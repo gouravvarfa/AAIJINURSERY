@@ -1,0 +1,114 @@
+name: Deploy
+
+# Push to main only -- tests, builds, packages an artifact, uploads it to S3,
+# then tells the EC2 instance (via SSM Run Command, no open SSH, no
+# long-lived AWS keys) to pull it down and deploy. The AWS role this
+# workflow assumes (via OIDC) can only PutObject to one S3 prefix and
+# SendCommand to this one instance -- see aaiji-github-deploy-role's trust
+# policy and inline permissions.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write   # required to request the OIDC token this job exchanges for AWS credentials
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  S3_BUCKET: aaiji-nursery-deploy-775995815275
+  DEPLOY_ROLE_ARN: arn:aws:iam::775995815275:role/aaiji-github-deploy-role
+  INSTANCE_ID: i-0be0818cd31b337f7
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run backend test suite (deploy gate)
+        run: python -m pytest tests/ -q
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Package release artifact
+        run: |
+          tar -czf /tmp/release.tar.gz \
+            --exclude='.git' \
+            --exclude='frontend/node_modules' \
+            --exclude='.github' \
+            .
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload artifact to S3
+        run: |
+          KEY="artifacts/release-${{ github.sha }}.tar.gz"
+          echo "ARTIFACT_KEY=$KEY" >> "$GITHUB_ENV"
+          aws s3 cp /tmp/release.tar.gz "s3://${{ env.S3_BUCKET }}/$KEY"
+
+      - name: Trigger deploy via SSM
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ env.INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy ${{ github.sha }}" \
+            --parameters "commands=[\"sudo /var/www/aaiji/deploy.sh '${{ env.ARTIFACT_KEY }}'\"]" \
+            --query "Command.CommandId" --output text)
+          echo "COMMAND_ID=$COMMAND_ID" >> "$GITHUB_ENV"
+          echo "SSM command sent: $COMMAND_ID"
+
+      - name: Wait for deploy to finish
+        run: |
+          for i in $(seq 1 30); do
+            sleep 5
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "${{ env.COMMAND_ID }}" \
+              --instance-id "${{ env.INSTANCE_ID }}" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            echo "Status: $STATUS"
+            if [ "$STATUS" = "Success" ] || [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ] || [ "$STATUS" = "TimedOut" ]; then
+              break
+            fi
+          done
+
+          echo "===== deploy.sh stdout ====="
+          aws ssm get-command-invocation \
+            --command-id "${{ env.COMMAND_ID }}" \
+            --instance-id "${{ env.INSTANCE_ID }}" \
+            --query "StandardOutputContent" --output text
+
+          echo "===== deploy.sh stderr ====="
+          aws ssm get-command-invocation \
+            --command-id "${{ env.COMMAND_ID }}" \
+            --instance-id "${{ env.INSTANCE_ID }}" \
+            --query "StandardErrorContent" --output text
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "Deploy failed or timed out (status: $STATUS)"
+            exit 1
+          fi

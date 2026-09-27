@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /account
+Disallow: /cart
+Disallow: /checkout
+Disallow: /orders
+Disallow: /addresses
+Disallow: /wishlist
+
+Sitemap: https://shreeaaijihightechnursery.in/sitemap.xml

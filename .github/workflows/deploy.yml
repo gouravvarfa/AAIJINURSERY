@@ -19,7 +19,7 @@ env:
   S3_BUCKET: aaiji-nursery-deploy-775995815275
   DEPLOY_ROLE_ARN: arn:aws:iam::775995815275:role/aaiji-github-deploy-role
   INSTANCE_ID: i-0a9840d6104761c4e
-  SITE_URL: http://65.2.81.227
+  SITE_URL: http://13.234.53.212   # Elastic IP -- static, won't change on stop/start
 
 jobs:
   deploy:

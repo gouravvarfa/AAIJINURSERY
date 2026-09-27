@@ -28,6 +28,7 @@ export default function ForgotPassword() {
         <>
           <div className="alert alert-success">
             If that email is registered, we've sent a password reset link to it.
+            Don't see it in your inbox? Please check your Spam or Promotions folder too.
           </div>
           <p className="auth-modal-footer-text">
             <Link to="/login" state={location.state}>Back to login</Link>

@@ -71,6 +71,15 @@ jobs:
         with:
           role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          # The action tags the assumed session (repo/ref/actor/etc.) by
+          # default, which requires the role's trust policy to also allow
+          # sts:TagSession -- ours only allows AssumeRoleWithWebIdentity, so
+          # AWS rejects the whole call with "Not authorized to perform
+          # sts:AssumeRoleWithWebIdentity" (misleading -- the real missing
+          # permission is TagSession). We don't need session tags for
+          # anything, so just turn them off instead of widening the trust
+          # policy.
+          role-skip-session-tagging: true
 
       - name: Upload artifact to S3
         run: |

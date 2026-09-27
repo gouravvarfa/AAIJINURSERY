@@ -14,10 +14,12 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: ap-south-1   # region of the EC2 instance -- SSM calls must target this
+  S3_BUCKET_REGION: us-east-1   # the S3 bucket itself lives here regardless of instance region
   S3_BUCKET: aaiji-nursery-deploy-775995815275
   DEPLOY_ROLE_ARN: arn:aws:iam::775995815275:role/aaiji-github-deploy-role
-  INSTANCE_ID: i-0be0818cd31b337f7
+  INSTANCE_ID: i-0a9840d6104761c4e
+  SITE_URL: http://65.2.81.227
 
 jobs:
   deploy:
@@ -74,7 +76,7 @@ jobs:
         run: |
           KEY="artifacts/release-${{ github.sha }}.tar.gz"
           echo "ARTIFACT_KEY=$KEY" >> "$GITHUB_ENV"
-          aws s3 cp /tmp/release.tar.gz "s3://${{ env.S3_BUCKET }}/$KEY"
+          aws s3 cp /tmp/release.tar.gz "s3://${{ env.S3_BUCKET }}/$KEY" --region "${{ env.S3_BUCKET_REGION }}"
 
       - name: Trigger deploy via SSM
         run: |
@@ -117,3 +119,20 @@ jobs:
             echo "Deploy failed or timed out (status: $STATUS)"
             exit 1
           fi
+
+      - name: Post-deploy smoke test (real public URL, outside-in)
+        run: |
+          # deploy.sh already health-checked from INSIDE the instance
+          # (127.0.0.1:8000) before declaring success -- this checks the
+          # SAME thing a real visitor would hit: public IP -> nginx ->
+          # uvicorn, catching nginx/security-group/DNS issues that an
+          # internal-only check can't see.
+          for path in "/" "/api/plants" "/api/categories"; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${{ env.SITE_URL }}$path")
+            echo "$path -> $CODE"
+            if [ "$CODE" != "200" ]; then
+              echo "Smoke test FAILED on $path (got $CODE, expected 200)"
+              exit 1
+            fi
+          done
+          echo "Smoke test passed -- site is live and serving real data."

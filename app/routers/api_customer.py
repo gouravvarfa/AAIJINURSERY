@@ -12,6 +12,7 @@ from app.order_alerts.hub import hub as order_alert_hub
 from app.auth import hash_password, verify_password
 from app.database import get_db
 from app.deps import get_current_customer
+from app.inventory import InsufficientStockError, deduct_stock, restore_stock
 from app.models import (
     CANCELLABLE_STATUSES,
     Address,
@@ -580,10 +581,24 @@ def checkout(
                 line_total=unit_price * quantity,
             )
         )
-        if variant:
-            variant.stock_quantity -= quantity
-        else:
-            plant.stock_quantity -= quantity
+        try:
+            deduct_stock(
+                db,
+                plant_id=plant.id,
+                variant_id=variant.id if variant else None,
+                quantity=quantity,
+                source_type="ONLINE_ORDER",
+                source_id=order.id,
+                reference=f"ORDER:{order.id}:SALE:{variant.id if variant else plant.id}",
+                created_by="customer",
+            )
+        except InsufficientStockError:
+            # Lost a genuine race against another checkout for the same
+            # item between the availability check above and this atomic
+            # deduction -- nothing has been committed yet, so raising here
+            # rolls the whole order (and any earlier lines' deductions in
+            # this same loop) back together when the session closes.
+            raise HTTPException(status_code=400, detail=f"Insufficient stock for {plant.name}")
 
     # Feature 2 (delivery feasibility + team confirmation): the Razorpay
     # order is deliberately NOT created here anymore, for either payment
@@ -753,14 +768,17 @@ def cancel_order(
         )
 
     for item in order.items:
-        if item.variant_id:
-            variant = db.query(PlantVariant).filter(PlantVariant.id == item.variant_id).first()
-            if variant:
-                variant.stock_quantity += item.quantity
-        elif item.plant_id:
-            plant = db.query(Plant).filter(Plant.id == item.plant_id).first()
-            if plant:
-                plant.stock_quantity += item.quantity
+        if item.plant_id:
+            restore_stock(
+                db,
+                plant_id=item.plant_id,
+                variant_id=item.variant_id,
+                quantity=item.quantity,
+                source_type="ORDER_CANCELLATION",
+                source_id=order.id,
+                reference=f"ORDER:{order.id}:SALE_REVERSAL:{item.variant_id or item.plant_id}",
+                created_by="customer",
+            )
 
     old_status = order.status
     order.status = "Cancelled"

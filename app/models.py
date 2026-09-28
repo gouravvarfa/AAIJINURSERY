@@ -189,6 +189,43 @@ class PlantReview(Base):
         return self.plant.name if self.plant else ""
 
 
+class InventoryTransaction(Base):
+    """Append-only ledger of every stock movement -- the audit trail behind
+    Plant/PlantVariant.stock_quantity. Written exclusively by app/inventory.py
+    (never directly by a router), which also performs the actual atomic
+    stock update these rows describe.
+
+    `reference`, when given, is a caller-chosen idempotency key (e.g.
+    "ORDER:123:SALE") enforced unique at the database level -- a second
+    attempt to record the same reference is rejected by the DB itself, not
+    just an application-level check, which is what actually prevents a
+    retried/duplicated request from deducting stock twice."""
+
+    __tablename__ = "inventory_transactions"
+    __table_args__ = (
+        UniqueConstraint("reference", name="uq_inventory_txn_reference"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    plant_id = Column(Integer, ForeignKey("plants.id"), nullable=False, index=True)
+    variant_id = Column(Integer, ForeignKey("plant_variants.id"), nullable=True, index=True)
+    # SALE, SALE_REVERSAL, PURCHASE_RECEIVED, MANUAL_ADJUSTMENT
+    transaction_type = Column(String(30), nullable=False)
+    quantity = Column(Integer, nullable=False)  # always positive; direction is implied by transaction_type
+    before_quantity = Column(Integer, nullable=False)
+    after_quantity = Column(Integer, nullable=False)
+    # ONLINE_ORDER, ADMIN_CANCEL, DELIVERY_REJECTED, PURCHASE, PURCHASE_ORDER, SALES_ORDER, ADMIN_ADJUSTMENT
+    source_type = Column(String(40), nullable=False)
+    source_id = Column(String(60), nullable=True)
+    reference = Column(String(120), nullable=True, index=True)
+    created_by = Column(String(80), default="system")
+    notes = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    plant = relationship("Plant")
+    variant = relationship("PlantVariant")
+
+
 class Service(Base):
     __tablename__ = "services"
 

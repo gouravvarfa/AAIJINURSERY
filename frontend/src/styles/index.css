@@ -31,6 +31,12 @@ html {
 
 body {
   margin: 0;
+  /* Defensive: nothing should ever cause page-level horizontal scroll (the
+     mobile carousel's full-bleed technique is self-compensating via equal
+     negative-margin/padding, but this is a safety net against any future
+     element that isn't). Carousels/tracks opt back into their own
+     horizontal scroll explicitly via overflow-x: auto on themselves. */
+  overflow-x: hidden;
   font-family: var(--font-body);
   color: var(--color-text);
   background: var(--color-bg);
@@ -225,21 +231,27 @@ button, input, textarea, select {
     gap: 12px;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
+    scroll-padding-left: clamp(12px, 4vw, 28px);
     -webkit-overflow-scrolling: touch;
     padding-bottom: 4px;
     /* Bleed to the screen edge like the rest of the mobile header/content,
        instead of the .container's side padding trapping the peek effect. */
-    margin: 0 calc(-1 * clamp(12px, 2vw, 28px));
-    padding-inline: clamp(12px, 2vw, 28px);
+    margin: 0 calc(-1 * clamp(12px, 4vw, 28px));
+    padding-inline: clamp(12px, 4vw, 28px);
   }
 
   .plant-carousel-track::-webkit-scrollbar {
     display: none;
   }
 
+  /* One full card per screen, with a deliberate ~18% peek of the next card
+     to invite swiping -- never a half-cut card on both edges at rest.
+     scroll-snap-align + scroll-padding-left above keep the current card's
+     left edge flush with the page gutter at every settled scroll position. */
   .plant-carousel-item {
     flex: 0 0 auto;
-    width: calc(50% - 6px);
+    width: 82%;
+    max-width: 320px;
     scroll-snap-align: start;
   }
 

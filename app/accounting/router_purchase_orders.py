@@ -17,6 +17,7 @@ from app.accounting.schemas import (
 )
 from app.database import get_db
 from app.deps import get_current_admin
+from app.inventory import adjust_stock
 from app.models import Plant, Purchase, PurchaseItem
 
 router = APIRouter(tags=["accounting-purchase-orders"])
@@ -187,7 +188,16 @@ def convert_to_bill(
             )
         )
         if plant:
-            plant.stock_quantity += line.quantity
+            adjust_stock(
+                db,
+                plant_id=plant.id,
+                quantity_delta=line.quantity,
+                transaction_type="PURCHASE_RECEIVED",
+                source_type="PURCHASE_ORDER",
+                source_id=order.id,
+                reference=f"PURCHASE_ORDER:{order.id}:PURCHASE_RECEIVED:{plant.id}",
+                created_by=admin,
+            )
         total += line.line_total
 
     bill.total_cost = round(total, 2)

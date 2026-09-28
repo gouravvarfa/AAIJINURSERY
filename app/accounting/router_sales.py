@@ -26,6 +26,7 @@ from app.accounting.schemas import (
 )
 from app.database import get_db
 from app.deps import get_current_admin
+from app.inventory import InsufficientStockError, deduct_stock, restore_stock
 
 router = APIRouter(tags=["accounting-sales"])
 
@@ -181,6 +182,25 @@ def convert_to_invoice(
                 line_total=line.line_total,
             )
         )
+        # This is the one clear "the sale is now real and committed" event
+        # in the offline flow (a Draft Sales Order can still be edited/
+        # abandoned without ever costing inventory) -- deducts the SAME
+        # shared Plant.stock_quantity the website's own checkout uses, so
+        # an offline sale reduces what the website shows as available too.
+        if line.plant_id:
+            try:
+                deduct_stock(
+                    db,
+                    plant_id=line.plant_id,
+                    quantity=line.quantity,
+                    source_type="SALES_ORDER",
+                    source_id=order.id,
+                    reference=f"SALES_ORDER:{order.id}:SALE:{line.plant_id}",
+                    created_by=admin,
+                )
+            except InsufficientStockError:
+                plant_label = line.plant.name if line.plant else line.description
+                raise HTTPException(status_code=400, detail=f"Insufficient stock for {plant_label}")
 
     old_status = order.status
     order.status = "Invoiced"
@@ -251,7 +271,12 @@ def void_invoice(
     db: Session = Depends(get_db),
 ):
     """Never a hard delete -- financial documents are Voided, not removed."""
-    item = db.query(Invoice).filter(Invoice.id == item_id).first()
+    item = (
+        db.query(Invoice)
+        .options(joinedload(Invoice.sales_order).joinedload(SalesOrder.items))
+        .filter(Invoice.id == item_id)
+        .first()
+    )
     if not item:
         raise HTTPException(status_code=404, detail="Invoice not found")
     if item.source == "online":
@@ -261,7 +286,25 @@ def void_invoice(
             "-- cancel the order itself from the Orders page instead.",
         )
     old_status = item.status
+    already_voided = old_status == "Voided"
     item.status = "Voided"
+
+    # convert_to_invoice deducted stock for this sale -- voiding it reverses
+    # that exactly once (the `reference` below makes a second void attempt,
+    # or voiding an already-Voided invoice, a safe no-op).
+    if not already_voided and item.sales_order:
+        for line in item.sales_order.items:
+            if line.plant_id:
+                restore_stock(
+                    db,
+                    plant_id=line.plant_id,
+                    quantity=line.quantity,
+                    source_type="SALES_ORDER_VOID",
+                    source_id=item.sales_order_id,
+                    reference=f"SALES_ORDER:{item.sales_order_id}:SALE_REVERSAL:{line.plant_id}",
+                    created_by=admin,
+                )
+
     db.commit()
     record_change(
         db,

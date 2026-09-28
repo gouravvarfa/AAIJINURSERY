@@ -14,6 +14,7 @@ from app.audit import SUPER_ACCESS_GRANTED, SUPER_ACCESS_REVOKED, record_admin_a
 from app.auth import hash_password
 from app.database import BASE_DIR, get_db
 from app.deps import get_current_admin, get_current_developer
+from app.inventory import adjust_stock, restore_stock
 from app.permissions import require_permission
 from app.models import (
     CANCELLABLE_STATUSES,
@@ -598,7 +599,18 @@ def create_purchase(
                 total_cost=line_total,
             )
         )
-        plant.stock_quantity += item.quantity  # procurement receipt increments live stock
+        # procurement receipt increments live stock -- reference is per
+        # purchase+plant since one Purchase can list several plants
+        adjust_stock(
+            db,
+            plant_id=plant.id,
+            quantity_delta=item.quantity,
+            transaction_type="PURCHASE_RECEIVED",
+            source_type="PURCHASE",
+            source_id=purchase.id,
+            reference=f"PURCHASE:{purchase.id}:PURCHASE_RECEIVED:{plant.id}",
+            created_by=admin,
+        )
         total += line_total
 
     purchase.total_cost = round(total, 2)
@@ -1221,14 +1233,17 @@ def admin_cancel_order(
         )
 
     for item in order.items:
-        if item.variant_id:
-            variant = db.query(PlantVariant).filter(PlantVariant.id == item.variant_id).first()
-            if variant:
-                variant.stock_quantity += item.quantity
-        elif item.plant_id:
-            plant = db.query(Plant).filter(Plant.id == item.plant_id).first()
-            if plant:
-                plant.stock_quantity += item.quantity
+        if item.plant_id:
+            restore_stock(
+                db,
+                plant_id=item.plant_id,
+                variant_id=item.variant_id,
+                quantity=item.quantity,
+                source_type="ORDER_CANCELLATION",
+                source_id=order.id,
+                reference=f"ORDER:{order.id}:SALE_REVERSAL:{item.variant_id or item.plant_id}",
+                created_by=admin,
+            )
 
     old_status = order.status
     order.status = "Cancelled"
@@ -1462,30 +1477,39 @@ def reject_order_delivery(
 
     # DELIVERY_UNAVAILABLE is a dead end for this order -- the customer can
     # never complete it, so the stock reserved at checkout must go back to
-    # inventory (same restoration logic as admin_cancel_order above).
+    # inventory (same restoration logic as admin_cancel_order above), and
+    # the order is marked Cancelled through the exact same path a normal
+    # cancellation uses, so sync_order_to_accounting()'s existing
+    # _sync_cancellation() voids the linked SalesOrder/Invoice automatically
+    # -- no separate invoice-void logic needed here.
     for item in order.items:
-        if item.variant_id:
-            variant = db.query(PlantVariant).filter(PlantVariant.id == item.variant_id).first()
-            if variant:
-                variant.stock_quantity += item.quantity
-        elif item.plant_id:
-            plant = db.query(Plant).filter(Plant.id == item.plant_id).first()
-            if plant:
-                plant.stock_quantity += item.quantity
+        if item.plant_id:
+            restore_stock(
+                db,
+                plant_id=item.plant_id,
+                variant_id=item.variant_id,
+                quantity=item.quantity,
+                source_type="DELIVERY_REJECTED",
+                source_id=order.id,
+                reference=f"ORDER:{order.id}:SALE_REVERSAL:{item.variant_id or item.plant_id}",
+                created_by=admin,
+            )
 
+    old_status = order.status
     order.team_confirmation_status = "DELIVERY_UNAVAILABLE"
     order.delivery_feasibility = "NOT_AVAILABLE"
     order.delivery_rejection_reason = payload.detail.strip() if payload.reason == "Other" and payload.detail.strip() else payload.reason
+    order.status = "Cancelled"
     # remarks is shared with the customer (OrderOut.history) -- the actual
     # internal reason lives only in delivery_rejection_reason, which is
     # excluded from the customer-facing schema (section 16).
     db.add(
         OrderStatusHistory(
             order_id=order.id,
-            old_status=order.status,
-            new_status=order.status,
+            old_status=old_status,
+            new_status="Cancelled",
             updated_by=admin,
-            remarks="Delivery unavailable for this order",
+            remarks="Delivery unavailable for this order -- order cancelled",
         )
     )
     db.commit()

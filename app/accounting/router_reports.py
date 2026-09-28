@@ -154,18 +154,18 @@ def purchase_report(
     range_key, start, end = range_info
     total_purchases = money(
         db.query(func.coalesce(func.sum(Purchase.total_cost), 0))
-        .filter(Purchase.purchase_date >= start, Purchase.purchase_date < end)
+        .filter(Purchase.purchase_date >= start, Purchase.purchase_date < end, Purchase.status != "Voided")
         .scalar()
     )
     bill_count = (
         db.query(func.count(Purchase.id))
-        .filter(Purchase.purchase_date >= start, Purchase.purchase_date < end)
+        .filter(Purchase.purchase_date >= start, Purchase.purchase_date < end, Purchase.status != "Voided")
         .scalar()
         or 0
     )
     monthly = (
         db.query(month_bucket(Purchase.purchase_date), func.sum(Purchase.total_cost), func.count(Purchase.id))
-        .filter(Purchase.purchase_date >= start, Purchase.purchase_date < end)
+        .filter(Purchase.purchase_date >= start, Purchase.purchase_date < end, Purchase.status != "Voided")
         .group_by(month_bucket(Purchase.purchase_date))
         .order_by(month_bucket(Purchase.purchase_date))
         .all()
@@ -264,7 +264,7 @@ def balance_sheet_report(admin: str = Depends(get_current_admin), db: Session = 
     )
     payables_bills = money(
         db.query(func.coalesce(func.sum(Purchase.total_cost), 0))
-        .filter(Purchase.status.notin_(["Paid"]))
+        .filter(Purchase.status.notin_(["Paid", "Voided", "Cancelled"]))
         .scalar()
     )
     payables_expenses = money(
@@ -301,7 +301,11 @@ def balance_sheet_report(admin: str = Depends(get_current_admin), db: Session = 
         .filter(Invoice.status != "Voided")
         .scalar()
     )
-    all_time_cogs = money(db.query(func.coalesce(func.sum(Purchase.total_cost), 0)).scalar())
+    all_time_cogs = money(
+        db.query(func.coalesce(func.sum(Purchase.total_cost), 0))
+        .filter(Purchase.status != "Voided")
+        .scalar()
+    )
     all_time_expenses = money(
         db.query(func.coalesce(func.sum(Expense.total_amount), 0))
         .filter(Expense.status != "Voided")
@@ -414,7 +418,7 @@ def payables_aging_report(admin: str = Depends(get_current_admin), db: Session =
     now = now_ist()
     out = AgingReportOut()
 
-    bills = db.query(Purchase).filter(Purchase.status.notin_(["Paid"])).all()
+    bills = db.query(Purchase).filter(Purchase.status.notin_(["Paid", "Voided", "Cancelled"])).all()
     for bill in bills:
         reference_date = bill.due_date or bill.purchase_date
         days = (now.replace(tzinfo=None) - reference_date).days

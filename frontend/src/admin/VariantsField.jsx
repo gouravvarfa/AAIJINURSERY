@@ -1,4 +1,4 @@
-export default function VariantsField({ value, onChange }) {
+export default function VariantsField({ value, onChange, pricePerUnit = 0 }) {
   const rows = value || [];
 
   function updateRow(index, key, val) {
@@ -28,7 +28,7 @@ export default function VariantsField({ value, onChange }) {
               />
             </label>
             <label>
-              Stock
+              Stock (in trays)
               <input
                 type="number"
                 className="form-control"
@@ -36,6 +36,10 @@ export default function VariantsField({ value, onChange }) {
                 onChange={(e) => updateRow(i, "stock_quantity", e.target.valueAsNumber || 0)}
               />
             </label>
+            <div className="variant-row-price">
+              Tray price:{" "}
+              <strong>&#8377;{Math.round((pricePerUnit || 0) * (row.tray_size || 0) * 100) / 100}</strong>
+            </div>
           </div>
           <button
             type="button"

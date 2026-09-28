@@ -145,6 +145,7 @@ export default function CrudPage({
                   <VariantsField
                     value={form[field.name]}
                     onChange={(next) => updateField(field.name, next)}
+                    pricePerUnit={form.price}
                   />
                 ) : field.type === "purchase_items" ? (
                   <PurchaseItemsField

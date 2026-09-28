@@ -228,6 +228,17 @@ table.admin-table .row-actions {
   margin-top: 4px;
 }
 
+.variant-row-price {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  padding-bottom: 8px;
+}
+
+.variant-row-price strong {
+  color: var(--color-primary-dark);
+}
+
 @media (max-width: 480px) {
   .variant-row {
     flex-wrap: wrap;

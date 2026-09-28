@@ -58,13 +58,19 @@ export default function Plants() {
       options: categories.map((c) => ({ value: c.id, label: c.name })),
     },
     { name: "description", label: "Description", type: "textarea" },
-    { name: "price", label: "Price (₹)", type: "number", required: true },
+    {
+      name: "price",
+      label: "Price per Unit / Seed (₹)",
+      type: "number",
+      required: true,
+      help: "If you add Tray/Pack Options below, each tray's selling price is this × the tray size (calculated automatically -- you don't set tray prices separately).",
+    },
     { name: "discount_price", label: "Discount Price (₹, optional)", type: "number" },
     {
       name: "stock_quantity",
-      label: "Stock Quantity",
+      label: "Stock Quantity (single-unit sale only)",
       type: "number",
-      help: "If tray options are added below, this is auto-calculated from their stock after saving.",
+      help: "Only matters if you leave Tray/Pack Options empty below. As soon as you add at least one tray option, stock is tracked per tray size there instead, and this field is ignored.",
     },
     { name: "sku", label: "SKU" },
     { name: "image_url", label: "Image URL", placeholder: "https://..." },
@@ -91,10 +97,10 @@ export default function Plants() {
     },
     {
       name: "variants",
-      label: "Tray Options (optional — for Seedlings & Trays)",
+      label: "Tray / Pack Options (recommended for every plant)",
       type: "variants",
       default: [],
-      help: "Add one row per tray size (e.g. 125, 150). Leave empty for a normal, non-tray plant.",
+      help: "Add one row per pack/tray size customers can buy (e.g. a tray of 150 seeds). Each tray's price is calculated automatically from Price per Unit above, and its stock is tracked separately per size -- once you add even one row here, customers must pick a tray size to buy, and the plain Stock Quantity field above is ignored.",
     },
   ];
 

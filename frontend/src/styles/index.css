@@ -1665,10 +1665,12 @@ select:focus-visible {
   width: 56px;
   height: 56px;
   border-radius: 50%;
+  background: #25d366;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  transition: transform 190ms ease, box-shadow 190ms ease;
   /* Below .navbar's own z-index (50): .navbar is `position: sticky` with an
      explicit z-index, which creates its own stacking context, so this fixed
      button must rank below that context's root level or it paints on top of
@@ -1677,10 +1679,28 @@ select:focus-visible {
   z-index: 40;
 }
 
-.whatsapp-fab img {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
+.whatsapp-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+}
+
+.whatsapp-fab svg {
+  width: 29px;
+  height: 29px;
+}
+
+@media (max-width: 768px) {
+  .whatsapp-fab {
+    width: 52px;
+    height: 52px;
+    bottom: 20px;
+    right: 20px;
+  }
+
+  .whatsapp-fab svg {
+    width: 27px;
+    height: 27px;
+  }
 }
 
 /* ---------- Forms ---------- */

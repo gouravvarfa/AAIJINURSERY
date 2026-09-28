@@ -131,15 +131,7 @@ export default function PlantDetail() {
                   )}
                 </div>
               )}
-              <p>{plant.description}</p>
-              {plant.feature_list?.length > 0 && (
-                <ul className="feature-list" style={{ marginBottom: 24 }}>
-                  {plant.feature_list.map((f) => (
-                    <li key={f}>{f}</li>
-                  ))}
-                </ul>
-              )}
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
                 {plant.availability_status === "ENQUIRY_AVAILABLE" ? (
                   <button type="button" className="btn btn-primary" onClick={() => setShowEnquireModal(true)}>
                     Enquire Now
@@ -158,6 +150,14 @@ export default function PlantDetail() {
                 )}
                 <WishlistButton plant={plant} />
               </div>
+              <p>{plant.description}</p>
+              {plant.feature_list?.length > 0 && (
+                <ul className="feature-list" style={{ marginBottom: 24 }}>
+                  {plant.feature_list.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </div>

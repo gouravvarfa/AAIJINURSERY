@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.accounting.sync import sync_order_to_accounting
@@ -21,6 +22,7 @@ from app.models import (
     OrderItem,
     OrderStatusHistory,
     Plant,
+    PlantReview,
     PlantVariant,
     WishlistItem,
 )
@@ -49,6 +51,9 @@ from app.schemas import (
     PaymentFailedIn,
     RazorpayVerifyIn,
     ResetPasswordIn,
+    ReviewEligibilityOut,
+    ReviewIn,
+    ReviewOut,
     WishlistAddIn,
     WishlistItemOut,
     WishlistStatusOut,
@@ -774,3 +779,100 @@ def cancel_order(
     order = get_or_404_order(db, order_id, customer_id)
     notify_order_cancelled(db, order, old_status, cancelled_by="customer", reason=payload.remarks)
     return order
+
+
+# ---------- Reviews ----------
+# A review is only allowed once a Delivered order containing that exact
+# plant exists for this customer -- re-derived from the database on every
+# request below, never taken on trust from the client. See PlantReview's
+# docstring in models.py for the full rationale.
+
+
+def _qualifying_delivered_order(db: Session, customer_id: int, plant_id: int) -> Optional[Order]:
+    return (
+        db.query(Order)
+        .join(OrderItem, OrderItem.order_id == Order.id)
+        .filter(Order.customer_id == customer_id, Order.status == "Delivered", OrderItem.plant_id == plant_id)
+        .order_by(Order.id.desc())
+        .first()
+    )
+
+
+@router.get("/plants/{plant_id}/review-eligibility", response_model=ReviewEligibilityOut)
+def review_eligibility(plant_id: int, customer_id: int = Depends(get_current_customer), db: Session = Depends(get_db)):
+    plant = db.query(Plant).filter(Plant.id == plant_id).first()
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+
+    existing = (
+        db.query(PlantReview)
+        .filter(PlantReview.plant_id == plant_id, PlantReview.customer_id == customer_id)
+        .first()
+    )
+    if existing:
+        return ReviewEligibilityOut(eligible=False, reason="already_reviewed", existing_review=existing)
+
+    if _qualifying_delivered_order(db, customer_id, plant_id):
+        return ReviewEligibilityOut(eligible=True, reason="eligible")
+
+    ever_purchased = (
+        db.query(OrderItem)
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(Order.customer_id == customer_id, OrderItem.plant_id == plant_id)
+        .first()
+    )
+    reason = "not_delivered" if ever_purchased else "not_purchased"
+    return ReviewEligibilityOut(eligible=False, reason=reason)
+
+
+@router.post("/reviews", response_model=ReviewOut, status_code=201)
+def create_review(payload: ReviewIn, customer_id: int = Depends(get_current_customer), db: Session = Depends(get_db)):
+    plant = db.query(Plant).filter(Plant.id == payload.plant_id).first()
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+
+    if not (1 <= payload.rating <= 5):
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+
+    comment = (payload.comment or "").strip()
+    if len(comment) > 2000:
+        raise HTTPException(status_code=400, detail="Comment is too long (max 2000 characters)")
+
+    existing = (
+        db.query(PlantReview)
+        .filter(PlantReview.plant_id == plant.id, PlantReview.customer_id == customer_id)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="You have already reviewed this plant")
+
+    qualifying_order = _qualifying_delivered_order(db, customer_id, plant.id)
+    if not qualifying_order:
+        raise HTTPException(status_code=403, detail="You can only review plants from delivered orders")
+
+    review = PlantReview(
+        plant_id=plant.id,
+        customer_id=customer_id,
+        order_id=qualifying_order.id,
+        rating=payload.rating,
+        comment=comment,
+        status="PENDING",
+    )
+    db.add(review)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="You have already reviewed this plant")
+    db.refresh(review)
+    return review
+
+
+@router.get("/reviews/my", response_model=list[ReviewOut])
+def my_reviews(customer_id: int = Depends(get_current_customer), db: Session = Depends(get_db)):
+    return (
+        db.query(PlantReview)
+        .filter(PlantReview.customer_id == customer_id)
+        .order_by(PlantReview.created_at.desc())
+        .all()
+    )

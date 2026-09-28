@@ -54,6 +54,8 @@ class PlantOut(BaseModel):
     availability_status: str = "AVAILABLE"
     category: Optional[CategoryOut] = None
     variants: List[PlantVariantOut] = []
+    average_rating: Optional[float] = None
+    review_count: int = 0
 
 
 class PlantIn(BaseModel):
@@ -151,6 +153,56 @@ class TestimonialIn(BaseModel):
     message: str
     image_url: str = ""
     is_approved: bool = True
+
+
+class ReviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    plant_id: int
+    customer_name: str
+    rating: int
+    comment: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReviewIn(BaseModel):
+    plant_id: int
+    rating: int
+    comment: str = ""
+
+
+class PlantReviewsOut(BaseModel):
+    average_rating: Optional[float] = None
+    review_count: int
+    rating_distribution: dict[int, int]
+    reviews: List[ReviewOut]
+
+
+class ReviewEligibilityOut(BaseModel):
+    eligible: bool
+    reason: str  # eligible | already_reviewed | not_delivered | not_purchased
+    existing_review: Optional[ReviewOut] = None
+
+
+class ReviewAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    plant_id: int
+    plant_name: str
+    customer_id: int
+    customer_name: str
+    order_id: int
+    rating: int
+    comment: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReviewModerateIn(BaseModel):
+    status: str  # PUBLISHED | REJECTED | PENDING
 
 
 class GalleryImageOut(BaseModel):

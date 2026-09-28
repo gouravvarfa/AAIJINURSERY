@@ -40,10 +40,12 @@ from app.models import (
     PAYMENT_STATUSES,
     PLANT_AVAILABILITY_STATUSES,
     Plant,
+    PlantReview,
     PlantVariant,
     PricingPlan,
     Purchase,
     PurchaseItem,
+    REVIEW_STATUSES,
     Role,
     Service,
     SiteSetting,
@@ -93,6 +95,8 @@ from app.schemas import (
     PricingPlanOut,
     PurchaseIn,
     PurchaseOut,
+    ReviewAdminOut,
+    ReviewModerateIn,
     ServiceIn,
     ServiceOut,
     SettingsIn,
@@ -825,6 +829,46 @@ def delete_testimonial(
     item_id: int, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)
 ):
     item = get_or_404(db, Testimonial, item_id)
+    db.delete(item)
+    db.commit()
+
+
+# ---------- Plant Reviews ----------
+# Reuses the "products" module permission (same one Plants/Categories use)
+# rather than introducing a new RBAC module just for this.
+
+@router.get("/reviews", dependencies=[Depends(require_permission("products", "VIEW"))], response_model=list[ReviewAdminOut])
+def list_reviews(
+    status: Optional[str] = None,
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    query = db.query(PlantReview).options(joinedload(PlantReview.plant), joinedload(PlantReview.customer))
+    if status:
+        query = query.filter(PlantReview.status == status)
+    return query.order_by(PlantReview.created_at.desc()).all()
+
+
+@router.patch("/reviews/{item_id}", dependencies=[Depends(require_permission("products", "EDIT"))], response_model=ReviewAdminOut)
+def moderate_review(
+    item_id: int,
+    payload: ReviewModerateIn,
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    if payload.status not in REVIEW_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    item = get_or_404(db, PlantReview, item_id)
+    item.status = payload.status
+    item.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.delete("/reviews/{item_id}", dependencies=[Depends(require_permission("products", "DELETE"))], status_code=204)
+def delete_review(item_id: int, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+    item = get_or_404(db, PlantReview, item_id)
     db.delete(item)
     db.commit()
 

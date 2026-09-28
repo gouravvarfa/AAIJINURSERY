@@ -7,8 +7,10 @@ import BuyNowButton from "../components/BuyNowButton";
 import WishlistButton from "../components/WishlistButton";
 import TraySelector from "../components/TraySelector";
 import EnquireModal from "../components/EnquireModal";
+import PlantReviews from "../components/PlantReviews";
 import { Loading, Empty } from "../components/Loading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { useProductStructuredData } from "../hooks/useProductStructuredData";
 
 export default function PlantDetail() {
   const { slug } = useParams();
@@ -18,19 +20,29 @@ export default function PlantDetail() {
   const [selectedVariantId, setSelectedVariantId] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [showEnquireModal, setShowEnquireModal] = useState(false);
+  const [reviewsData, setReviewsData] = useState(null);
   useDocumentTitle(plant ? `${plant.name} | Aaiji Nursery` : "Plant Details | Aaiji Nursery");
+
+  function loadReviews() {
+    api.get(`/plants/${slug}/reviews`).then(setReviewsData).catch(() => setReviewsData(null));
+  }
 
   useEffect(() => {
     setPlant(null);
     setNotFound(false);
     setSelectedVariantId(null);
     setQuantity(1);
+    setReviewsData(null);
     api
       .get(`/plants/${slug}`)
       .then(setPlant)
       .catch(() => setNotFound(true));
     api.get(`/plants/${slug}/recommendations`).then(setRelated).catch(() => setRelated([]));
+    loadReviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
+
+  useProductStructuredData(plant, reviewsData);
 
   if (notFound) {
     return (
@@ -160,6 +172,12 @@ export default function PlantDetail() {
               )}
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="section section-alt">
+        <div className="container">
+          <PlantReviews plant={plant} data={reviewsData} onChanged={loadReviews} />
         </div>
       </section>
 

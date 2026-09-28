@@ -94,6 +94,7 @@ class Plant(Base):
 
     category = relationship("Category", back_populates="plants")
     variants = relationship("PlantVariant", back_populates="plant", cascade="all, delete-orphan")
+    reviews = relationship("PlantReview", back_populates="plant", cascade="all, delete-orphan")
 
     @property
     def feature_list(self):
@@ -102,6 +103,21 @@ class Plant(Base):
     @property
     def effective_price(self):
         return self.discount_price if self.discount_price else self.price
+
+    @property
+    def _published_reviews(self):
+        return [r for r in self.reviews if r.status == "PUBLISHED"]
+
+    @property
+    def review_count(self):
+        return len(self._published_reviews)
+
+    @property
+    def average_rating(self):
+        published = self._published_reviews
+        if not published:
+            return None
+        return round(sum(r.rating for r in published) / len(published), 2)
 
 
 class PlantVariant(Base):
@@ -128,6 +144,49 @@ class PlantVariant(Base):
     @property
     def price(self):
         return round(self.plant.price * self.tray_size, 2) if self.plant else 0
+
+
+REVIEW_STATUSES = ["PENDING", "PUBLISHED", "REJECTED"]
+
+
+class PlantReview(Base):
+    """A star rating + comment on a plant, restricted to a customer whose
+    order containing that plant has reached "Delivered" -- this is checked
+    server-side against Order/OrderItem at creation time (never trusted from
+    the client) and the qualifying order_id is stored alongside the review.
+    One review per customer per plant, enforced at the database level (not
+    just in the API), since a race between two tabs submitting at once could
+    otherwise slip past an application-level check alone."""
+
+    __tablename__ = "plant_reviews"
+    __table_args__ = (
+        UniqueConstraint("plant_id", "customer_id", name="uq_review_plant_customer"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    plant_id = Column(Integer, ForeignKey("plants.id"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    rating = Column(Integer, nullable=False)
+    comment = Column(Text, default="")
+    # New reviews start PENDING and only count toward the public rating /
+    # show up on the site once an admin moderates them to PUBLISHED -- see
+    # PlantReview docstring and api_admin.py's /reviews endpoints.
+    status = Column(String(20), nullable=False, default="PENDING", index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    plant = relationship("Plant", back_populates="reviews")
+    customer = relationship("Customer")
+    order = relationship("Order")
+
+    @property
+    def customer_name(self):
+        return self.customer.name if self.customer else ""
+
+    @property
+    def plant_name(self):
+        return self.plant.name if self.plant else ""
 
 
 class Service(Base):

@@ -2076,6 +2076,123 @@ textarea.form-control {
   font-weight: 700;
 }
 
+/* ---------- Plant Reviews ---------- */
+
+.plant-reviews {
+  max-width: 760px;
+}
+
+.plant-reviews-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.plant-reviews-header h2 {
+  margin: 0;
+}
+
+.plant-reviews-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.plant-reviews-avg {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  line-height: 1;
+}
+
+.plant-reviews-count {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  margin-top: 4px;
+}
+
+.plant-reviews-empty {
+  color: var(--color-text-muted);
+  margin-bottom: 24px;
+}
+
+.plant-reviews-empty p:first-child {
+  color: var(--color-text);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.review-stars {
+  color: #f2b100;
+  letter-spacing: 1px;
+}
+
+.review-stars-lg {
+  font-size: 1.3rem;
+}
+
+.plant-reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.plant-review-item {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+}
+
+.plant-review-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.plant-review-comment {
+  margin: 6px 0;
+  color: var(--color-text);
+}
+
+.plant-review-date {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.review-star-input {
+  display: flex;
+  gap: 4px;
+}
+
+.review-star-btn {
+  background: none;
+  border: none;
+  font-size: 1.8rem;
+  line-height: 1;
+  color: #f2b100;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.review-star-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .plant-reviews-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 /* ---------- Plant Explorer (search & filters) ---------- */
 
 .explorer-searchbar {

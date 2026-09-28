@@ -25,6 +25,7 @@ const NAV = [
   { to: "/admin/gallery", label: "Gallery", module: "website" },
   { to: "/admin/blog", label: "Blog", module: "website" },
   { to: "/admin/inquiries", label: "Inquiries", module: "customers" },
+  { to: "/admin/reviews", label: "Reviews", module: "products" },
   { to: "/admin/customers", label: "Customers", module: "customers" },
   { to: "/admin/customer-logs", label: "Customer Logs", module: "customers" },
   { to: "/admin/settings", label: "Site Settings", module: "website" },

@@ -27,6 +27,7 @@ from app.models import (
     Order,
     OrderItem,
     Plant,
+    PlantReview,
     PricingPlan,
     Service,
     Testimonial,
@@ -41,6 +42,7 @@ from app.schemas import (
     InquiryIn,
     InquiryOut,
     PlantOut,
+    PlantReviewsOut,
     PricingPlanOut,
     ServiceOut,
     TestimonialOut,
@@ -95,7 +97,7 @@ def list_plants(
 ):
     query = (
         db.query(Plant)
-        .options(joinedload(Plant.category), selectinload(Plant.variants))
+        .options(joinedload(Plant.category), selectinload(Plant.variants), selectinload(Plant.reviews))
         .filter(Plant.is_active.is_(True))
     )
 
@@ -143,13 +145,39 @@ def list_plants(
 def get_plant(slug: str, db: Session = Depends(get_db)):
     plant = (
         db.query(Plant)
-        .options(joinedload(Plant.category), selectinload(Plant.variants))
+        .options(joinedload(Plant.category), selectinload(Plant.variants), selectinload(Plant.reviews))
         .filter(Plant.slug == slug)
         .first()
     )
     if not plant:
         raise HTTPException(status_code=404, detail="Plant not found")
     return plant
+
+
+@router.get("/plants/{slug}/reviews", response_model=PlantReviewsOut)
+def get_plant_reviews(slug: str, db: Session = Depends(get_db)):
+    plant = db.query(Plant).filter(Plant.slug == slug).first()
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+
+    reviews = (
+        db.query(PlantReview)
+        .options(joinedload(PlantReview.customer))
+        .filter(PlantReview.plant_id == plant.id, PlantReview.status == "PUBLISHED")
+        .order_by(PlantReview.created_at.desc())
+        .all()
+    )
+    distribution = {n: 0 for n in range(5, 0, -1)}
+    for r in reviews:
+        distribution[r.rating] = distribution.get(r.rating, 0) + 1
+    average = round(sum(r.rating for r in reviews) / len(reviews), 2) if reviews else None
+
+    return PlantReviewsOut(
+        average_rating=average,
+        review_count=len(reviews),
+        rating_distribution=distribution,
+        reviews=reviews,
+    )
 
 
 @router.get("/plants/{slug}/related", response_model=list[PlantOut])

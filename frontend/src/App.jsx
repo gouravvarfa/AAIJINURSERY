@@ -37,6 +37,7 @@ import AdminServices from "./admin/pages/Services";
 import AdminPricingPlans from "./admin/pages/PricingPlans";
 import AdminFAQs from "./admin/pages/FAQs";
 import AdminTestimonials from "./admin/pages/Testimonials";
+import AdminReviews from "./admin/pages/Reviews";
 import AdminGallery from "./admin/pages/Gallery";
 import AdminBlog from "./admin/pages/Blog";
 import AdminInquiries from "./admin/pages/Inquiries";
@@ -158,6 +159,7 @@ export default function App() {
           <Route path="pricing-plans" element={<AdminPricingPlans />} />
           <Route path="faqs" element={<AdminFAQs />} />
           <Route path="testimonials" element={<AdminTestimonials />} />
+          <Route path="reviews" element={<AdminReviews />} />
           <Route path="gallery" element={<AdminGallery />} />
           <Route path="blog" element={<AdminBlog />} />
           <Route path="inquiries" element={<AdminInquiries />} />

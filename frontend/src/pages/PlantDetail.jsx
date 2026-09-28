@@ -61,7 +61,7 @@ export default function PlantDetail() {
           <div className="grid grid-2">
             <img
               className="card"
-              style={{ aspectRatio: "4/3", objectFit: "cover" }}
+              style={{ aspectRatio: "4/3", objectFit: "contain", background: "var(--color-bg, #f4f4f0)" }}
               src={plant.image_url}
               alt={plant.name}
             />

@@ -352,7 +352,7 @@ async def _bind_live_log_hub():
 @app.get("/")
 def serve_home():
     if FRONTEND_DIST.exists():
-        return FileResponse(FRONTEND_DIST / "index.html")
+        return FileResponse(FRONTEND_DIST / "index.html", headers={"Cache-Control": "no-cache"})
     return {"message": "Frontend not built"}
 
 SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY")

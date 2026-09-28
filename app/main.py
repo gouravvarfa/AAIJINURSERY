@@ -463,8 +463,16 @@ if FRONTEND_DIST.exists():
     def serve_react_app(full_path: str):
         candidate = (FRONTEND_DIST / full_path).resolve()
         if full_path and candidate.is_file() and candidate.is_relative_to(FRONTEND_DIST.resolve()):
-            return FileResponse(candidate)
-        return FileResponse(FRONTEND_DIST / "index.html")
+            # Everything served through this catch-all (favicon.png, manifest,
+            # robots.txt, sitemap.xml, ...) has a plain, non-hashed filename --
+            # unlike /assets/*.js|css which get a content hash per build and
+            # can be cached forever. Without an explicit header here, browsers
+            # apply their own heuristic caching and can keep serving a stale
+            # copy for a long time after a deploy (bit us with both the
+            # favicon and an old JS bundle sticking around after real fixes
+            # had already shipped).
+            return FileResponse(candidate, headers={"Cache-Control": "no-cache"})
+        return FileResponse(FRONTEND_DIST / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 

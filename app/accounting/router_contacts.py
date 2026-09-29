@@ -14,7 +14,7 @@ from app.accounting.models import (
     PurchaseOrder,
     SalesOrder,
 )
-from app.accounting.permissions import CONTACT_WRITE_ROLES, require_roles
+from app.accounting.permissions import CONTACT_WRITE_ROLES, require_accounting_action
 from app.accounting.schemas import ContactIn, ContactOut
 from app.database import get_db
 from app.deps import get_current_admin
@@ -170,7 +170,7 @@ def get_contact(
 def create_contact(
     payload: ContactIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*CONTACT_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CREATE", CONTACT_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     item = Contact(**payload.model_dump(), source="offline")
@@ -187,7 +187,7 @@ def update_contact(
     item_id: int,
     payload: ContactIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*CONTACT_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("EDIT", CONTACT_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)
@@ -214,7 +214,7 @@ def update_contact(
 def delete_contact(
     item_id: int,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*CONTACT_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("DELETE", CONTACT_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)

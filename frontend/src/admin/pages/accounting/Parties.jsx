@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../../api";
+import { useAuth } from "../../../context/AuthContext";
 import { Loading, Empty } from "../../../components/Loading";
 import SearchBox from "../../accounting/SearchBox";
 import ExportButton from "../../accounting/ExportButton";
@@ -23,6 +24,16 @@ function emptyForm() {
 }
 
 export default function Parties() {
+  const { role, hasPermission } = useAuth();
+  // Custom-role admins are authorized by the module/action matrix, so hide
+  // actions they lack. Other roles are gated by the legacy accounting_role on
+  // the backend, which the frontend can't see -- keep showing the buttons for
+  // them and let the backend enforce. The backend is the real security boundary.
+  const isCustom = role === "custom";
+  const canCreate = !isCustom || hasPermission("accounting", "CREATE");
+  const canEdit = !isCustom || hasPermission("accounting", "EDIT");
+  const canDelete = !isCustom || hasPermission("accounting", "DELETE");
+
   const [items, setItems] = useState(null);
   const [contactType, setContactType] = useState("");
   const [channelFilter, setChannelFilter] = useState("");
@@ -270,9 +281,11 @@ export default function Parties() {
         <h1>Parties</h1>
         <div style={{ display: "flex", gap: 8 }}>
           <ExportButton baseUrl="/api/admin/accounting/export/contacts.xlsx" />
-          <button className="btn btn-sm btn-primary" onClick={startCreate}>
-            + New Party
-          </button>
+          {canCreate && (
+            <button className="btn btn-sm btn-primary" onClick={startCreate}>
+              + New Party
+            </button>
+          )}
         </div>
       </div>
 
@@ -342,12 +355,16 @@ export default function Parties() {
                       </Link>
                       {item.source !== "online" && (
                         <>
-                          <button className="btn btn-sm btn-outline dark" onClick={() => startEdit(item)}>
-                            Edit
-                          </button>
-                          <button className="btn btn-sm btn-danger" onClick={() => handleDelete(item)}>
-                            Delete
-                          </button>
+                          {canEdit && (
+                            <button className="btn btn-sm btn-outline dark" onClick={() => startEdit(item)}>
+                              Edit
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button className="btn btn-sm btn-danger" onClick={() => handleDelete(item)}>
+                              Delete
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

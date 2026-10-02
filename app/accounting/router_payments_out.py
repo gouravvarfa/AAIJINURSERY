@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.accounting.audit import record_change
 from app.accounting.models import Expense, PaymentOut
-from app.accounting.permissions import PURCHASE_WRITE_ROLES, require_roles
+from app.accounting.permissions import PURCHASE_WRITE_ROLES, require_accounting_action
 from app.accounting.schemas import PaymentOutIn, PaymentOutOut
 from app.database import get_db
 from app.deps import get_current_admin
@@ -37,7 +37,7 @@ def list_payments_out(
 def create_payment_out(
     payload: PaymentOutIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*PURCHASE_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CREATE", PURCHASE_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     if bool(payload.purchase_id) == bool(payload.expense_id):

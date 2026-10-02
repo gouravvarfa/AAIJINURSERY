@@ -36,9 +36,21 @@ def get_accounting_role(
 
 
 def require_roles(*allowed: str):
+    """Legacy, role-only gate -- no action/module awareness, kept only for
+    the Accounting role-management endpoints themselves (router_roles.py),
+    where "who can reassign accounting_role" is deliberately its own
+    narrower axis, not something System A's module/action matrix should
+    arbitrate. Developer always passes (System A's own top precedence
+    rule), same as everywhere else."""
     allowed_set = set(allowed)
 
-    def _dep(role: str = Depends(get_accounting_role)) -> str:
+    def _dep(
+        admin: str = Depends(get_current_admin), db: Session = Depends(get_db)
+    ) -> str:
+        user = db.query(AdminUser).filter(AdminUser.username == admin).first()
+        if user and user.role == "developer":
+            return "developer"
+        role = user.accounting_role if user and user.accounting_role else "Viewer"
         if role not in allowed_set:
             raise HTTPException(
                 status_code=403,
@@ -49,24 +61,31 @@ def require_roles(*allowed: str):
     return _dep
 
 
-def require_accounting_action(action: str, legacy_roles):
-    """Action-aware gate for Accounting writes (bridges the two RBAC axes).
+def require_module_action(module: str, action: str, legacy_roles):
+    """Unified action-aware gate -- the one bridge between the legacy
+    accounting_role axis and System A's module/action RBAC (app/permissions.py),
+    used by Accounting, Delivery and Labour alike (each passes its own
+    `module` name and legacy role-set).
 
-    Precedence:
-      1. Authentication (get_current_admin -> 401 if missing).
-      2. Module VIEW boundary is enforced separately at the router mount
-         in main.py (require_permission("accounting", "VIEW")).
-      3. If the user has an explicit accounting_role, that legacy role is
-         authoritative: allowed only if it is in `legacy_roles`. Nothing is
+    Precedence (mirrors System A's own, documented in app/permissions.py):
+      1. Developer -- always allowed, unconditionally. (Previously this
+         function denied a developer outright whenever accounting_role was
+         unset, which was the actual bug: the site's own superuser account
+         could get locked out of Accounting/Delivery/Labour writes.)
+      2. If the user has an explicit legacy accounting_role, that role is
+         authoritative: allowed only if it's in `legacy_roles`. Nothing is
          converted, so existing Owner/Admin/Accountant/Sales Staff/
-         Purchase Staff/Viewer behavior is unchanged. (Known limitation: an
-         explicit legacy role is NOT overridden by a module-matrix DENY.)
-      4. Otherwise, for role == "custom", defer to app.permissions.
-         check_permission(), which already applies user DENY/ALLOW
-         overrides, then the custom role's RolePermission row, then
-         default deny.
-      5. Any other user with no accounting_role keeps the old behavior
-         (treated as Viewer -> denied), so access is never widened silently.
+         Purchase Staff/Viewer assignments behave exactly as before for
+         anyone who already has one set.
+      3. Otherwise (no legacy role assigned -- the normal case for a
+         regular "admin", "super_access", or "custom" account that was
+         never given an accounting_role), defer entirely to System A's
+         check_permission(module, action): this applies user-level DENY/
+         ALLOW overrides, then the resolved role's RolePermission row
+         (custom role, Admin (Default), or Super Access), then default
+         deny -- the same engine every other module already uses, so a
+         Developer-granted custom-role permission for this module actually
+         takes effect instead of being silently ignored.
     """
     if action not in ACTIONS:
         raise ValueError(f"Unknown action: {action}")
@@ -76,20 +95,34 @@ def require_accounting_action(action: str, legacy_roles):
         admin: str = Depends(get_current_admin), db: Session = Depends(get_db)
     ) -> str:
         user = db.query(AdminUser).filter(AdminUser.username == admin).first()
-        explicit = user.accounting_role if user and user.accounting_role else None
+        if not user:
+            raise HTTPException(status_code=401, detail="Not authenticated")
 
+        if user.role == "developer":
+            return "developer"
+
+        explicit = user.accounting_role if user.accounting_role else None
         if explicit:
             if explicit in allowed_set:
                 return explicit
             detail = f"Your accounting role ({explicit}) does not permit this action."
-        elif user and user.role == "custom" and check_permission(db, user, "accounting", action):
-            return "custom"
+        elif check_permission(db, user, module, action):
+            return user.role
         else:
-            detail = f"You do not have permission to {action} in the Accounting module."
+            detail = f"You do not have permission to {action} in {module.capitalize()}."
 
         record_admin_audit(
-            admin, UNAUTHORIZED_ACCESS_ATTEMPT, {"module": "accounting", "action": action}
+            admin, UNAUTHORIZED_ACCESS_ATTEMPT, {"module": module, "action": action}
         )
         raise HTTPException(status_code=403, detail=detail)
 
     return _dep
+
+
+def require_accounting_action(action: str, legacy_roles):
+    """Accounting-specific convenience wrapper around require_module_action
+    -- kept as a separate name since it's already imported this way across
+    the Accounting routers; Delivery/Labour call require_module_action
+    directly with their own module name instead of needing their own
+    identical wrapper."""
+    return require_module_action("accounting", action, legacy_roles)

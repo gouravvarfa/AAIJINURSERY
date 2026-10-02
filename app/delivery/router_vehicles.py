@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.delivery.models import Delivery, DeliveryTrip, Vehicle, VehicleFuelLog
-from app.delivery.permissions import DELIVERY_WRITE_ROLES, require_roles
+from app.delivery.permissions import require_roles
 from app.delivery.schemas import VehicleIn, VehicleOut
 from app.deps import get_current_admin
 
@@ -77,7 +77,7 @@ def get_vehicle(item_id: int, admin: str = Depends(get_current_admin), db: Sessi
 def create_vehicle(
     payload: VehicleIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     existing = db.query(Vehicle).filter(Vehicle.registration_number == payload.registration_number).first()
@@ -95,7 +95,7 @@ def update_vehicle(
     item_id: int,
     payload: VehicleIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)
@@ -110,7 +110,7 @@ def update_vehicle(
 def delete_vehicle(
     item_id: int,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("DELETE")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)

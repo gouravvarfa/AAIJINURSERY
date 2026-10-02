@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.delivery.models import Delivery, DeliveryTrip, Driver, Vehicle
-from app.delivery.permissions import DELIVERY_WRITE_ROLES, require_roles
+from app.delivery.permissions import require_roles
 from app.delivery.schemas import TripEndIn, TripOut, TripStartIn
 from app.delivery.trip_notifications import queue_trip_assigned_to_driver
 from app.deps import get_current_admin
@@ -66,7 +66,7 @@ def get_trip(item_id: int, admin: str = Depends(get_current_admin), db: Session 
 def start_trip(
     payload: TripStartIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     vehicle = db.query(Vehicle).filter(Vehicle.id == payload.vehicle_id).first()
@@ -119,7 +119,7 @@ def end_trip(
     item_id: int,
     payload: TripEndIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     trip = _get_or_404(db, item_id)

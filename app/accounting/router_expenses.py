@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.accounting.audit import record_change
 from app.accounting.models import Account, Contact, Expense
-from app.accounting.permissions import PURCHASE_WRITE_ROLES, require_roles
+from app.accounting.permissions import PURCHASE_WRITE_ROLES, require_accounting_action
 from app.accounting.schemas import ExpenseIn, ExpenseOut
 from app.database import get_db
 from app.deps import get_current_admin
@@ -56,7 +56,7 @@ def get_expense(item_id: int, admin: str = Depends(get_current_admin), db: Sessi
 def create_expense(
     payload: ExpenseIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*PURCHASE_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CREATE", PURCHASE_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     if payload.amount <= 0:
@@ -96,7 +96,7 @@ def create_expense(
 def void_expense(
     item_id: int,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*PURCHASE_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CANCEL", PURCHASE_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     """Never a hard delete -- financial documents are Voided, not removed."""

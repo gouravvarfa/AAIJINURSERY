@@ -9,7 +9,7 @@ from app.database import get_db
 from app.deps import get_current_admin
 from app.labour import ledger
 from app.labour.models import EmployeeAttendance, Payroll, WorkerAdvance, WorkerPayment
-from app.labour.permissions import LABOUR_WRITE_ROLES, require_roles
+from app.labour.permissions import require_roles
 from app.labour.schemas import EmployeeFullIn, EmployeeFullOut
 
 router = APIRouter(prefix="/employees", tags=["labour-employees"])
@@ -56,7 +56,7 @@ def get_employee(item_id: int, admin: str = Depends(get_current_admin), db: Sess
 def create_employee(
     payload: EmployeeFullIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     item = Employee(**payload.model_dump(), is_active=payload.status == "Active")
@@ -73,7 +73,7 @@ def update_employee(
     item_id: int,
     payload: EmployeeFullIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)
@@ -97,7 +97,7 @@ def update_employee(
 def delete_employee(
     item_id: int,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("DELETE")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)

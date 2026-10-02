@@ -9,7 +9,7 @@ from app.accounting.models import Employee
 from app.database import get_db
 from app.deps import get_current_admin
 from app.labour.models import HALF_DAY_RATIO, Labour, LabourAttendance, EmployeeAttendance
-from app.labour.permissions import LABOUR_WRITE_ROLES, require_roles
+from app.labour.permissions import require_roles
 from app.labour.schemas import (
     EmployeeAttendanceIn,
     EmployeeAttendanceOut,
@@ -44,7 +44,7 @@ def list_employee_attendance(
 def mark_employee_attendance(
     payload: EmployeeAttendanceIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     employee = db.query(Employee).filter(Employee.id == payload.employee_id).first()
@@ -128,7 +128,7 @@ def _compute_labour_earning(labour: Labour, status: str, overtime_hours: float):
 def mark_labour_attendance(
     payload: LabourAttendanceIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     labour = db.query(Labour).filter(Labour.id == payload.labour_id).first()

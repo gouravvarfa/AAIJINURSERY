@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.accounting.models import Contact, SalesOrder, SalesOrderItem
 from app.database import get_db
 from app.delivery.models import Delivery, DeliveryItem, DeliveryTrip, Driver, Vehicle, VehicleFuelLog
-from app.delivery.permissions import DELIVERY_WRITE_ROLES, require_roles
+from app.delivery.permissions import require_roles
 from app.delivery.schemas import (
     DeliveryAssignIn,
     DeliveryCompleteIn,
@@ -141,7 +141,7 @@ def get_delivery(item_id: int, admin: str = Depends(get_current_admin), db: Sess
 def create_delivery(
     payload: DeliveryIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     contact = db.query(Contact).filter(Contact.id == payload.contact_id).first()
@@ -217,7 +217,7 @@ def assign_delivery(
     item_id: int,
     payload: DeliveryAssignIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     delivery = _get_or_404(db, item_id)
@@ -246,7 +246,7 @@ def update_delivery_status(
     item_id: int,
     payload: DeliveryStatusIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     from app.delivery.models import DELIVERY_STATUSES
@@ -268,7 +268,7 @@ def complete_delivery(
     item_id: int,
     payload: DeliveryCompleteIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     delivery = _get_or_404(db, item_id)

@@ -44,6 +44,7 @@ const DEVELOPER_NAV = [
   { to: "/admin/developer/system-health/functions", label: "Function Monitoring" },
   { to: "/admin/developer/system-health/logs", label: "System Logs" },
   { to: "/admin/developer/live-logs", label: "Live Logs" },
+  { to: "/admin/accounting/roles", label: "Accounting Roles" },
 ];
 
 const ACCOUNTING_NAV = [
@@ -56,7 +57,6 @@ const ACCOUNTING_NAV = [
   { to: "/admin/accounting/parties", label: "Parties", module: "accounting" },
   { to: "/admin/accounting/employees", label: "Employees", module: "accounting" },
   { to: "/admin/accounting/reports", label: "Reports", module: "accounting" },
-  { to: "/admin/accounting/roles", label: "Roles", module: "accounting" },
   { to: "/admin/accounting/chart-of-accounts", label: "Chart of Accounts", module: "accounting" },
   { to: "/admin/accounting/tax-rates", label: "Tax Rates", module: "accounting" },
 ];

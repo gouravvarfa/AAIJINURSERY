@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.accounting.audit import record_change
 from app.accounting.models import Employee
-from app.accounting.permissions import EMPLOYEE_WRITE_ROLES, require_roles
+from app.accounting.permissions import EMPLOYEE_WRITE_ROLES, require_accounting_action
 from app.accounting.schemas import EmployeeIn, EmployeeOut
 from app.database import get_db
 from app.deps import get_current_admin
@@ -27,7 +27,7 @@ def list_employees(admin: str = Depends(get_current_admin), db: Session = Depend
 def create_employee(
     payload: EmployeeIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*EMPLOYEE_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CREATE", EMPLOYEE_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     item = Employee(**payload.model_dump())
@@ -44,7 +44,7 @@ def update_employee(
     item_id: int,
     payload: EmployeeIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*EMPLOYEE_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("EDIT", EMPLOYEE_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)
@@ -66,7 +66,7 @@ def update_employee(
 def delete_employee(
     item_id: int,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*EMPLOYEE_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("DELETE", EMPLOYEE_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)

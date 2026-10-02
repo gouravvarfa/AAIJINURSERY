@@ -18,7 +18,7 @@ from app.labour.models import (
     Payroll,
     WorkerAdvance,
 )
-from app.labour.permissions import LABOUR_WRITE_ROLES, require_roles
+from app.labour.permissions import require_roles
 from app.labour.schemas import PayrollAdjustIn, PayrollGenerateIn, PayrollOut
 
 router = APIRouter(prefix="/payroll", tags=["labour-payroll"])
@@ -82,7 +82,7 @@ def get_payroll(item_id: int, admin: str = Depends(get_current_admin), db: Sessi
 def generate_payroll(
     payload: PayrollGenerateIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     if payload.worker_type not in ("EMPLOYEE", "LABOUR"):
@@ -256,7 +256,7 @@ def adjust_payroll(
     item_id: int,
     payload: PayrollAdjustIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)
@@ -287,7 +287,7 @@ def adjust_payroll(
 def finalize_payroll(
     item_id: int,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("APPROVE")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)
@@ -306,7 +306,7 @@ def finalize_payroll(
 def reopen_payroll(
     item_id: int,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)

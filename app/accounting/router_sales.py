@@ -15,7 +15,7 @@ from app.accounting.models import (
     SalesOrder,
     SalesOrderItem,
 )
-from app.accounting.permissions import SALES_WRITE_ROLES, require_roles
+from app.accounting.permissions import SALES_WRITE_ROLES, require_accounting_action
 from app.accounting.schemas import (
     InvoiceConvertIn,
     InvoiceOut,
@@ -78,7 +78,7 @@ def get_sales_order(
 def create_sales_order(
     payload: SalesOrderIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*SALES_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CREATE", SALES_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     if not payload.items:
@@ -133,7 +133,7 @@ def convert_to_invoice(
     item_id: int,
     payload: InvoiceConvertIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*SALES_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CREATE", SALES_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     """Converts an (offline) Sales Order into an Invoice. The original Sales
@@ -267,7 +267,7 @@ def get_invoice(
 def void_invoice(
     item_id: int,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*SALES_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CANCEL", SALES_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     """Never a hard delete -- financial documents are Voided, not removed."""
@@ -342,7 +342,7 @@ def list_payments_in(
 def create_payment_in(
     payload: PaymentInIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*SALES_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CREATE", SALES_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     invoice = db.query(Invoice).filter(Invoice.id == payload.invoice_id).first()

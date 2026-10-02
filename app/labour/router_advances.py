@@ -9,7 +9,7 @@ from app.database import get_db
 from app.deps import get_current_admin
 from app.labour import ledger
 from app.labour.models import Labour, WorkerAdvance
-from app.labour.permissions import LABOUR_WRITE_ROLES, require_roles
+from app.labour.permissions import require_roles
 from app.labour.schemas import WorkerAdvanceIn, WorkerAdvanceOut
 
 router = APIRouter(prefix="/advances", tags=["labour-advances"])
@@ -62,7 +62,7 @@ def get_advance(item_id: int, admin: str = Depends(get_current_admin), db: Sessi
 def create_advance(
     payload: WorkerAdvanceIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     if payload.worker_type not in ("EMPLOYEE", "LABOUR"):

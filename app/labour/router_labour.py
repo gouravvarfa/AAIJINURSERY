@@ -15,7 +15,7 @@ from app.labour.models import (
     WorkerAdvance,
     WorkerPayment,
 )
-from app.labour.permissions import LABOUR_WRITE_ROLES, require_roles
+from app.labour.permissions import require_roles
 from app.labour.schemas import LabourIn, LabourOut
 
 router = APIRouter(prefix="/labour", tags=["labour-labour"])
@@ -65,7 +65,7 @@ def get_labour(item_id: int, admin: str = Depends(get_current_admin), db: Sessio
 def create_labour(
     payload: LabourIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     item = Labour(**payload.model_dump())
@@ -82,7 +82,7 @@ def update_labour(
     item_id: int,
     payload: LabourIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)
@@ -104,7 +104,7 @@ def update_labour(
 def delete_labour(
     item_id: int,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("DELETE")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.accounting.audit import record_change
 from app.accounting.models import Contact, PurchaseOrder, PurchaseOrderItem
-from app.accounting.permissions import PURCHASE_WRITE_ROLES, require_roles
+from app.accounting.permissions import PURCHASE_WRITE_ROLES, require_accounting_action
 from app.accounting.router_bills import _with_summary as _bill_with_summary
 from app.accounting.schemas import (
     BillOut,
@@ -74,7 +74,7 @@ def get_purchase_order(
 def create_purchase_order(
     payload: PurchaseOrderIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*PURCHASE_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CREATE", PURCHASE_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     if not payload.items:
@@ -135,7 +135,7 @@ def convert_to_bill(
     item_id: int,
     payload: PurchaseOrderConvertIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*PURCHASE_WRITE_ROLES)),
+    _role: str = Depends(require_accounting_action("CREATE", PURCHASE_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
     """Converts a Purchase Order into a Bill (the existing Purchase table).

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.delivery.models import Vehicle, VehicleFuelLog
-from app.delivery.permissions import DELIVERY_WRITE_ROLES, require_roles
+from app.delivery.permissions import require_roles
 from app.delivery.schemas import FuelLogIn, FuelLogOut
 from app.deps import get_current_admin
 
@@ -38,7 +38,7 @@ def list_fuel_logs(
 def create_fuel_log(
     payload: FuelLogIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     if not db.query(Vehicle).filter(Vehicle.id == payload.vehicle_id).first():

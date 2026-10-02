@@ -8,7 +8,7 @@ from app.accounting.audit import record_change
 from app.database import get_db
 from app.deps import get_current_admin
 from app.labour.models import Labour, WorkAssignment, WorkRequirement
-from app.labour.permissions import LABOUR_WRITE_ROLES, require_roles
+from app.labour.permissions import require_roles
 from app.labour.schemas import (
     WorkAssignmentStatusIn,
     WorkRequirementIn,
@@ -58,7 +58,7 @@ def get_work_requirement(
 def create_work_requirement(
     payload: WorkRequirementIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     item = WorkRequirement(
@@ -92,7 +92,7 @@ def send_more_requests(
     item_id: int,
     labour_ids: list[int],
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     """Adds more Labour workers to an already-created work requirement
@@ -112,7 +112,7 @@ def update_assignment_status(
     assignment_id: int,
     payload: WorkAssignmentStatusIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     assignment = db.query(WorkAssignment).filter(WorkAssignment.id == assignment_id).first()

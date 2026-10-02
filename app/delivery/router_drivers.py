@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.delivery.models import Delivery, DeliveryTrip, Driver
-from app.delivery.permissions import DELIVERY_WRITE_ROLES, require_roles
+from app.delivery.permissions import require_roles
 from app.delivery.schemas import DriverIn, DriverOut
 from app.deps import get_current_admin
 
@@ -60,7 +60,7 @@ def get_driver(item_id: int, admin: str = Depends(get_current_admin), db: Sessio
 def create_driver(
     payload: DriverIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     item = Driver(**payload.model_dump())
@@ -75,7 +75,7 @@ def update_driver(
     item_id: int,
     payload: DriverIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("EDIT")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)
@@ -90,7 +90,7 @@ def update_driver(
 def delete_driver(
     item_id: int,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*DELIVERY_WRITE_ROLES)),
+    _role: str = Depends(require_roles("DELETE")),
     db: Session = Depends(get_db),
 ):
     item = _get_or_404(db, item_id)

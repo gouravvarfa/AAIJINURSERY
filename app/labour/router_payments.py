@@ -8,7 +8,7 @@ from app.accounting.models import Employee
 from app.database import get_db
 from app.deps import get_current_admin
 from app.labour.models import Labour, Payroll, WorkerPayment
-from app.labour.permissions import LABOUR_WRITE_ROLES, require_roles
+from app.labour.permissions import require_roles
 from app.labour.schemas import WorkerPaymentIn, WorkerPaymentOut
 
 router = APIRouter(prefix="/payments", tags=["labour-payments"])
@@ -39,7 +39,7 @@ def list_payments(
 def create_payment(
     payload: WorkerPaymentIn,
     admin: str = Depends(get_current_admin),
-    _role: str = Depends(require_roles(*LABOUR_WRITE_ROLES)),
+    _role: str = Depends(require_roles("CREATE")),
     db: Session = Depends(get_db),
 ):
     if payload.worker_type not in ("EMPLOYEE", "LABOUR"):

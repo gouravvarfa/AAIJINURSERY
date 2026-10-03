@@ -54,6 +54,19 @@ export default function Dashboard() {
         <h1>Dashboard</h1>
       </div>
 
+      <Link to="/admin/ai" className="admin-status-banner" style={{ justifyContent: "space-between", textDecoration: "none" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="admin-status-banner-icon" style={{ background: "var(--color-primary)" }}>🤖</span>
+          <span>
+            <strong style={{ display: "block" }}>Ask AAIJI</strong>
+            <span style={{ fontWeight: 400, color: "var(--color-text-muted)", fontSize: "0.82rem" }}>
+              Ask questions about your business
+            </span>
+          </span>
+        </span>
+        <span className="btn btn-sm btn-primary">Open Assistant</span>
+      </Link>
+
       <div className="stat-cards" style={{ marginBottom: 28 }}>
         {orderCards.map((c) => (
           <Link key={c.label} to={c.to} className="stat-card">

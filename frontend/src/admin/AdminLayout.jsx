@@ -14,6 +14,10 @@ import logoImg from "../assets/logo.png";
 // business access), it only actually restricts a "custom" role.
 const NAV = [
   { to: "/admin", label: "Dashboard", end: true, module: null },
+  // module: null -- the page itself is open to any logged-in admin; each
+  // answer is still scoped per-question by the real RBAC check inside
+  // every admin_tools.py function, same as the rest of this app.
+  { to: "/admin/ai", label: "🤖 Ask AAIJI", module: null },
   { to: "/admin/analytics", label: "Analytics", module: "analytics" },
   { to: "/admin/orders", label: "Orders", module: "orders" },
   { to: "/admin/categories", label: "Categories", module: "products" },

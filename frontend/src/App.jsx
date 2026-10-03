@@ -29,6 +29,7 @@ import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./admin/AdminLayout";
 import AdminDashboard from "./admin/pages/Dashboard";
+import AskAaiji from "./admin/pages/AskAaiji";
 import AdminAnalytics from "./admin/pages/Analytics";
 import AdminPurchases from "./admin/pages/Purchases";
 import AdminOrders from "./admin/pages/Orders";
@@ -153,6 +154,7 @@ export default function App() {
         <Route path="/admin/login" element={<Navigate to="/login" replace />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
+          <Route path="ai" element={<AskAaiji />} />
           <Route path="analytics" element={<AdminAnalytics />} />
           <Route path="orders" element={<AdminOrders />} />
           <Route path="orders/:id" element={<AdminOrderDetail />} />

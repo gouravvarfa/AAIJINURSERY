@@ -138,6 +138,51 @@
   margin: 0;
 }
 
+/* ----- Status banner (used by Dashboard's "no new orders" state and the
+   "Ask AAIJI" shortcut card) -- base rule works on every width; the mobile
+   media query further down only tweaks spacing, it doesn't redefine this. */
+.admin-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: #eef7f0;
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+  transition: box-shadow 0.15s ease;
+}
+
+a.admin-status-banner:hover {
+  box-shadow: var(--shadow);
+}
+
+.admin-status-banner.alert {
+  background: #fdf1e6;
+  color: #8a5a1f;
+  border-color: #f3d9b8;
+}
+
+.admin-status-banner-icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+}
+
+.admin-status-banner.alert .admin-status-banner-icon {
+  background: #d98b2b;
+}
+
 .stat-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -720,39 +765,6 @@ table.admin-table .row-actions {
   .stat-card .label { order: 1; margin-top: 0; margin-bottom: 4px; font-size: 0.75rem; }
   .stat-card .num { order: 2; font-size: 1.4rem; }
 
-  /* ----- Status banner (replaces the big "no new orders" button area) ----- */
-  .admin-status-banner {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    border: 1px solid var(--color-border);
-    background: #eef7f0;
-    color: var(--color-primary-dark);
-    font-weight: 600;
-    font-size: 0.88rem;
-    margin-bottom: 20px;
-  }
-  .admin-status-banner.alert {
-    background: #fdf1e6;
-    color: #8a5a1f;
-    border-color: #f3d9b8;
-  }
-  .admin-status-banner-icon {
-    flex-shrink: 0;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--color-accent);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.7rem;
-  }
-  .admin-status-banner.alert .admin-status-banner-icon { background: #d98b2b; }
-
   /* ----- Mobile list rows (replace a data table on narrow screens) -----
      Scoped to .admin-dashboard-table-wrap specifically (NOT the generic
      .admin-table-wrap used by every other admin list page) -- only the
@@ -1163,5 +1175,99 @@ table.admin-table .row-actions {
   }
   .admin-content {
     padding: 0 !important;
+  }
+}
+
+/* ---------- Ask AAIJI (Admin BI chat page) ---------- */
+/* Reuses the customer AI widget's bubble/typing/chip/error styles
+   (.ai-chat-msg, .ai-chat-chip, .ai-chat-error, .ai-chat-typing-dots,
+   .ai-chat-send-btn, .ai-chat-status-dot -- all in index.css, globally
+   available) inside a full-page layout instead of a floating widget. */
+
+.ask-aaiji-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ask-aaiji-panel {
+  display: flex;
+  flex-direction: column;
+  height: min(640px, calc(100vh - 220px));
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.ask-aaiji-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ask-aaiji-msg {
+  max-width: 70%;
+}
+
+.ask-aaiji-empty {
+  margin: auto;
+  text-align: center;
+  max-width: 420px;
+  color: var(--color-text);
+}
+
+.ask-aaiji-empty-icon {
+  font-size: 2.2rem;
+  margin-bottom: 8px;
+}
+
+.ask-aaiji-empty p {
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+  margin: 6px 0 16px;
+}
+
+.ask-aaiji-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.ask-aaiji-input-row textarea {
+  flex: 1;
+  min-width: 0;
+  max-height: 100px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg, #f4f4f0);
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: none;
+}
+
+.ask-aaiji-input-row textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  background: #fff;
+}
+
+@media (max-width: 768px) {
+  .ask-aaiji-panel {
+    height: calc(100vh - 260px);
+    border-radius: 12px;
+  }
+  .ask-aaiji-msg {
+    max-width: 88%;
+  }
+  .ask-aaiji-header-right {
+    width: 100%;
+    justify-content: space-between;
   }
 }

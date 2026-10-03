@@ -21,6 +21,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.accounting.router import router as accounting_router
 from app.ai.gateway import router as ai_gateway_router
+from app.ai.admin_gateway import router as admin_ai_gateway_router
 from app.communications import models as communications_models  # noqa: F401 -- registers tables with Base.metadata
 from app.communications.router import router as communications_router
 from app.communications.seed import seed_communications_defaults
@@ -470,6 +471,13 @@ app.include_router(delivery_router, dependencies=[Depends(require_permission("de
 app.include_router(communications_router, dependencies=[Depends(require_permission("communications", "VIEW"))])
 app.include_router(api_customer.router)
 app.include_router(ai_gateway_router)
+# No blanket require_permission() here (unlike accounting/labour/delivery/
+# communications above) -- Ask AAIJI is gated by Depends(get_current_admin)
+# on its own route plus a per-tool check_permission() call inside every
+# function in admin_tools.py, so any logged-in admin can open the page and
+# ask, but each individual answer is still scoped to what their role is
+# actually allowed to see.
+app.include_router(admin_ai_gateway_router)
 
 
 STATIC_SITEMAP_PATHS = [

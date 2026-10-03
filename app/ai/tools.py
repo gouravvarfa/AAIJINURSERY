@@ -11,6 +11,8 @@ customer_id themselves and simply refuse (return an error dict, never raise)
 if it's missing, so a logged-out visitor can never be tricked into pulling
 another customer's order history through a crafted prompt.
 """
+import re
+
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -18,6 +20,29 @@ from app.models import Category, Order, Plant
 from app.settings_helper import get_settings
 
 MAX_RESULTS = 8
+
+
+def _find_plant_by_name(db: Session, name: str) -> Plant | None:
+    """Looks up one plant by name the way a customer actually types it, not
+    by exact substring. Plant names like "1057 (TOMATO)" have spacing/
+    punctuation a plain `ILIKE %name%` is too strict about -- "1057(TOMATO)"
+    or "1057 tomato" (both things a real user -- or a model echoing a
+    product-card title back -- would type) wouldn't match that name as one
+    contiguous substring even though they clearly mean the same plant.
+    Instead: split the query into alphanumeric tokens and require every
+    token to appear somewhere in the name, in any order/spacing."""
+    tokens = [t for t in re.split(r"[^a-zA-Z0-9]+", name) if t]
+    if not tokens:
+        return None
+    q = db.query(Plant).filter(Plant.is_active.is_(True))
+    for t in tokens:
+        q = q.filter(Plant.name.ilike(f"%{t}%"))
+    plant = q.first()
+    if plant:
+        return plant
+    # Fallback: the plain substring match still catches names with no
+    # separators at all between tokens, or a single-word query.
+    return db.query(Plant).filter(Plant.is_active.is_(True), Plant.name.ilike(f"%{name.strip()}%")).first()
 
 
 def _plant_summary(plant: Plant) -> dict:
@@ -40,8 +65,11 @@ def search_plants(db: Session, query: str = "", category: str = "", max_price: f
     the public /api/plants endpoint and website Shop page use."""
     q = db.query(Plant).filter(Plant.is_active.is_(True))
     if query:
-        like = f"%{query.strip()}%"
-        q = q.filter(or_(Plant.name.ilike(like), Plant.description.ilike(like)))
+        # Tokenized, not one exact substring -- see _find_plant_by_name for
+        # why ("1057(TOMATO)" vs the stored "1057 (TOMATO)", etc.).
+        for t in re.split(r"[^a-zA-Z0-9]+", query):
+            if t:
+                q = q.filter(or_(Plant.name.ilike(f"%{t}%"), Plant.description.ilike(f"%{t}%")))
     if category:
         q = q.join(Category, Category.id == Plant.category_id).filter(Category.name.ilike(f"%{category.strip()}%"))
     if max_price is not None:
@@ -57,7 +85,7 @@ def get_product(db: Session, name: str) -> dict:
     Tomato plant' type questions."""
     if not name:
         return {"error": "A plant name is required."}
-    plant = db.query(Plant).filter(Plant.is_active.is_(True), Plant.name.ilike(f"%{name.strip()}%")).first()
+    plant = _find_plant_by_name(db, name)
     if not plant:
         return {"error": f"No plant found matching '{name}'."}
     summary = _plant_summary(plant)
@@ -72,7 +100,7 @@ def check_stock(db: Session, name: str) -> dict:
     'is X in stock' question."""
     if not name:
         return {"error": "A plant name is required."}
-    plant = db.query(Plant).filter(Plant.is_active.is_(True), Plant.name.ilike(f"%{name.strip()}%")).first()
+    plant = _find_plant_by_name(db, name)
     if not plant:
         return {"error": f"No plant found matching '{name}'."}
     return {
@@ -86,7 +114,7 @@ def check_stock(db: Session, name: str) -> dict:
 def get_price(db: Session, name: str) -> dict:
     if not name:
         return {"error": "A plant name is required."}
-    plant = db.query(Plant).filter(Plant.is_active.is_(True), Plant.name.ilike(f"%{name.strip()}%")).first()
+    plant = _find_plant_by_name(db, name)
     if not plant:
         return {"error": f"No plant found matching '{name}'."}
     out = {"name": plant.name, "price": plant.price, "effective_price": plant.effective_price}

@@ -440,19 +440,6 @@ class AccountingOverviewOut(BaseModel):
     has_data: bool = False
 
 
-# ---------- Roles (Phase 4) ----------
-
-class AdminAccountingRoleOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    username: str
-    accounting_role: Optional[str] = None
-
-
-class AdminAccountingRoleIn(BaseModel):
-    accounting_role: str
-
-
 # ---------- Reports (Phase 3) ----------
 
 class MonthlyAmountRow(BaseModel):

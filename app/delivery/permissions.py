@@ -5,7 +5,7 @@ Delivery actually takes effect, instead of only the legacy accounting_role
 tier (Owner/Admin/Accountant) ever working. See require_module_action's
 docstring in app/accounting/permissions.py for the exact precedence.
 Driver Portal auth (Phase C) is separate."""
-from app.accounting.permissions import get_accounting_role, require_module_action  # noqa: F401
+from app.accounting.permissions import require_module_action
 
 DELIVERY_WRITE_ROLES = {"Owner", "Admin", "Accountant"}
 

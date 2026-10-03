@@ -4,7 +4,7 @@ bridges to System A's module/action RBAC (app/permissions.py, module=
 takes effect, instead of only the legacy accounting_role tier ever working.
 See require_module_action's docstring in app/accounting/permissions.py for
 the exact precedence."""
-from app.accounting.permissions import get_accounting_role, require_module_action  # noqa: F401
+from app.accounting.permissions import require_module_action
 
 # Payroll/attendance/advances/payments are gated to the same financial
 # roles as Accounting's purchase-side writes -- Sales/Purchase Staff don't

@@ -13,6 +13,7 @@ load_dotenv()
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -459,6 +460,45 @@ app.include_router(labour_router, dependencies=[Depends(require_permission("labo
 app.include_router(delivery_router, dependencies=[Depends(require_permission("delivery", "VIEW"))])
 app.include_router(communications_router, dependencies=[Depends(require_permission("communications", "VIEW"))])
 app.include_router(api_customer.router)
+
+
+STATIC_SITEMAP_PATHS = [
+    ("/", "1.0"),
+    ("/plants", "0.9"),
+    ("/about", "0.6"),
+    ("/services", "0.8"),
+    ("/pricing", "0.6"),
+    ("/gallery", "0.5"),
+    ("/blog", "0.6"),
+    ("/faqs", "0.5"),
+    ("/contact", "0.6"),
+    ("/testimonials", "0.5"),
+]
+
+
+@app.get("/sitemap.xml")
+def dynamic_sitemap():
+    """Registered before the static-file catch-all below, so it takes
+    priority over any stale frontend/public/sitemap.xml copy -- includes
+    every active plant's product page, not just the fixed marketing pages,
+    so new plants are discoverable by Google without a manual sitemap edit."""
+    from app.models import Plant
+
+    db = SessionLocal()
+    try:
+        plants = db.query(Plant.slug, Plant.created_at).filter(Plant.is_active.is_(True)).all()
+    finally:
+        db.close()
+
+    base = "https://shreeaaijihightechnursery.in"
+    urls = [f"  <url>\n    <loc>{base}{path}</loc>\n    <priority>{priority}</priority>\n  </url>" for path, priority in STATIC_SITEMAP_PATHS]
+    for slug, created_at in plants:
+        lastmod = f"\n    <lastmod>{created_at.date().isoformat()}</lastmod>" if created_at else ""
+        urls.append(f"  <url>\n    <loc>{base}/plants/{slug}</loc>{lastmod}\n    <priority>0.7</priority>\n  </url>")
+
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + "\n".join(urls) + "\n</urlset>"
+    return Response(content=xml, media_type="application/xml")
+
 
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")

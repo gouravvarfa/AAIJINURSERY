@@ -11,6 +11,7 @@ import PlantReviews from "../components/PlantReviews";
 import { Loading, Empty } from "../components/Loading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useProductStructuredData } from "../hooks/useProductStructuredData";
+import { useMetaTags } from "../hooks/useMetaTags";
 
 export default function PlantDetail() {
   const { slug } = useParams();
@@ -43,6 +44,15 @@ export default function PlantDetail() {
   }, [slug]);
 
   useProductStructuredData(plant, reviewsData);
+  useMetaTags(
+    plant
+      ? {
+          title: `${plant.name} | Aaiji Nursery`,
+          description: (plant.description || `Buy ${plant.name} online from Aaiji Nursery. Quality plants with doorstep delivery.`).slice(0, 160),
+          image: plant.image_url,
+        }
+      : undefined
+  );
 
   if (notFound) {
     return (

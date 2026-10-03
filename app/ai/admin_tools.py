@@ -43,13 +43,30 @@ def _denied(module: str) -> dict:
 
 
 def _find_customer(db: Session, name: str) -> Customer | None:
+    """Duplicate/near-duplicate customer records (e.g. "Gourav Varfa" and
+    "gourav varfa" as two separate accounts) are a real, observed data
+    pattern here -- a plain .first() can silently pick the empty one and
+    truthfully-but-unhelpfully report "no purchases" for someone who
+    clearly has orders. When more than one candidate matches the name,
+    prefer whichever actually has order history, most recent first."""
     tokens = [t for t in re.split(r"[^a-zA-Z0-9]+", name) if t]
     if not tokens:
         return None
     q = db.query(Customer)
     for t in tokens:
         q = q.filter(Customer.name.ilike(f"%{t}%"))
-    return q.first() or db.query(Customer).filter(Customer.name.ilike(f"%{name.strip()}%")).first()
+    candidates = q.all() or db.query(Customer).filter(Customer.name.ilike(f"%{name.strip()}%")).all()
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    order_counts = dict(
+        db.query(Order.customer_id, func.count(Order.id))
+        .filter(Order.customer_id.in_([c.id for c in candidates]))
+        .group_by(Order.customer_id)
+        .all()
+    )
+    return max(candidates, key=lambda c: order_counts.get(c.id, 0))
 
 
 # ---------- Sales ----------

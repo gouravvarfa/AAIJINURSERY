@@ -224,16 +224,13 @@ export default function Expenses() {
     <div>
       <div className="admin-page-head">
         <h1>Expenses</h1>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="admin-page-head-controls">
+          <SearchBox value={q} onChange={setQ} placeholder="Search by category or description..." />
           <ExportButton baseUrl="/api/admin/accounting/export/expenses.xlsx" />
           <button className="btn btn-sm btn-primary" onClick={startCreate}>
             + New Expense
           </button>
         </div>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <SearchBox value={q} onChange={setQ} placeholder="Search by category or description..." />
       </div>
 
       {loadError ? (

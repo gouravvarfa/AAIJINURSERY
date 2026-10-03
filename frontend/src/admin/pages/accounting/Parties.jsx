@@ -279,7 +279,20 @@ export default function Parties() {
     <div>
       <div className="admin-page-head">
         <h1>Parties</h1>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="admin-page-head-controls">
+          <select className="form-control admin-control-sm" style={{ maxWidth: 180 }} value={contactType} onChange={(e) => setContactType(e.target.value)}>
+            <option value="">All Types</option>
+            <option value="customer">Customer</option>
+            <option value="supplier">Supplier</option>
+            <option value="both">Both</option>
+          </select>
+          <select className="form-control admin-control-sm" style={{ maxWidth: 180 }} value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)}>
+            <option value="">All Channels</option>
+            <option value="online">Online Only</option>
+            <option value="offline">Offline Only</option>
+            <option value="both">Online + Offline</option>
+          </select>
+          <SearchBox value={q} onChange={setQ} placeholder="Search by name, email, or phone..." />
           <ExportButton baseUrl="/api/admin/accounting/export/contacts.xlsx" />
           {canCreate && (
             <button className="btn btn-sm btn-primary" onClick={startCreate}>
@@ -287,22 +300,6 @@ export default function Parties() {
             </button>
           )}
         </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <select className="form-control" style={{ maxWidth: 180 }} value={contactType} onChange={(e) => setContactType(e.target.value)}>
-          <option value="">All Types</option>
-          <option value="customer">Customer</option>
-          <option value="supplier">Supplier</option>
-          <option value="both">Both</option>
-        </select>
-        <select className="form-control" style={{ maxWidth: 180 }} value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)}>
-          <option value="">All Channels</option>
-          <option value="online">Online Only</option>
-          <option value="offline">Offline Only</option>
-          <option value="both">Online + Offline</option>
-        </select>
-        <SearchBox value={q} onChange={setQ} placeholder="Search by name, email, or phone..." />
       </div>
 
       {!filteredItems ? (

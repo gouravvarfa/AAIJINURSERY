@@ -139,16 +139,13 @@ export default function PurchaseOrders() {
     <div>
       <div className="admin-page-head">
         <h1>Purchase Orders</h1>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="admin-page-head-controls">
+          <SearchBox value={q} onChange={setQ} placeholder="Search by order # or supplier name..." />
           <ExportButton baseUrl="/api/admin/accounting/export/purchase-orders.xlsx" />
           <button className="btn btn-sm btn-primary" onClick={startCreate}>
             + New Purchase Order
           </button>
         </div>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <SearchBox value={q} onChange={setQ} placeholder="Search by order # or supplier name..." />
       </div>
 
       {loadError ? (

@@ -28,18 +28,17 @@ export default function Bills() {
     <div>
       <div className="admin-page-head">
         <h1>Bills</h1>
-        <ExportButton baseUrl="/api/admin/accounting/export/bills.xlsx" />
-      </div>
-
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <select className="form-control" style={{ maxWidth: 200 }} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All Statuses</option>
-          <option value="Unpaid">Unpaid</option>
-          <option value="PartiallyPaid">Partially Paid</option>
-          <option value="Paid">Paid</option>
-          <option value="Voided">Voided</option>
-        </select>
-        <SearchBox value={q} onChange={setQ} placeholder="Search by bill # or supplier..." />
+        <div className="admin-page-head-controls">
+          <select className="form-control admin-control-sm" style={{ maxWidth: 200 }} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">All Statuses</option>
+            <option value="Unpaid">Unpaid</option>
+            <option value="PartiallyPaid">Partially Paid</option>
+            <option value="Paid">Paid</option>
+            <option value="Voided">Voided</option>
+          </select>
+          <SearchBox value={q} onChange={setQ} placeholder="Search by bill # or supplier..." />
+          <ExportButton baseUrl="/api/admin/accounting/export/bills.xlsx" />
+        </div>
       </div>
 
       {error ? (

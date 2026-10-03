@@ -31,20 +31,19 @@ export default function Invoices() {
     <div>
       <div className="admin-page-head">
         <h1>Invoices</h1>
-        <ExportButton baseUrl="/api/admin/accounting/export/invoices.xlsx" />
-      </div>
-
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <SourceFilter value={source} onChange={setSource} />
-        <select className="form-control" style={{ maxWidth: 180 }} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All Statuses</option>
-          <option value="Sent">Sent</option>
-          <option value="PartiallyPaid">Partially Paid</option>
-          <option value="Paid">Paid</option>
-          <option value="Overdue">Overdue</option>
-          <option value="Voided">Voided</option>
-        </select>
-        <SearchBox value={q} onChange={setQ} placeholder="Search by invoice # or contact name..." />
+        <div className="admin-page-head-controls">
+          <SourceFilter value={source} onChange={setSource} />
+          <select className="form-control admin-control-sm" style={{ maxWidth: 180 }} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">All Statuses</option>
+            <option value="Sent">Sent</option>
+            <option value="PartiallyPaid">Partially Paid</option>
+            <option value="Paid">Paid</option>
+            <option value="Overdue">Overdue</option>
+            <option value="Voided">Voided</option>
+          </select>
+          <SearchBox value={q} onChange={setQ} placeholder="Search by invoice # or contact name..." />
+          <ExportButton baseUrl="/api/admin/accounting/export/invoices.xlsx" />
+        </div>
       </div>
 
       {error ? (

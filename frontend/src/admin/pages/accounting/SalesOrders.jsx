@@ -144,17 +144,14 @@ export default function SalesOrders() {
     <div>
       <div className="admin-page-head">
         <h1>Sales Orders</h1>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="admin-page-head-controls">
+          <SourceFilter value={source} onChange={setSource} />
+          <SearchBox value={q} onChange={setQ} placeholder="Search by order # or contact name..." />
           <ExportButton baseUrl="/api/admin/accounting/export/sales-orders.xlsx" />
           <button className="btn btn-sm btn-primary" onClick={startCreate}>
             + New Sales Order
           </button>
         </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
-        <SourceFilter value={source} onChange={setSource} />
-        <SearchBox value={q} onChange={setQ} placeholder="Search by order # or contact name..." />
       </div>
 
       {loadError ? (

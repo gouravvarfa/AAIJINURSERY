@@ -186,15 +186,7 @@ def me(admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
 
 @router.get("/admins", response_model=list[AdminUserOut])
 def list_admins(admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
-    from app.permissions import check_permission
-
-    users = db.query(AdminUser).order_by(AdminUser.id).all()
-    out = []
-    for u in users:
-        row = AdminUserOut.model_validate(u)
-        row.ask_aaiji_enabled = check_permission(db, u, "ai_assistant", "VIEW")
-        out.append(row)
-    return out
+    return db.query(AdminUser).order_by(AdminUser.id).all()
 
 
 ADMIN_ROLES = ("admin", "developer", "super_access", "custom")

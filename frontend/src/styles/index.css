@@ -1761,7 +1761,8 @@ select:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .ai-chat-fab,
   .ai-chat-panel,
-  .ai-chat-msg {
+  .ai-chat-msg,
+  .ai-chat-mic-btn {
     transition: none !important;
     animation: none !important;
   }
@@ -2077,6 +2078,48 @@ select:focus-visible {
   outline: none;
   border-color: var(--color-accent);
   background: #fff;
+}
+
+.ai-chat-mic-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-border);
+  background: #fff;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ai-chat-mic-btn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.ai-chat-mic-btn.listening {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #fff;
+  animation: aiChatMicPulse 1.3s ease-in-out infinite;
+}
+
+@keyframes aiChatMicPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(193, 68, 60, 0.35); }
+  50% { box-shadow: 0 0 0 7px rgba(193, 68, 60, 0); }
+}
+
+.ai-chat-mic-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ai-chat-mic-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .ai-chat-send-btn {

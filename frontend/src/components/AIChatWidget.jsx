@@ -31,6 +31,23 @@ function SendIcon() {
   );
 }
 
+function MicIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <path d="M12 19v3M8 22h8" />
+    </svg>
+  );
+}
+
+// Browser's free, built-in speech-to-text -- no API key, no backend
+// involvement. Chrome/Edge/Android support it well; Safari/Firefox mostly
+// don't, so the mic button simply doesn't render there (feature-detected
+// below) rather than showing a button that would just fail silently.
+const SpeechRecognitionCtor =
+  typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+
 // Customer-facing AI assistant widget -- calls the existing POST /api/ai/chat
 // gateway (Groq/Gemini/OpenRouter chain, tool-calling, rate limiting all
 // unchanged, see app/ai/gateway.py). History lives only in this component's
@@ -45,9 +62,40 @@ export default function AIChatWidget() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState(null); // null = unknown yet, "online" | "offline" once a real response has come back
+  const [listening, setListening] = useState(false);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const panelRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    // Stop any in-progress recognition when the panel closes/unmounts --
+    // otherwise the mic keeps listening in the background with no visible
+    // UI for it.
+    return () => recognitionRef.current?.stop();
+  }, []);
+
+  function toggleListening() {
+    if (!SpeechRecognitionCtor) return;
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = "en-IN";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = (e) => {
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+      setInput(transcript);
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  }
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -188,6 +236,18 @@ export default function AIChatWidget() {
               disabled={sending}
               aria-label="Type your question"
             />
+            {SpeechRecognitionCtor && (
+              <button
+                type="button"
+                className={`ai-chat-mic-btn${listening ? " listening" : ""}`}
+                onClick={toggleListening}
+                disabled={sending}
+                aria-label={listening ? "Stop voice input" : "Speak your question"}
+                title={listening ? "Listening... tap to stop" : "Speak"}
+              >
+                <MicIcon />
+              </button>
+            )}
             <button type="submit" className="ai-chat-send-btn" disabled={sending || !input.trim()} aria-label="Send message">
               <SendIcon />
             </button>

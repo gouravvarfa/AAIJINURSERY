@@ -1727,6 +1727,92 @@ select:focus-visible {
   }
 }
 
+/* Below 767px the fixed bottom tab bar (.bottom-nav) occupies the lower
+   edge of the screen -- lift the WhatsApp button above it instead of
+   letting the two collide. */
+@media (max-width: 767px) {
+  .whatsapp-fab {
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------- Mobile bottom tab bar ---------- */
+
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  main.has-bottom-nav {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 45;
+    background: #fff;
+    border-top: 1px solid var(--color-border);
+    box-shadow: 0 -4px 16px rgba(27, 67, 50, 0.08);
+    border-radius: 16px 16px 0 0;
+    padding: 6px 2px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .bottom-nav-item {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 48px;
+    padding: 4px 2px;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    transition: color 0.18s ease;
+  }
+
+  .bottom-nav-item.active {
+    color: var(--color-primary);
+  }
+
+  .bottom-nav-icon {
+    position: relative;
+    display: flex;
+    transition: transform 0.18s ease;
+  }
+
+  .bottom-nav-item.active .bottom-nav-icon {
+    transform: scale(1.08);
+  }
+
+  .bottom-nav-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+  }
+
+  .bottom-nav-badge {
+    position: absolute;
+    top: -6px;
+    right: -9px;
+    background: var(--color-accent);
+    color: #fff;
+    border-radius: 999px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+}
+
 /* ---------- Forms ---------- */
 
 .form-group {

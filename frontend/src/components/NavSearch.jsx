@@ -91,6 +91,7 @@ export default function NavSearch() {
         </button>
         <input
           ref={inputRef}
+          id="nav-search-input"
           type="search"
           className="nav-search-input"
           placeholder="Search plants, products..."

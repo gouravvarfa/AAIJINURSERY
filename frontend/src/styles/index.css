@@ -1783,6 +1783,12 @@ select:focus-visible {
   z-index: 55;
   width: min(400px, calc(100vw - 32px));
   height: min(620px, calc(100vh - var(--ai-fab-bottom) - var(--ai-fab-size) - 32px));
+  /* iOS/iPadOS Safari's `100vh` includes space the browser's own chrome
+     (tab bar, URL bar) can cover, so a height sized off it can still push
+     the panel's top above what's actually visible -- `dvh` tracks the real
+     visible viewport instead. Declared after vh so it only overrides where
+     supported; browsers without dvh just keep the vh value above. */
+  height: min(620px, calc(100dvh - var(--ai-fab-bottom) - var(--ai-fab-size) - 32px));
   background: #fff;
   border-radius: 20px;
   box-shadow: var(--shadow-lg);
@@ -2122,6 +2128,7 @@ select:focus-visible {
        navbar visually painted over the header on short/tall-content
        viewports) and clear of the real visible viewport top. */
     height: min(70vh, 620px, calc(100vh - var(--ai-fab-bottom) - var(--ai-fab-size) - 24px));
+    height: min(70dvh, 620px, calc(100dvh - var(--ai-fab-bottom) - var(--ai-fab-size) - 24px));
   }
 
   .ai-chat-quick-actions,

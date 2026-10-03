@@ -14,10 +14,12 @@ import logoImg from "../assets/logo.png";
 // business access), it only actually restricts a "custom" role.
 const NAV = [
   { to: "/admin", label: "Dashboard", end: true, module: null },
-  // module: null -- the page itself is open to any logged-in admin; each
-  // answer is still scoped per-question by the real RBAC check inside
-  // every admin_tools.py function, same as the rest of this app.
-  { to: "/admin/ai", label: "🤖 Ask AAIJI", module: null },
+  // Gated like any other module -- a Developer/Super Access admin must
+  // explicitly grant the "ai_assistant" module to a role (or override it
+  // for one user) before that admin sees Ask AAIJI at all. Each answer is
+  // additionally scoped per-question by the real RBAC check inside every
+  // admin_tools.py function, same as the rest of this app.
+  { to: "/admin/ai", label: "🤖 Ask AAIJI", module: "ai_assistant" },
   { to: "/admin/analytics", label: "Analytics", module: "analytics" },
   { to: "/admin/orders", label: "Orders", module: "orders" },
   { to: "/admin/categories", label: "Categories", module: "products" },
@@ -304,7 +306,7 @@ export default function AdminLayout() {
           </ErrorBoundary>
         </div>
       </div>
-      {location.pathname !== "/admin/ai" && (
+      {location.pathname !== "/admin/ai" && hasPermission("ai_assistant") && (
         <NavLink to="/admin/ai" className="admin-ai-fab" aria-label="Ask AAIJI" title="Ask AAIJI">
           <LeafIcon />
         </NavLink>

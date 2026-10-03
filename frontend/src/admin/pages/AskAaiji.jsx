@@ -53,8 +53,10 @@ export default function AskAaiji() {
       setLastFailedText(trimmed);
       if (err.status === 429) {
         setError("Too many messages -- please wait a few minutes and try again.");
-      } else if (err.status === 401 || err.status === 403) {
-        setError("Your session has expired or you don't have access. Please log in again.");
+      } else if (err.status === 403) {
+        setError(err.message || "You don't have access to Ask AAIJI.");
+      } else if (err.status === 401) {
+        setError("Your session has expired. Please log in again.");
       } else {
         setError("AI service is temporarily unavailable. Please try again.");
         setStatus("offline");

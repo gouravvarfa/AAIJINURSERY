@@ -29,6 +29,7 @@ from app.audit import record_admin_audit
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models import AdminUser
+from app.permissions import check_permission
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin/ai")
@@ -149,6 +150,8 @@ async def admin_chat(payload: AdminChatIn, request: Request, admin: str = Depend
     admin_user = db.query(AdminUser).filter(AdminUser.username == admin).first()
     if not admin_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    if not check_permission(db, admin_user, "ai_assistant", "VIEW"):
+        raise HTTPException(status_code=403, detail="You don't have access to Ask AAIJI. Ask a Developer/Super Access admin to enable it for your role.")
 
     trimmed_history = payload.history[-MAX_HISTORY_MESSAGES:]
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]

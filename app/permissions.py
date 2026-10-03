@@ -46,6 +46,7 @@ MODULES = [
     "communications",
     "inventory",
     "reports",
+    "ai_assistant",
     "users_roles",
     "system_health",
 ]

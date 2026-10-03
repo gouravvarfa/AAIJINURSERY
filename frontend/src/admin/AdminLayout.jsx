@@ -29,10 +29,10 @@ const NAV = [
   { to: "/admin/customers", label: "Customers", module: "customers" },
   { to: "/admin/customer-logs", label: "Customer Logs", module: "customers" },
   { to: "/admin/settings", label: "Site Settings", module: "website" },
-  { to: "/admin/admins", label: "Admins", module: "users_roles" },
 ];
 
 const DEVELOPER_NAV = [
+  { to: "/admin/admins", label: "Admins" },
   { to: "/admin/developer/activity-log", label: "Activity Log" },
   { to: "/admin/developer/roles-permissions", label: "Roles & Permissions" },
   { to: "/admin/developer/sessions", label: "Sessions" },

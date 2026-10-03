@@ -148,6 +148,52 @@ def get_sales_summary(db: Session, admin: AdminUser, range: str = "today", chann
     }
 
 
+def get_customers_who_purchased(db: Session, admin: AdminUser, range: str = "today", limit: int = 15) -> dict:
+    """Who bought what, for a date range -- online Orders and offline
+    Invoices, each with the customer name and the products on that
+    order/invoice. Answers "today kin customers ne kya khareeda"."""
+    if not check_permission(db, admin, "analytics", "VIEW"):
+        return _denied("analytics")
+    start, end = resolve_date_range(range)
+    cap = min(limit, MAX_RESULTS)
+
+    purchases = []
+    online_orders = (
+        db.query(Order)
+        .filter(Order.created_at >= start, Order.created_at < end, Order.status != "Cancelled")
+        .order_by(Order.created_at.desc())
+        .limit(cap)
+        .all()
+    )
+    for o in online_orders:
+        purchases.append({
+            "customer_name": o.delivery_name or (o.customer.name if o.customer else "Unknown"),
+            "channel": "online",
+            "amount": o.total_amount,
+            "products": [i.plant_name for i in o.items],
+            "created_at": o.created_at.isoformat(),
+        })
+
+    offline_invoices = (
+        db.query(Invoice)
+        .filter(Invoice.invoice_date >= start, Invoice.invoice_date < end, Invoice.source == "offline", Invoice.status != "Voided")
+        .order_by(Invoice.invoice_date.desc())
+        .limit(cap)
+        .all()
+    )
+    for inv in offline_invoices:
+        purchases.append({
+            "customer_name": inv.contact.name if inv.contact else "Unknown",
+            "channel": "offline",
+            "amount": inv.total_amount,
+            "products": [i.description for i in inv.items],
+            "created_at": inv.invoice_date.isoformat(),
+        })
+
+    purchases.sort(key=lambda p: p["created_at"], reverse=True)
+    return {"range": range, "count": len(purchases), "purchases": purchases[:cap]}
+
+
 def get_top_selling_plants(db: Session, admin: AdminUser, range: str = "month", limit: int = 5) -> dict:
     if not check_permission(db, admin, "analytics", "VIEW"):
         return _denied("analytics")
@@ -526,6 +572,7 @@ def get_business_summary(db: Session, admin: AdminUser, range: str = "today") ->
 # arguments can never override either one.
 ADMIN_TOOLS = {
     "get_sales_summary": get_sales_summary,
+    "get_customers_who_purchased": get_customers_who_purchased,
     "get_top_selling_plants": get_top_selling_plants,
     "get_pending_orders": get_pending_orders,
     "get_order_details": get_order_details,
@@ -551,6 +598,20 @@ ADMIN_TOOL_SCHEMAS = [
                 "properties": {
                     "range": {"type": "string", "enum": ["today", "week", "month", "last_month", "year", "last_year"], "description": "Defaults to 'today'"},
                     "channel": {"type": "string", "enum": ["all", "online", "offline"], "description": "Defaults to 'all'"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_customers_who_purchased",
+            "description": "List which customers purchased (online and offline) during a date range, with the products each one bought. Use for 'aaj kin customers ne kya khareeda', 'today's customers', 'who bought what today'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "range": {"type": "string", "enum": ["today", "week", "month", "last_month", "year", "last_year"]},
+                    "limit": {"type": "integer"},
                 },
             },
         },

@@ -72,7 +72,11 @@ export default function PlantReviews({ plant, data, onChanged }) {
         </button>
       );
     }
-    return null; // never purchased -- no CTA at all
+    return (
+      <span className="plant-reviews-hint">
+        Purchase this plant and wait for delivery to leave a review.
+      </span>
+    );
   }
 
   return (
@@ -92,6 +96,7 @@ export default function PlantReviews({ plant, data, onChanged }) {
         </div>
       ) : (
         <div className="plant-reviews-empty">
+          <Stars value={0} size="lg" />
           <p>No reviews yet.</p>
           <p style={{ color: "var(--color-text-muted)" }}>Be the first customer to review this plant.</p>
         </div>

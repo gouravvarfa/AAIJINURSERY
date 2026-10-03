@@ -2138,6 +2138,17 @@ textarea.form-control {
   margin-bottom: 2px;
 }
 
+.plant-reviews-empty .review-stars {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--color-text-muted);
+}
+
+.plant-reviews-hint {
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+}
+
 .review-stars {
   color: #f2b100;
   letter-spacing: 1px;

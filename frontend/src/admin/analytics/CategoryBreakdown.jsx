@@ -20,7 +20,7 @@ export default function CategoryBreakdown({ filters, onSelectCategory }) {
   useEffect(() => {
     setData(null);
     api.get(`/admin/analytics/categories?${rangeQuery(filters)}`).then(setData);
-  }, [filters.range, filters.dateFrom, filters.dateTo]);
+  }, [filters.range, filters.dateFrom, filters.dateTo, filters.source]);
 
   return (
     <section id="categories" className="analytics-section">

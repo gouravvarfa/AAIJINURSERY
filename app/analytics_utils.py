@@ -112,6 +112,76 @@ MONTH_NAMES = [
     "July", "August", "September", "October", "November", "December",
 ]
 
+
+def combined_sale_lines(db, start, end, source: str = ""):
+    """One unified list of sale line-items spanning BOTH online website
+    orders and offline (manually entered) Accounting invoices, so
+    plant/category-level analytics (Top Plants, Categories, Plants
+    Performance, Trends) can include offline sales, not just online ones.
+
+    `source`: "" (both), "online", or "offline".
+
+    Each row exposes: plant_id, quantity, line_total, txn_id, created_at --
+    the same shape regardless of which table it came from, so callers never
+    need to know which source a row originated from. Plain Python-side
+    merge (not a SQL UNION) because the two source tables have genuinely
+    different join chains; dataset sizes here are small enough that this
+    is simpler and just as fast as building a UNION query.
+
+    Offline rows only exist from the point InvoiceItem.plant_id started
+    being populated (see convert_to_invoice / sync.py) -- older offline
+    invoices created before that fix have no plant attribution and are
+    excluded here the same way a line with no plant would be (can't
+    attribute a NULL plant to any plant/category).
+    """
+    from app.models import Order, OrderItem
+
+    rows = []
+    if source != "offline":
+        online = (
+            db.query(
+                OrderItem.plant_id.label("plant_id"),
+                OrderItem.quantity.label("quantity"),
+                OrderItem.line_total.label("line_total"),
+                Order.id.label("txn_id"),
+                Order.created_at.label("created_at"),
+            )
+            .join(Order, Order.id == OrderItem.order_id)
+            .filter(Order.created_at >= start, Order.created_at < end, Order.status != "Cancelled")
+            .all()
+        )
+        rows.extend(online)
+
+    if source != "online":
+        from app.accounting.models import Invoice, InvoiceItem
+
+        offline = (
+            db.query(
+                InvoiceItem.plant_id.label("plant_id"),
+                InvoiceItem.quantity.label("quantity"),
+                InvoiceItem.line_total.label("line_total"),
+                # Negated: Order.id and Invoice.id are separate numeric
+                # sequences that can collide (both start at 1) -- online
+                # txn_id is always a positive Order.id, so a negative
+                # Invoice.id guarantees no false "same transaction" merge
+                # when counting distinct transactions across both sources.
+                (-Invoice.id).label("txn_id"),
+                Invoice.invoice_date.label("created_at"),
+            )
+            .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
+            .filter(
+                Invoice.invoice_date >= start,
+                Invoice.invoice_date < end,
+                Invoice.status != "Voided",
+                Invoice.source == "offline",
+                InvoiceItem.plant_id.isnot(None),
+            )
+            .all()
+        )
+        rows.extend(offline)
+
+    return rows
+
 def pct_change(current, previous):
     """Percentage change from previous -> current. None if previous is 0/None
     (division by zero would be meaningless, not "0% change")."""

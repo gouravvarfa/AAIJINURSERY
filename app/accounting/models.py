@@ -172,6 +172,11 @@ class InvoiceItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     invoice_id = Column(Integer, ForeignKey("accounting_invoices.id"), nullable=False, index=True)
+    # Nullable: not every invoice line is a plant (delivery charges, generic
+    # services, etc.) -- when present (copied from SalesOrderItem.plant_id at
+    # convert_to_invoice time), it lets offline sales be attributed to a real
+    # Plant for analytics, the same way online OrderItem.plant_id already is.
+    plant_id = Column(Integer, ForeignKey("plants.id"), nullable=True, index=True)
     description = Column(String(200), default="")
     quantity = Column(Integer, default=1)
     unit_price = Column(Float, default=0)
@@ -180,6 +185,7 @@ class InvoiceItem(Base):
     line_total = Column(Float, default=0)
 
     invoice = relationship("Invoice", back_populates="items")
+    plant = relationship("Plant")
 
 
 class PaymentIn(Base):

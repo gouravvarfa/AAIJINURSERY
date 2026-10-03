@@ -76,7 +76,7 @@ export default function PlantsPerformanceTable({ filters }) {
     return () => {
       cancelled = true;
     };
-  }, [filters.range, filters.dateFrom, filters.dateTo, debouncedSearch, categoryId, stockStatus, sortBy, sortDir, page]);
+  }, [filters.range, filters.dateFrom, filters.dateTo, filters.source, debouncedSearch, categoryId, stockStatus, sortBy, sortDir, page]);
 
   return (
     <section id="plants" className="analytics-section">

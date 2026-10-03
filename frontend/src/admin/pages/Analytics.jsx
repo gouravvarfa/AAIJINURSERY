@@ -41,7 +41,7 @@ export default function Analytics() {
   useEffect(() => {
     setSummary(null);
     api.get(`/admin/analytics/summary?${rangeQuery(filters)}`).then(setSummary);
-  }, [filters.range, filters.dateFrom, filters.dateTo]);
+  }, [filters.range, filters.dateFrom, filters.dateTo, filters.source]);
 
   useEffect(() => {
     api.get("/admin/analytics/visits").then(setVisits);
@@ -57,6 +57,22 @@ export default function Analytics() {
           </p>
         </div>
         <div className="analytics-header-actions">
+          <div className="analytics-toggle-group" role="group" aria-label="Sales source">
+            {[
+              { value: "", label: "All" },
+              { value: "online", label: "Online" },
+              { value: "offline", label: "Offline" },
+            ].map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                className={`btn btn-sm ${filters.source === s.value ? "btn-primary" : "btn-outline dark"}`}
+                onClick={() => filters.setSource(s.value)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
           <DateRangePicker
             range={filters.range}
             dateFrom={filters.dateFrom}

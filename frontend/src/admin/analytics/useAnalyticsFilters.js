@@ -34,6 +34,9 @@ export function useAnalyticsFilters() {
     plantId: plantId ? Number(plantId) : null,
     customerId: customerId ? Number(customerId) : null,
     status: status || null,
+    // "" = All (online + offline), "online", "offline" -- shared across
+    // every analytics section the same way range/category/plant already are.
+    source: get("source", ""),
     setRange: (v) => set("range", v),
     setDateFrom: (v) => set("from", v),
     setDateTo: (v) => set("to", v),
@@ -41,6 +44,7 @@ export function useAnalyticsFilters() {
     setPlantId: (v) => set("plant", v),
     setCustomerId: (v) => set("customer", v),
     setStatus: (v) => set("status", v),
+    setSource: (v) => set("source", v),
     clearDrilldown: () => {
       const next = new URLSearchParams(params);
       next.delete("category");
@@ -54,11 +58,12 @@ export function useAnalyticsFilters() {
 
 // Builds the range/date_from/date_to query-string fragment shared by nearly
 // every analytics endpoint.
-export function rangeQuery({ range, dateFrom, dateTo }) {
+export function rangeQuery({ range, dateFrom, dateTo, source }) {
   const params = new URLSearchParams({ range });
   if (range === "custom") {
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
   }
+  if (source) params.set("source", source);
   return params.toString();
 }

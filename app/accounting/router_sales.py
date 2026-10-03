@@ -174,6 +174,7 @@ def convert_to_invoice(
         db.add(
             InvoiceItem(
                 invoice_id=invoice.id,
+                plant_id=line.plant_id,
                 description=line.description,
                 quantity=line.quantity,
                 unit_price=line.unit_price,

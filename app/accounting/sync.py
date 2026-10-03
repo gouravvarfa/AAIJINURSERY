@@ -159,6 +159,7 @@ def _get_or_create_invoice(db, order, sales_order, contact):
         db.add(
             InvoiceItem(
                 invoice_id=invoice.id,
+                plant_id=item.plant_id,
                 description=item.plant_name,
                 quantity=item.quantity,
                 unit_price=item.unit_price,

@@ -23,6 +23,7 @@ from app.analytics_utils import (
     RANGE_LABELS,
     VIP_ORDER_COUNT,
     VIP_SPEND_THRESHOLD,
+    combined_sale_lines,
     day_bucket,
     money,
     month_bucket,
@@ -30,6 +31,7 @@ from app.analytics_utils import (
     pct_change,
     resolve_date_range,
     shift_range_back,
+    to_utc,
     week_bucket,
     year_bucket,
 )
@@ -100,46 +102,73 @@ def range_dep(
 @router.get("/summary", response_model=KpiSummaryOut)
 def get_summary(
     range_info: tuple = Depends(range_dep),
+    source: str = Query("", description="''=all (online+offline) | online | offline"),
     admin: str = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     range_key, start, end = range_info
     prev_start, prev_end = shift_range_back(start, end)
 
-    sales_row = (
-        db.query(func.coalesce(func.sum(Order.total_amount), 0), func.count(Order.id))
-        .filter(Order.created_at >= start, Order.created_at < end, Order.status != "Cancelled")
-        .first()
-    )
-    total_sales, total_orders = money(sales_row[0]), int(sales_row[1] or 0)
+    def period_totals(period_start, period_end):
+        """(total_sales, total_txns, completed, pending, cancelled) across
+        online Orders and/or offline Invoices, per the `source` filter.
+        Offline invoices have no delivery workflow of their own -- "Paid" is
+        treated as completed, "Cancelled"/"Voided" as cancelled, everything
+        else (Draft/Sent/PartiallyPaid/Overdue) as pending, the closest
+        honest analog to the online Pending/Confirmed/.../Delivered flow."""
+        sales, txns, completed, pending, cancelled = 0.0, 0, 0, 0, 0
+        if source != "offline":
+            row = (
+                db.query(func.coalesce(func.sum(Order.total_amount), 0), func.count(Order.id))
+                .filter(Order.created_at >= period_start, Order.created_at < period_end, Order.status != "Cancelled")
+                .first()
+            )
+            sales += money(row[0])
+            txns += int(row[1] or 0)
+            status_counts = dict(
+                db.query(Order.status, func.count(Order.id))
+                .filter(Order.created_at >= period_start, Order.created_at < period_end)
+                .group_by(Order.status)
+                .all()
+            )
+            completed += status_counts.get("Delivered", 0)
+            cancelled += status_counts.get("Cancelled", 0)
+            pending += sum(status_counts.get(s, 0) for s in MAIN_STATUSES if s != "Delivered")
+        if source != "online":
+            from app.accounting.models import Invoice
 
-    prev_sales = (
-        db.query(func.coalesce(func.sum(Order.total_amount), 0))
-        .filter(Order.created_at >= prev_start, Order.created_at < prev_end, Order.status != "Cancelled")
-        .scalar()
-    )
-    sales_change_pct = pct_change(total_sales, money(prev_sales))
+            row = (
+                db.query(func.coalesce(func.sum(Invoice.total_amount), 0), func.count(Invoice.id))
+                .filter(
+                    Invoice.invoice_date >= period_start,
+                    Invoice.invoice_date < period_end,
+                    Invoice.source == "offline",
+                    Invoice.status != "Voided",
+                )
+                .first()
+            )
+            sales += money(row[0])
+            txns += int(row[1] or 0)
+            inv_status_counts = dict(
+                db.query(Invoice.status, func.count(Invoice.id))
+                .filter(Invoice.invoice_date >= period_start, Invoice.invoice_date < period_end, Invoice.source == "offline")
+                .group_by(Invoice.status)
+                .all()
+            )
+            completed += inv_status_counts.get("Paid", 0)
+            cancelled += inv_status_counts.get("Cancelled", 0) + inv_status_counts.get("Voided", 0)
+            pending += sum(
+                inv_status_counts.get(s, 0) for s in ("Draft", "Sent", "PartiallyPaid", "Overdue")
+            )
+        return money(sales), txns, completed, pending, cancelled
 
-    status_counts = dict(
-        db.query(Order.status, func.count(Order.id))
-        .filter(Order.created_at >= start, Order.created_at < end)
-        .group_by(Order.status)
-        .all()
-    )
-    orders_completed = status_counts.get("Delivered", 0)
-    orders_cancelled = status_counts.get("Cancelled", 0)
-    orders_pending = sum(status_counts.get(s, 0) for s in MAIN_STATUSES if s != "Delivered")
+    total_sales, total_orders, orders_completed, orders_pending, orders_cancelled = period_totals(start, end)
+    prev_sales, _, _, _, _ = period_totals(prev_start, prev_end)
+    sales_change_pct = pct_change(total_sales, prev_sales)
 
-    plants_row = (
-        db.query(
-            func.coalesce(func.sum(OrderItem.quantity), 0),
-            func.count(func.distinct(OrderItem.plant_id)),
-        )
-        .join(Order, Order.id == OrderItem.order_id)
-        .filter(Order.created_at >= start, Order.created_at < end, Order.status != "Cancelled")
-        .first()
-    )
-    plants_sold, varieties_sold = int(plants_row[0] or 0), int(plants_row[1] or 0)
+    combined_lines = combined_sale_lines(db, start, end, source)
+    plants_sold = sum(int(r.quantity or 0) for r in combined_lines)
+    varieties_sold = len({r.plant_id for r in combined_lines if r.plant_id is not None})
 
     total_customers = db.query(func.count(Customer.id)).scalar() or 0
     new_customers = (
@@ -229,9 +258,9 @@ def get_site_visits(
     db: Session = Depends(get_db),
 ):
     now = now_ist()
-    today_start = datetime(now.year, now.month, now.day)
-    week_start = today_start - timedelta(days=today_start.weekday())
-    month_start = datetime(now.year, now.month, 1)
+    today_start = to_utc(datetime(now.year, now.month, now.day))
+    week_start = to_utc(datetime(now.year, now.month, now.day) - timedelta(days=now.weekday()))
+    month_start = to_utc(datetime(now.year, now.month, 1))
 
     total_visits = db.query(func.count(SiteVisit.id)).scalar() or 0
     visits_today = db.query(func.count(SiteVisit.id)).filter(SiteVisit.created_at >= today_start).scalar() or 0
@@ -255,32 +284,69 @@ def get_sales_series(
     range_info: tuple = Depends(range_dep),
     category_id: Optional[int] = Query(None),
     plant_id: Optional[int] = Query(None),
+    source: str = Query("", description="''=all (online+offline) | online | offline"),
     admin: str = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     _, start, end = range_info
     bucket_fn = BUCKET_FNS.get(granularity, day_bucket)
-    bucket = bucket_fn(Order.created_at)
 
-    query = (
-        db.query(
-            bucket.label("period"),
-            func.coalesce(func.sum(Order.total_amount), 0).label("revenue"),
-            func.count(func.distinct(Order.id)).label("orders"),
-            func.coalesce(func.sum(OrderItem.quantity), 0).label("plants_sold"),
+    points_by_period = {}
+
+    if source != "offline":
+        bucket = bucket_fn(Order.created_at)
+        query = (
+            db.query(
+                bucket.label("period"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("revenue"),
+                func.count(func.distinct(Order.id)).label("orders"),
+                func.coalesce(func.sum(OrderItem.quantity), 0).label("plants_sold"),
+            )
+            .join(OrderItem, OrderItem.order_id == Order.id)
+            .filter(Order.created_at >= start, Order.created_at < end, Order.status != "Cancelled")
         )
-        .join(OrderItem, OrderItem.order_id == Order.id)
-        .filter(Order.created_at >= start, Order.created_at < end, Order.status != "Cancelled")
-    )
-    if category_id:
-        query = query.join(Plant, Plant.id == OrderItem.plant_id).filter(Plant.category_id == category_id)
-    if plant_id:
-        query = query.filter(OrderItem.plant_id == plant_id)
+        if category_id:
+            query = query.join(Plant, Plant.id == OrderItem.plant_id).filter(Plant.category_id == category_id)
+        if plant_id:
+            query = query.filter(OrderItem.plant_id == plant_id)
+        for r in query.group_by("period").order_by("period").all():
+            p = points_by_period.setdefault(r.period, {"revenue": 0.0, "orders": 0, "plants_sold": 0})
+            p["revenue"] += money(r.revenue)
+            p["orders"] += r.orders
+            p["plants_sold"] += int(r.plants_sold or 0)
 
-    rows = query.group_by("period").order_by("period").all()
+    if source != "online":
+        from app.accounting.models import Invoice, InvoiceItem
+
+        bucket = bucket_fn(Invoice.invoice_date)
+        query = (
+            db.query(
+                bucket.label("period"),
+                func.coalesce(func.sum(Invoice.total_amount), 0).label("revenue"),
+                func.count(func.distinct(Invoice.id)).label("orders"),
+                func.coalesce(func.sum(InvoiceItem.quantity), 0).label("plants_sold"),
+            )
+            .join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)
+            .filter(
+                Invoice.invoice_date >= start,
+                Invoice.invoice_date < end,
+                Invoice.source == "offline",
+                Invoice.status != "Voided",
+            )
+        )
+        if category_id:
+            query = query.join(Plant, Plant.id == InvoiceItem.plant_id).filter(Plant.category_id == category_id)
+        if plant_id:
+            query = query.filter(InvoiceItem.plant_id == plant_id)
+        for r in query.group_by("period").order_by("period").all():
+            p = points_by_period.setdefault(r.period, {"revenue": 0.0, "orders": 0, "plants_sold": 0})
+            p["revenue"] += money(r.revenue)
+            p["orders"] += r.orders
+            p["plants_sold"] += int(r.plants_sold or 0)
+
     points = [
-        SalesPointOut(period=r.period, revenue=money(r.revenue), orders=r.orders, plants_sold=r.plants_sold)
-        for r in rows
+        SalesPointOut(period=period, revenue=money(v["revenue"]), orders=v["orders"], plants_sold=v["plants_sold"])
+        for period, v in sorted(points_by_period.items())
     ]
     return SalesSeriesOut(granularity=granularity, points=points, has_data=len(points) > 0)
 
@@ -290,41 +356,43 @@ def get_sales_series(
 @router.get("/categories", response_model=CategorySalesListOut)
 def get_category_sales(
     range_info: tuple = Depends(range_dep),
+    source: str = Query("", description="''=all (online+offline) | online | offline"),
     admin: str = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     _, start, end = range_info
 
-    rows = (
-        db.query(
-            Category.id,
-            Category.name,
-            func.coalesce(func.sum(OrderItem.quantity), 0).label("plants_sold"),
-            func.coalesce(func.sum(OrderItem.line_total), 0).label("revenue"),
-            func.count(func.distinct(Order.id)).label("orders"),
-        )
-        .join(Plant, Plant.category_id == Category.id)
-        .join(OrderItem, OrderItem.plant_id == Plant.id)
-        .join(Order, Order.id == OrderItem.order_id)
-        .filter(Order.created_at >= start, Order.created_at < end, Order.status != "Cancelled")
-        .group_by(Category.id, Category.name)
-        .order_by(func.sum(OrderItem.line_total).desc())
-        .all()
-    )
+    plant_category = dict(db.query(Plant.id, Plant.category_id).all())
+    category_names = dict(db.query(Category.id, Category.name).all())
 
-    total_revenue = sum(money(r.revenue) for r in rows)
-    total_plants_sold = sum(int(r.plants_sold) for r in rows)
-    categories = [
-        CategorySalesOut(
-            category_id=r.id,
-            category_name=r.name,
-            plants_sold=int(r.plants_sold),
-            revenue=money(r.revenue),
-            orders=r.orders,
-            pct_of_sales=round(money(r.revenue) / total_revenue * 100, 1) if total_revenue else 0,
-        )
-        for r in rows
-    ]
+    lines = combined_sale_lines(db, start, end, source)
+    agg = {}  # category_id -> {plants_sold, revenue, txn_ids}
+    for line in lines:
+        cat_id = plant_category.get(line.plant_id)
+        if cat_id is None:
+            continue
+        bucket = agg.setdefault(cat_id, {"plants_sold": 0, "revenue": 0.0, "txn_ids": set()})
+        bucket["plants_sold"] += int(line.quantity or 0)
+        bucket["revenue"] += money(line.line_total)
+        bucket["txn_ids"].add(line.txn_id)
+
+    total_revenue = sum(money(b["revenue"]) for b in agg.values())
+    total_plants_sold = sum(b["plants_sold"] for b in agg.values())
+    categories = sorted(
+        (
+            CategorySalesOut(
+                category_id=cat_id,
+                category_name=category_names.get(cat_id, "Unknown"),
+                plants_sold=b["plants_sold"],
+                revenue=money(b["revenue"]),
+                orders=len(b["txn_ids"]),
+                pct_of_sales=round(money(b["revenue"]) / total_revenue * 100, 1) if total_revenue else 0,
+            )
+            for cat_id, b in agg.items()
+        ),
+        key=lambda c: c.revenue,
+        reverse=True,
+    )
     return CategorySalesListOut(
         categories=categories,
         total_revenue=total_revenue,
@@ -343,6 +411,7 @@ def get_plants_performance(
     stock_status: Optional[str] = Query(None, description="low|out|in_stock"),
     sort_by: str = Query("revenue", description="sold|revenue|profit|stock|last_sold|name"),
     sort_dir: str = Query("desc", description="asc|desc"),
+    source: str = Query("", description="''=all (online+offline) | online | offline"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=200),
     admin: str = Depends(get_current_admin),
@@ -350,17 +419,60 @@ def get_plants_performance(
 ):
     _, start, end = range_info
 
-    sales_sub = (
+    # Combined online (OrderItem) + offline (InvoiceItem) sale lines, unioned
+    # at the raw-line level then re-aggregated by plant -- same approach as
+    # combined_sale_lines() but kept as a SQL subquery here (not fetched into
+    # Python) so pagination/sorting/search on the Plant table stay in SQL,
+    # same as before this filter existed. Invoice.id is negated in the union
+    # (see analytics_utils.combined_sale_lines for why) so COUNT(DISTINCT)
+    # can't falsely merge an online order and an offline invoice that happen
+    # to share the same numeric id.
+    online_lines = (
         db.query(
             OrderItem.plant_id.label("plant_id"),
-            func.sum(OrderItem.quantity).label("total_sold"),
-            func.sum(OrderItem.line_total).label("total_revenue"),
-            func.count(func.distinct(OrderItem.order_id)).label("order_count"),
-            func.max(Order.created_at).label("last_sold_at"),
+            OrderItem.quantity.label("quantity"),
+            OrderItem.line_total.label("line_total"),
+            Order.id.label("txn_id"),
+            Order.created_at.label("sold_at"),
         )
         .join(Order, Order.id == OrderItem.order_id)
         .filter(Order.created_at >= start, Order.created_at < end, Order.status != "Cancelled")
-        .group_by(OrderItem.plant_id)
+    )
+    from app.accounting.models import Invoice, InvoiceItem
+
+    offline_lines = (
+        db.query(
+            InvoiceItem.plant_id.label("plant_id"),
+            InvoiceItem.quantity.label("quantity"),
+            InvoiceItem.line_total.label("line_total"),
+            (-Invoice.id).label("txn_id"),
+            Invoice.invoice_date.label("sold_at"),
+        )
+        .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
+        .filter(
+            Invoice.invoice_date >= start,
+            Invoice.invoice_date < end,
+            Invoice.source == "offline",
+            Invoice.status != "Voided",
+            InvoiceItem.plant_id.isnot(None),
+        )
+    )
+    if source == "online":
+        raw_lines = online_lines.subquery()
+    elif source == "offline":
+        raw_lines = offline_lines.subquery()
+    else:
+        raw_lines = online_lines.union_all(offline_lines).subquery()
+
+    sales_sub = (
+        db.query(
+            raw_lines.c.plant_id.label("plant_id"),
+            func.sum(raw_lines.c.quantity).label("total_sold"),
+            func.sum(raw_lines.c.line_total).label("total_revenue"),
+            func.count(func.distinct(raw_lines.c.txn_id)).label("order_count"),
+            func.max(raw_lines.c.sold_at).label("last_sold_at"),
+        )
+        .group_by(raw_lines.c.plant_id)
         .subquery()
     )
     cost_sub = (

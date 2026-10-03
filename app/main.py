@@ -288,6 +288,14 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE accounting_employees ADD COLUMN bank_details TEXT DEFAULT ''"))
         conn.commit()
 
+    # Analytics: lets an offline invoice line be attributed to a real Plant
+    # (same as online OrderItem.plant_id always has), so Categories/Top
+    # Plants/Plants Performance can include offline sales, not just online.
+    invoice_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_invoice_items)"))}
+    if "plant_id" not in invoice_item_columns:
+        conn.execute(text("ALTER TABLE accounting_invoice_items ADD COLUMN plant_id INTEGER"))
+        conn.commit()
+
     # Communications: WhatsApp template approval-status enum (section: WhatsApp
     # Business Cloud API template system) supersedes the old is_active boolean
     # -- a template can now be PENDING/REJECTED/DISABLED, not just on/off.

@@ -33,7 +33,7 @@ export default function SalesChart({ filters }) {
     if (filters.categoryId) params.set("category_id", filters.categoryId);
     if (filters.plantId) params.set("plant_id", filters.plantId);
     api.get(`/admin/analytics/sales?${params.toString()}`).then(setData);
-  }, [granularity, filters.range, filters.dateFrom, filters.dateTo, filters.categoryId, filters.plantId]);
+  }, [granularity, filters.range, filters.dateFrom, filters.dateTo, filters.source, filters.categoryId, filters.plantId]);
 
   return (
     <section id="sales" className="analytics-section">

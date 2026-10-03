@@ -14,12 +14,6 @@ import { rangeQuery } from "./useAnalyticsFilters";
 import ChartTooltip from "./ChartTooltip";
 import KpiCard from "./KpiCard";
 
-const SOURCES = [
-  { value: "", label: "All" },
-  { value: "online", label: "Online" },
-  { value: "offline", label: "Offline" },
-];
-
 function money(v) {
   return `₹${(v || 0).toLocaleString()}`;
 }
@@ -30,8 +24,10 @@ function money(v) {
 // endpoint (GET /api/admin/accounting/reports/sales) rather than duplicating
 // its revenue logic; the `source` param there is additive (defaults to the
 // same unfiltered behavior the Accounting Reports page already relies on).
+// Driven by the SAME global filters.source used by every other section on
+// this page (set via the Source toggle in the page header), not its own
+// separate control.
 export default function SalesBySource({ filters }) {
-  const [source, setSource] = useState("");
   const [data, setData] = useState(null);
   const [unavailable, setUnavailable] = useState(false);
 
@@ -39,12 +35,11 @@ export default function SalesBySource({ filters }) {
     setData(null);
     setUnavailable(false);
     const params = new URLSearchParams(rangeQuery(filters));
-    if (source) params.set("source", source);
     api
       .get(`/admin/accounting/reports/sales?${params.toString()}`)
       .then(setData)
       .catch(() => setUnavailable(true));
-  }, [source, filters.range, filters.dateFrom, filters.dateTo]);
+  }, [filters.range, filters.dateFrom, filters.dateTo, filters.source]);
 
   // A custom role without Accounting access simply won't see this section --
   // never a broken/error-looking widget on their Analytics page.
@@ -54,18 +49,6 @@ export default function SalesBySource({ filters }) {
     <section id="sales-by-source" className="analytics-section">
       <div className="admin-page-head">
         <h2>Sales by Source</h2>
-        <div className="analytics-toggle-group">
-          {SOURCES.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              className={`btn btn-sm ${source === s.value ? "btn-primary" : "btn-outline dark"}`}
-              onClick={() => setSource(s.value)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       {!data ? (
@@ -76,7 +59,7 @@ export default function SalesBySource({ filters }) {
         <>
           <div className="stat-cards" style={{ marginBottom: 20 }}>
             <KpiCard
-              label={source === "online" ? "Online Sales" : source === "offline" ? "Offline Sales" : "Total Sales"}
+              label={filters.source === "online" ? "Online Sales" : filters.source === "offline" ? "Offline Sales" : "Total Sales"}
               value={money(data.total_sales)}
               sublabel={`${data.invoice_count} invoice${data.invoice_count === 1 ? "" : "s"} · ${data.range_label}`}
             />

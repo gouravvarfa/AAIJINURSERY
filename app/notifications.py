@@ -131,6 +131,23 @@ def notify_order_status(order, old_status: str | None, new_status: str) -> None:
     event_type = STATUS_TO_EVENT.get(new_status, f"ORDER_{new_status.upper().replace(' ', '_')}")
     _queue_order_event(order, event_type, [_order_contact(order)[1], f"ORD-{order.id}", f"Rs.{order.total_amount}"])
 
+    # Separate, additive event -- never replaces the standard ORDER_DELIVERED
+    # notification above. Its own event_type gives it its own idempotency key
+    # (GOOGLE_REVIEW_REQUEST:{order_id}), so repeated/duplicate Delivered
+    # transitions can't double-send it, independent of the delivery message.
+    # Skipped entirely (no queue attempt at all) if no review URL is
+    # configured -- this can never affect the order/delivery flow either way.
+    if new_status == "Delivered":
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            review_url = get_settings(db).get("google_review_url", "")
+        finally:
+            db.close()
+        if review_url:
+            _queue_order_event(order, "GOOGLE_REVIEW_REQUEST", [_order_contact(order)[1], review_url])
+
 
 # Feature 2 (delivery feasibility + team confirmation) -- dedicated
 # messages matching the exact customer-facing copy the business wants at

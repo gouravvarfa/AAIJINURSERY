@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
+import { useSettings } from "../context/SettingsContext";
 import { Loading, Empty } from "../components/Loading";
 import OrderTracker from "../components/OrderTracker";
 import CancelOrderModal from "../components/CancelOrderModal";
@@ -19,6 +20,7 @@ export default function OrderDetail() {
   const { id } = useParams();
   useDocumentTitle(`Order #${id} | Aaiji Nursery`);
   const { session } = useAuth();
+  const settings = useSettings();
   const [order, setOrder] = useState(null);
   const [error, setError] = useState("");
   const [cancelling, setCancelling] = useState(false);
@@ -250,6 +252,22 @@ export default function OrderDetail() {
                   </div>
 
                   <OrderTracker status={order.status} />
+
+                  {order.status === "Delivered" && settings?.google_review_url && (
+                    <div style={{ marginTop: 20 }}>
+                      <p style={{ marginBottom: 10 }}>
+                        Thank you for shopping with us! Please share your honest experience with AAIJI Nursery.
+                      </p>
+                      <a
+                        href={settings.google_review_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-sm btn-outline dark"
+                      >
+                        ⭐ Leave a Google Review
+                      </a>
+                    </div>
+                  )}
 
                   {CANCELLABLE_STATUSES.includes(order.status) && (
                     <button

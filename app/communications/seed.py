@@ -33,6 +33,7 @@ DEFAULT_EVENT_SETTINGS = [
     ("SALES_ORDER_CREATED", "Sales Order Created"),
     ("DELIVERY_ASSIGNED_TO_DRIVER", "Delivery Assigned to Driver"),
     ("TRIP_ASSIGNED_TO_DRIVER", "Trip Assigned to Driver"),
+    ("GOOGLE_REVIEW_REQUEST", "Google Review Request"),
 ]
 
 # THE central event -> template map (never hardcoded per module). Every
@@ -64,6 +65,7 @@ DEFAULT_EVENT_TEMPLATE_MAP = [
     ("SALES_ORDER_CREATED", "sales_order_created"),
     ("DELIVERY_ASSIGNED_TO_DRIVER", "delivery_assigned_to_driver"),
     ("TRIP_ASSIGNED_TO_DRIVER", "trip_assigned_to_driver"),
+    ("GOOGLE_REVIEW_REQUEST", "google_review_request"),
 ]
 
 # The 7 core templates use the exact copy specified in the WhatsApp
@@ -195,6 +197,11 @@ DEFAULT_TEMPLATES = [
         "name": "trip_assigned_to_driver", "category": "driver",
         "preview": "Hello {{driver_name}}, Trip #{{trip_number}} has been assigned to you.\nTotal Deliveries: {{delivery_count}}\nDate: {{trip_date}}\nPlease open your Delivery Dashboard for the complete route.",
         "variables": ["driver_name", "trip_number", "delivery_count", "trip_date"],
+    },
+    {
+        "name": "google_review_request", "category": "orders",
+        "preview": "Hello {{customer_name}}, thank you for shopping with AAIJI Nursery!\nWe hope you are happy with your plants and your overall experience.\nPlease share your honest experience with us on Google: {{review_url}}",
+        "variables": ["customer_name", "review_url"],
     },
 ]
 

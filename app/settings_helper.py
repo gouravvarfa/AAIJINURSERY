@@ -20,6 +20,7 @@ DEFAULT_SETTINGS = {
     "payment_methods": "UPI, Credit/Debit Cards, Net Banking, and Cash on Delivery.",
     "facebook_url": "",
     "instagram_url": "",
+    "google_review_url": "",
 }
 
 

@@ -345,6 +345,53 @@ def create_override(
     return row
 
 
+@router.put("/users/{item_id}/ask-aaiji")
+def set_ask_aaiji_access(
+    item_id: int,
+    enabled: bool,
+    admin: str = Depends(get_current_developer),
+    db: Session = Depends(get_db),
+):
+    """One-tickbox shortcut for the single most common override: whether
+    this admin can use Ask AAIJI. Just an ALLOW/DENY override on the
+    "ai_assistant"/"VIEW" pair underneath -- same mechanism as the generic
+    Overrides panel, so it shows up there too."""
+    item = db.query(AdminUser).filter(AdminUser.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Admin not found")
+
+    existing = (
+        db.query(UserPermissionOverride)
+        .filter(
+            UserPermissionOverride.admin_user_id == item_id,
+            UserPermissionOverride.module == "ai_assistant",
+            UserPermissionOverride.action == "VIEW",
+        )
+        .first()
+    )
+    if existing:
+        db.delete(existing)
+        db.flush()
+
+    db.add(
+        UserPermissionOverride(
+            admin_user_id=item_id,
+            module="ai_assistant",
+            action="VIEW",
+            effect="ALLOW" if enabled else "DENY",
+            granted_by=admin,
+            reason="Ask AAIJI tickbox",
+        )
+    )
+    db.commit()
+    record_admin_audit(
+        admin,
+        PERMISSION_OVERRIDE_GRANTED,
+        {"username": item.username, "module": "ai_assistant", "action": "VIEW", "effect": "ALLOW" if enabled else "DENY"},
+    )
+    return {"ask_aaiji_enabled": enabled}
+
+
 @router.delete("/users/{item_id}/overrides/{override_id}", status_code=204)
 def delete_override(
     item_id: int, override_id: int, admin: str = Depends(get_current_developer), db: Session = Depends(get_db)

@@ -236,6 +236,16 @@ export default function Admins() {
     }
   }
 
+  async function handleToggleAskAaiji(item) {
+    const enabling = !item.ask_aaiji_enabled;
+    try {
+      await api.put(`/admin/rbac/users/${item.id}/ask-aaiji?enabled=${enabling}`, {});
+      load();
+    } catch (err) {
+      alert(err.message || "Could not update Ask AAIJI access.");
+    }
+  }
+
   async function handleRevokeSessions(item) {
     if (!confirm(`Sign "${item.username}" out of every device?`)) return;
     try {
@@ -350,6 +360,7 @@ export default function Admins() {
                 <th>Username</th>
                 <th>Role</th>
                 <th>Status</th>
+                <th>Ask AAIJI</th>
                 {isDeveloper && <th>Actions</th>}
               </tr>
             </thead>
@@ -377,6 +388,21 @@ export default function Admins() {
                       <span className={item.is_active ? "badge badge-accent" : "badge badge-danger"}>
                         {item.is_active ? "Active" : "Disabled"}
                       </span>
+                    </td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={item.ask_aaiji_enabled}
+                        disabled={!isDeveloper || item.role === "developer"}
+                        onChange={() => handleToggleAskAaiji(item)}
+                        title={
+                          item.role === "developer"
+                            ? "Developer always has access"
+                            : item.ask_aaiji_enabled
+                            ? "Ask AAIJI is visible to this admin"
+                            : "Ask AAIJI is hidden from this admin"
+                        }
+                      />
                     </td>
                     {isDeveloper && (
                       <td>
@@ -432,7 +458,7 @@ export default function Admins() {
                   </tr>
                   {overridesFor === item.id && (
                     <tr>
-                      <td colSpan={isDeveloper ? 5 : 4}>
+                      <td colSpan={isDeveloper ? 6 : 5}>
                         <OverridesPanel item={item} onClose={() => setOverridesFor(null)} />
                       </td>
                     </tr>

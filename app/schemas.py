@@ -324,6 +324,9 @@ class AdminUserOut(BaseModel):
     created_at: Optional[datetime] = None
     is_active: bool = True
     custom_role_id: Optional[int] = None
+    # Effective Ask AAIJI access (role-based or per-user override combined) --
+    # computed, not a column; only meaningful to edit for a "custom" role.
+    ask_aaiji_enabled: bool = False
 
 
 class AdminUserCreateIn(BaseModel):

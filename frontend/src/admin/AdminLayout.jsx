@@ -14,12 +14,10 @@ import logoImg from "../assets/logo.png";
 // business access), it only actually restricts a "custom" role.
 const NAV = [
   { to: "/admin", label: "Dashboard", end: true, module: null },
-  // Gated like any other module -- a Developer/Super Access admin must
-  // explicitly grant the "ai_assistant" module to a role (or override it
-  // for one user) before that admin sees Ask AAIJI at all. Each answer is
-  // additionally scoped per-question by the real RBAC check inside every
-  // admin_tools.py function, same as the rest of this app.
-  { to: "/admin/ai", label: "🤖 Ask AAIJI", module: "ai_assistant" },
+  // Ask AAIJI is intentionally NOT listed here -- it's reached only via the
+  // floating chat icon (below), not as a permanent sidebar entry. The route
+  // and its "ai_assistant" RBAC gate still exist; see the floating-button
+  // render further down, which checks hasPermission("ai_assistant") itself.
   { to: "/admin/analytics", label: "Analytics", module: "analytics" },
   { to: "/admin/orders", label: "Orders", module: "orders" },
   { to: "/admin/categories", label: "Categories", module: "products" },

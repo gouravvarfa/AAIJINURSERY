@@ -1776,13 +1776,13 @@ select:focus-visible {
   position: fixed;
   right: var(--ai-fab-right);
   bottom: calc(var(--ai-fab-bottom) + var(--ai-fab-size) + 12px);
-  z-index: 46; /* above the mobile bottom tab bar (45) so it never hides behind it */
+  /* Above the sticky navbar (z-index 50) -- a floating chat panel is
+     expected to render in front of the navbar when it overlaps it (same as
+     most ecommerce chat widgets), rather than being capped short just to
+     stay below it. Still below the auth/menu drawer overlays (90+). */
+  z-index: 55;
   width: min(400px, calc(100vw - 32px));
-  /* The second min() term keeps the panel's top edge below the sticky
-     navbar (112px tall, z-index 50 -- above this panel's 46) on shorter
-     laptop/desktop viewports, where 620px fixed height would otherwise
-     push the header up underneath it. */
-  height: min(620px, calc(100vh - var(--ai-fab-bottom) - var(--ai-fab-size) - 150px));
+  height: min(620px, calc(100vh - var(--ai-fab-bottom) - var(--ai-fab-size) - 32px));
   background: #fff;
   border-radius: 20px;
   box-shadow: var(--shadow-lg);
@@ -2121,7 +2121,7 @@ select:focus-visible {
        navbar (it's z-index 50, above this panel's 46, so without this the
        navbar visually painted over the header on short/tall-content
        viewports) and clear of the real visible viewport top. */
-    height: min(70vh, 620px, calc(100vh - var(--ai-fab-bottom) - var(--ai-fab-size) - 88px));
+    height: min(70vh, 620px, calc(100vh - var(--ai-fab-bottom) - var(--ai-fab-size) - 24px));
   }
 
   .ai-chat-quick-actions,

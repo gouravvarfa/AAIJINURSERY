@@ -6,6 +6,7 @@ import { Loading, Empty } from "../components/Loading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { statusBadgeClass } from "../utils/orderStatus";
 import { useSettings } from "../context/SettingsContext";
+import GoogleReviewButton from "../components/GoogleReviewButton";
 
 export default function Orders() {
   useDocumentTitle("My Orders | Aaiji Nursery");
@@ -93,18 +94,9 @@ export default function Orders() {
                       <div>
                         <span className={`badge ${statusBadgeClass(order.status)}`}>{order.status}</span>
                         {order.status === "Delivered" && settings?.google_review_url && (
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline dark"
-                            style={{ display: "block", marginTop: 8 }}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              window.open(settings.google_review_url, "_blank", "noopener,noreferrer");
-                            }}
-                          >
-                            ⭐ Leave a Google Review
-                          </button>
+                          <div style={{ marginTop: 8 }}>
+                            <GoogleReviewButton url={settings.google_review_url} />
+                          </div>
                         )}
                       </div>
                       <div className="orders-row-total">&#8377;{order.total_amount}</div>

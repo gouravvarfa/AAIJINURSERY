@@ -3,6 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
+import GoogleReviewButton from "../components/GoogleReviewButton";
 import { Loading, Empty } from "../components/Loading";
 import OrderTracker from "../components/OrderTracker";
 import CancelOrderModal from "../components/CancelOrderModal";
@@ -254,18 +255,9 @@ export default function OrderDetail() {
                   <OrderTracker status={order.status} />
 
                   {order.status === "Delivered" && settings?.google_review_url && (
-                    <div style={{ marginTop: 20 }}>
-                      <p style={{ marginBottom: 10 }}>
-                        Thank you for shopping with us! Please share your honest experience with AAIJI Nursery.
-                      </p>
-                      <a
-                        href={settings.google_review_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-sm btn-outline dark"
-                      >
-                        ⭐ Leave a Google Review
-                      </a>
+                    <div className="google-review-prompt">
+                      <p>Thank you for shopping with us! Please share your honest experience with AAIJI Nursery.</p>
+                      <GoogleReviewButton url={settings.google_review_url} />
                     </div>
                   )}
 

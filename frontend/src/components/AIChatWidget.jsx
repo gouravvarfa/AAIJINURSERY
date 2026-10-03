@@ -83,8 +83,16 @@ export default function AIChatWidget() {
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply, provider: data.provider }]);
       setStatus(data.provider !== "none" ? "online" : "offline");
     } catch (err) {
-      setError(err.status === 429 ? "Too many messages -- please wait a bit." : "Something went wrong. Please try again.");
-      setStatus("offline");
+      if (err.status === 429) {
+        // Rate limiting, not a provider outage -- the assistant is working
+        // fine, the customer just needs to slow down. Leaving `status`
+        // untouched avoids falsely flipping the header to "Temporarily
+        // unavailable" for what is actually a normal, expected guard.
+        setError("Too many messages -- please wait a bit.");
+      } else {
+        setError("Something went wrong. Please try again.");
+        setStatus("offline");
+      }
     } finally {
       setSending(false);
     }

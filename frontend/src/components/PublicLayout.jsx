@@ -4,6 +4,7 @@ import { api } from "../api";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import WhatsAppButton from "./WhatsAppButton";
+import AIChatWidget from "./AIChatWidget";
 import BottomNav from "./BottomNav";
 import Toast from "./Toast";
 
@@ -29,6 +30,7 @@ export default function PublicLayout() {
       </main>
       <Footer />
       <WhatsAppButton />
+      <AIChatWidget />
       <BottomNav />
       <Toast />
     </>

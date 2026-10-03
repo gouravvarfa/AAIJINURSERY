@@ -20,6 +20,7 @@ from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.accounting.router import router as accounting_router
+from app.ai.gateway import router as ai_gateway_router
 from app.communications import models as communications_models  # noqa: F401 -- registers tables with Base.metadata
 from app.communications.router import router as communications_router
 from app.communications.seed import seed_communications_defaults
@@ -468,6 +469,7 @@ app.include_router(labour_router, dependencies=[Depends(require_permission("labo
 app.include_router(delivery_router, dependencies=[Depends(require_permission("delivery", "VIEW"))])
 app.include_router(communications_router, dependencies=[Depends(require_permission("communications", "VIEW"))])
 app.include_router(api_customer.router)
+app.include_router(ai_gateway_router)
 
 
 STATIC_SITEMAP_PATHS = [

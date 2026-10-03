@@ -750,3 +750,16 @@ class PurchaseItem(Base):
 
     purchase = relationship("Purchase", back_populates="items")
     plant = relationship("Plant")
+
+
+class SiteVisit(Base):
+    """One row per unique browser session that visits the public site --
+    deduped server-side via the session cookie (see POST /api/track-visit),
+    so a visitor refreshing or browsing multiple pages only counts once.
+    Deliberately minimal: this is a simple "how many people visited" counter
+    for the admin, not a full analytics/pageview system."""
+
+    __tablename__ = "site_visits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

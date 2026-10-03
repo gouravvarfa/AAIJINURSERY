@@ -45,6 +45,7 @@ from app.models import (
     Plant,
     Purchase,
     PurchaseItem,
+    SiteVisit,
 )
 from app.schemas import (
     CategorySalesListOut,
@@ -71,6 +72,7 @@ from app.schemas import (
     RegistrationPointOut,
     RegistrationsOut,
     SalesPointOut,
+    SiteVisitStatsOut,
     SalesSeriesOut,
     SalesTrendsOut,
     StockAlertItemOut,
@@ -216,6 +218,32 @@ def get_summary(
         gross_profit=gross_profit,
         profit_margin_pct=profit_margin_pct,
         has_data=total_orders > 0 or total_purchase_cost > 0,
+    )
+
+
+# ---------- Website visitors ----------
+
+@router.get("/visits", response_model=SiteVisitStatsOut)
+def get_site_visits(
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    now = now_ist()
+    today_start = datetime(now.year, now.month, now.day)
+    week_start = today_start - timedelta(days=today_start.weekday())
+    month_start = datetime(now.year, now.month, 1)
+
+    total_visits = db.query(func.count(SiteVisit.id)).scalar() or 0
+    visits_today = db.query(func.count(SiteVisit.id)).filter(SiteVisit.created_at >= today_start).scalar() or 0
+    visits_this_week = db.query(func.count(SiteVisit.id)).filter(SiteVisit.created_at >= week_start).scalar() or 0
+    visits_this_month = db.query(func.count(SiteVisit.id)).filter(SiteVisit.created_at >= month_start).scalar() or 0
+
+    return SiteVisitStatsOut(
+        total_visits=total_visits,
+        visits_today=visits_today,
+        visits_this_week=visits_this_week,
+        visits_this_month=visits_this_month,
+        has_data=total_visits > 0,
     )
 
 

@@ -831,6 +831,14 @@ class KpiSummaryOut(BaseModel):
     has_data: bool = False
 
 
+class SiteVisitStatsOut(BaseModel):
+    total_visits: int = 0
+    visits_today: int = 0
+    visits_this_week: int = 0
+    visits_this_month: int = 0
+    has_data: bool = False
+
+
 class SalesPointOut(BaseModel):
     period: str
     revenue: float = 0

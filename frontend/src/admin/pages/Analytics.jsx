@@ -34,11 +34,16 @@ const JUMP_NAV = [
 export default function Analytics() {
   const filters = useAnalyticsFilters();
   const [summary, setSummary] = useState(null);
+  const [visits, setVisits] = useState(null);
 
   useEffect(() => {
     setSummary(null);
     api.get(`/admin/analytics/summary?${rangeQuery(filters)}`).then(setSummary);
   }, [filters.range, filters.dateFrom, filters.dateTo]);
+
+  useEffect(() => {
+    api.get("/admin/analytics/visits").then(setVisits);
+  }, []);
 
   return (
     <div>
@@ -108,6 +113,13 @@ export default function Analytics() {
             value={summary.gross_profit != null ? `₹${summary.gross_profit.toLocaleString()}` : "N/A"}
             sublabel={summary.profit_margin_pct != null ? `${summary.profit_margin_pct}% margin` : "Log a purchase to see profit"}
           />
+          {visits && (
+            <KpiCard
+              label="Website Visitors"
+              value={visits.total_visits.toLocaleString()}
+              sublabel={`${visits.visits_today} today · ${visits.visits_this_week} this week · ${visits.visits_this_month} this month`}
+            />
+          )}
         </div>
       )}
 

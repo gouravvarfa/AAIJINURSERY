@@ -32,6 +32,7 @@ from app.models import (
     PlantReview,
     PricingPlan,
     Service,
+    SiteVisit,
     Testimonial,
 )
 from app.routers.api_admin import log_activity
@@ -78,6 +79,20 @@ def _client_ip(request: Request) -> str:
 @router.get("/settings")
 def read_settings(db: Session = Depends(get_db)):
     return get_settings(db)
+
+
+@router.post("/track-visit", status_code=204)
+def track_visit(request: Request, db: Session = Depends(get_db)):
+    """Counts one real visitor, not one pageview -- the session cookie
+    already set by SessionMiddleware marks this browser session as counted,
+    so navigating between pages or refreshing never inflates the number.
+    Fire-and-forget from the frontend; failures here must never break the
+    page, so this stays a no-auth, no-return-body endpoint."""
+    if request.session.get("visit_counted"):
+        return
+    request.session["visit_counted"] = True
+    db.add(SiteVisit())
+    db.commit()
 
 
 @router.get("/categories", response_model=list[CategoryOut])

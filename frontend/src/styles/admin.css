@@ -109,6 +109,18 @@
   gap: 12px;
 }
 
+/* Compact variant of the base .form-control (which uses a large 12px/14px
+   padding meant for standalone form fields) -- used wherever a date input/
+   select/search box sits inline next to a .btn-sm action (Export, Search,
+   +New) across every Accounting list page's filter row (ExportButton,
+   SourceFilter, SearchBox), so they all line up at the same height instead
+   of the oversized field dwarfing the buttons beside it. */
+.admin-control-sm {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  height: 36px;
+}
+
 .admin-page-head h1 {
   font-size: 1.5rem;
   margin: 0;

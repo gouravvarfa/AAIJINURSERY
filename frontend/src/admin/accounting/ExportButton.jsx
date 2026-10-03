@@ -15,7 +15,7 @@ export default function ExportButton({ baseUrl, label = "Export" }) {
     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
       <input
         type="date"
-        className="form-control"
+        className="form-control admin-control-sm"
         style={{ maxWidth: 150 }}
         value={dateFrom}
         onChange={(e) => setDateFrom(e.target.value)}
@@ -23,7 +23,7 @@ export default function ExportButton({ baseUrl, label = "Export" }) {
       />
       <input
         type="date"
-        className="form-control"
+        className="form-control admin-control-sm"
         style={{ maxWidth: 150 }}
         value={dateTo}
         onChange={(e) => setDateTo(e.target.value)}

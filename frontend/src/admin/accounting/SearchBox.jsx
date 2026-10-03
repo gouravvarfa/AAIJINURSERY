@@ -11,10 +11,10 @@ export default function SearchBox({ value, onChange, placeholder = "Search..." }
   }
 
   return (
-    <form onSubmit={submit} style={{ display: "flex", gap: 8 }}>
+    <form onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "center" }}>
       <input
         type="text"
-        className="form-control"
+        className="form-control admin-control-sm"
         style={{ maxWidth: 260 }}
         placeholder={placeholder}
         value={draft}

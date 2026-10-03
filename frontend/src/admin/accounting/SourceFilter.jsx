@@ -3,7 +3,7 @@
 export default function SourceFilter({ value, onChange }) {
   return (
     <select
-      className="form-control"
+      className="form-control admin-control-sm"
       style={{ maxWidth: 160 }}
       value={value || ""}
       onChange={(e) => onChange(e.target.value)}

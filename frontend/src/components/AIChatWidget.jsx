@@ -26,12 +26,16 @@ export default function AIChatWidget() {
     if (!text || sending) return;
     setInput("");
     setError("");
-    const history = messages.map((m) => ({ role: m.role, content: m.content }));
+    // Excludes any earlier "AI not available"/error fallback reply (provider
+    // "none") from what gets sent back as context -- otherwise a stale
+    // outage message keeps steering every later answer in the same
+    // conversation, even after the provider is working again.
+    const history = messages.filter((m) => m.provider !== "none").map((m) => ({ role: m.role, content: m.content }));
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setSending(true);
     try {
       const data = await api.post("/ai/chat", { message: text, history });
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: data.reply, provider: data.provider }]);
     } catch (err) {
       setError(err.status === 429 ? "Too many messages -- please wait a bit." : "Something went wrong. Please try again.");
     } finally {

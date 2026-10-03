@@ -149,7 +149,11 @@ class OpenRouterProvider(_OpenAICompatibleProvider):
     base_url = "https://openrouter.ai/api/v1/chat/completions"
     env_key = "OPENROUTER_API_KEY"
     default_model_env = "OPENROUTER_MODEL"
-    default_model = "meta-llama/llama-3.1-8b-instruct:free"
+    # The original default (a Llama 3.1 free slug) was retired on
+    # OpenRouter's end -- same situation as Groq/Gemini's defaults above.
+    # Override via OPENROUTER_MODEL if this one is ever retired too;
+    # current free-tier list: GET /api/v1/models, filter id.endswith(":free").
+    default_model = "qwen/qwen3.8-27b:free"
     extra_headers = {"HTTP-Referer": "https://shreeaaijihightechnursery.in", "X-Title": "Aaiji Nursery"}
 
 

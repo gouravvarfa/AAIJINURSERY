@@ -28,8 +28,8 @@ from app.accounting.models import (
 from app.analytics_utils import money, now_ist, resolve_date_range, to_utc
 from app.delivery.models import Delivery, DeliveryStatusHistory, DeliveryTrip, Driver, Vehicle
 from app.models import (
-    AdminActivityLog, AdminUser, Category, Customer, InventoryTransaction, Order, OrderItem,
-    OrderStatusHistory, Plant, Purchase,
+    AdminActivityLog, AdminUser, Category, Customer, Inquiry, InventoryTransaction, Order,
+    OrderItem, OrderStatusHistory, Plant, Purchase,
 )
 from app.permissions import check_permission
 
@@ -686,6 +686,40 @@ def get_driver_details(db: Session, admin: AdminUser, name: str) -> dict:
     }
 
 
+def get_inquiries(db: Session, admin: AdminUser, range: str = "week", from_date: str = None, to_date: str = None, status: str = None, limit: int = 15) -> dict:
+    """Website contact/product enquiries (the Inquiries page) -- who asked,
+    about what plant, when, and whether it's been replied to."""
+    if not check_permission(db, admin, "customers", "VIEW"):
+        return _denied("customers")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    q = db.query(Inquiry).filter(Inquiry.created_at >= start, Inquiry.created_at < end)
+    if status:
+        q = q.filter(Inquiry.status == status.strip().lower())
+    rows = q.order_by(Inquiry.created_at.desc()).all()
+    by_status: dict = {}
+    for r in rows:
+        by_status[r.status] = by_status.get(r.status, 0) + 1
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "count": len(rows),
+        "by_status": by_status,
+        "listed": [
+            {
+                "enquiry_number": r.enquiry_number or f"INQ-{r.id}",
+                "when": _fmt(r.created_at),
+                "name": r.name,
+                "mobile": r.mobile,
+                "plant": r.plant_name_snapshot or (r.plant.name if r.plant else None),
+                "requirement": r.requirement or None,
+                "status": r.status,
+            }
+            for r in rows[: max(1, min(limit or 15, 25))]
+        ],
+    }
+
+
 def get_customer_counts(db: Session, admin: AdminUser) -> dict:
     """How many customers exist, by channel: online (registered on the
     website) vs offline-only (accounting contacts with no website
@@ -1250,6 +1284,7 @@ ADMIN_TOOLS = {
     "get_driver_details": get_driver_details,
     "get_customer_invoices": get_customer_invoices,
     "get_employee_details": get_employee_details,
+    "get_inquiries": get_inquiries,
     "get_customer_counts": get_customer_counts,
     "get_business_summary": get_business_summary,
     "get_order_timeline": get_order_timeline,
@@ -1414,6 +1449,7 @@ ADMIN_TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "get_delivery_timeline", "description": "History of one delivery by number (e.g. DEL-12): creation, driver/vehicle assignment, status changes, completion, each with who.", "parameters": {"type": "object", "properties": {"delivery_number": {"type": "string"}}, "required": ["delivery_number"]}}},
     {"type": "function", "function": {"name": "get_admin_activity", "description": "What admins did (activity log) for a period, optionally one admin username. Needs Users & Roles permission.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_customer_counts", "description": "How many customers exist: online (website accounts) vs offline-only (walk-in/manual contacts), and the total. Use for 'kitne online customer hai', 'total customers kitne hain'.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "get_inquiries", "description": "Website contact/product enquiries: who asked, about which plant, when, and reply status (new/replied). Use for 'kisi customer ki enquiry aayi', 'naye enquiries'.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "status": {"type": "string", "description": "'new' or 'replied'"}, "limit": {"type": "integer"}}}}},
 ]
 
 

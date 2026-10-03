@@ -77,7 +77,6 @@ import AccountingExpenses from "./admin/pages/accounting/Expenses";
 import AccountingExpenseDetail from "./admin/pages/accounting/ExpenseDetail";
 import AccountingEmployees from "./admin/pages/accounting/Employees";
 import AccountingReports from "./admin/pages/accounting/Reports";
-import AccountingRoles from "./admin/pages/accounting/Roles";
 import CommunicationsDashboard from "./admin/pages/communications/Dashboard";
 import CommunicationsSendMessage from "./admin/pages/communications/SendMessage";
 import CommunicationsTemplates from "./admin/pages/communications/Templates";
@@ -202,7 +201,6 @@ export default function App() {
           <Route path="accounting/expenses/:id" element={<ErrorBoundary moduleName="Accounting"><AccountingExpenseDetail /></ErrorBoundary>} />
           <Route path="accounting/employees" element={<ErrorBoundary moduleName="Accounting"><AccountingEmployees /></ErrorBoundary>} />
           <Route path="accounting/reports" element={<ErrorBoundary moduleName="Accounting"><AccountingReports /></ErrorBoundary>} />
-          <Route path="accounting/roles" element={<ErrorBoundary moduleName="Accounting"><AccountingRoles /></ErrorBoundary>} />
           <Route path="communications" element={<ErrorBoundary moduleName="Communications"><CommunicationsDashboard /></ErrorBoundary>} />
           <Route path="communications/send" element={<ErrorBoundary moduleName="Communications"><CommunicationsSendMessage /></ErrorBoundary>} />
           <Route path="communications/templates" element={<ErrorBoundary moduleName="Communications"><CommunicationsTemplates /></ErrorBoundary>} />

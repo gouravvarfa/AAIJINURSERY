@@ -49,7 +49,6 @@ const DEVELOPER_NAV = [
   { to: "/admin/developer/system-health/functions", label: "Function Monitoring" },
   { to: "/admin/developer/system-health/logs", label: "System Logs" },
   { to: "/admin/developer/live-logs", label: "Live Logs" },
-  { to: "/admin/accounting/roles", label: "Accounting Roles" },
 ];
 
 const ACCOUNTING_NAV = [

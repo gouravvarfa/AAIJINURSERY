@@ -22,8 +22,10 @@ const MODULE_LABELS = {
   accounting: "Accounting",
   delivery: "Delivery",
   labour: "Employees & Labour",
+  communications: "Communications (WhatsApp)",
   inventory: "Inventory",
   reports: "Reports",
+  ai_assistant: "Ask AAIJI (Chatbot)",
   users_roles: "Users & Roles (Developer only)",
   system_health: "System Health (Developer only)",
 };

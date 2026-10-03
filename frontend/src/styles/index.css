@@ -279,9 +279,21 @@ button, input, textarea, select {
   }
 }
 
-/* ---------- Mobile plant product grid (Home/Plants/PlantDetail/PlantExplorer) ---------- */
+/* ---------- Plant product grid responsive columns (Home/Plants/PlantDetail/PlantExplorer) ---------- */
 /* Scoped to .grid-plants + .plant-card so desktop/tablet .card and .grid usages
    elsewhere (blog, testimonials, services, pricing, category tiles) are untouched. */
+
+@media (min-width: 769px) and (max-width: 1279px) {
+  .grid.grid-plants {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .grid.grid-plants {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
 
 @media (max-width: 768px) {
   .grid.grid-plants {
@@ -1831,14 +1843,31 @@ textarea.form-control {
   letter-spacing: 2px;
 }
 
+.plants-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
 .category-pills {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 10px;
-  margin-bottom: 32px;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.category-pills::-webkit-scrollbar {
+  display: none;
 }
 
 .pill {
+  flex-shrink: 0;
   padding: 8px 18px;
   border-radius: 999px;
   border: 1.5px solid var(--color-border);
@@ -1846,12 +1875,75 @@ textarea.form-control {
   font-size: 0.88rem;
   cursor: pointer;
   background: #fff;
+  white-space: nowrap;
 }
 
 .pill.active {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: #fff;
+}
+
+.pill-count {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 0.76rem;
+  margin-left: 2px;
+}
+
+.pill.active .pill-count {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.plants-sort-select {
+  flex-shrink: 0;
+  width: auto;
+  max-width: 220px;
+}
+
+@media (max-width: 620px) {
+  .plants-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .plants-sort-select {
+    max-width: none;
+  }
+}
+
+/* ---------- Plant card skeleton (Plants page loading state) ---------- */
+
+.skeleton {
+  background: linear-gradient(90deg, #eceee9 25%, #f5f6f3 37%, #eceee9 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.plant-card-skeleton .skeleton-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 0;
+}
+
+.plant-card-skeleton .skeleton-line {
+  height: 12px;
+  margin: 10px 0;
+}
+
+.plant-card-skeleton .skeleton-button {
+  height: 34px;
+  width: 100%;
+  border-radius: 999px;
 }
 
 /* ---------- Tray selector (PlantDetail, Seedlings & Trays) ---------- */

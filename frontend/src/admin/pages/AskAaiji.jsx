@@ -11,6 +11,22 @@ const SUGGESTED_QUESTIONS = [
   "Pending deliveries",
 ];
 
+function MicIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <path d="M12 19v3M8 22h8" />
+    </svg>
+  );
+}
+
+// Same browser-native speech-to-text as the customer widget (AIChatWidget.jsx)
+// -- no API key, no backend involvement. Feature-detected: the mic button
+// simply doesn't render on browsers without support (mainly Safari/Firefox).
+const SpeechRecognitionCtor =
+  typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+
 // Admin-only business-intelligence assistant. Calls the dedicated
 // POST /api/admin/ai/chat gateway (app/ai/admin_gateway.py) -- a completely
 // separate backend route/rate-limit from the customer-facing AI widget,
@@ -25,8 +41,10 @@ export default function AskAaiji() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState(null);
   const [lastFailedText, setLastFailedText] = useState(null);
+  const [listening, setListening] = useState(false);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -35,6 +53,32 @@ export default function AskAaiji() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    return () => recognitionRef.current?.stop();
+  }, []);
+
+  function toggleListening() {
+    if (!SpeechRecognitionCtor) return;
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = "en-IN";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = (e) => {
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+      setInput(transcript);
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  }
 
   async function sendText(text) {
     const trimmed = text.trim();
@@ -166,6 +210,18 @@ export default function AskAaiji() {
             disabled={sending}
             aria-label="Ask AAIJI"
           />
+          {SpeechRecognitionCtor && (
+            <button
+              type="button"
+              className={`ai-chat-mic-btn${listening ? " listening" : ""}`}
+              onClick={toggleListening}
+              disabled={sending}
+              aria-label={listening ? "Stop voice input" : "Speak your question"}
+              title={listening ? "Listening... tap to stop" : "Speak"}
+            >
+              <MicIcon />
+            </button>
+          )}
           <button type="submit" className="ai-chat-send-btn" disabled={sending || !input.trim()} aria-label="Send">
             ➤
           </button>

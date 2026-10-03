@@ -108,7 +108,7 @@ export default function Inquiries() {
                   <td>
                     <select
                       className="form-control"
-                      style={{ padding: "6px 10px" }}
+                      style={{ padding: "6px 10px", minWidth: 130, width: "auto" }}
                       value={item.status}
                       onChange={(e) => updateStatus(item, e.target.value)}
                     >

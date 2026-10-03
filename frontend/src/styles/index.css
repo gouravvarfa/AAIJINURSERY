@@ -2112,8 +2112,12 @@ select:focus-visible {
   .ai-chat-panel {
     width: calc(100vw - 24px);
     right: 12px;
-    height: min(70vh, 620px);
     bottom: calc(var(--ai-fab-bottom) + var(--ai-fab-size) + 12px);
+    /* The third min() term keeps the panel's top edge below the sticky
+       navbar (it's z-index 50, above this panel's 46, so without this the
+       navbar visually painted over the header on short/tall-content
+       viewports) and clear of the real visible viewport top. */
+    height: min(70vh, 620px, calc(100vh - var(--ai-fab-bottom) - var(--ai-fab-size) - 88px));
   }
 
   .ai-chat-quick-actions,

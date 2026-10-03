@@ -289,6 +289,9 @@ def void_invoice(
     old_status = item.status
     already_voided = old_status == "Voided"
     item.status = "Voided"
+    if not already_voided:
+        item.voided_by = admin
+        item.voided_at = datetime.utcnow()
 
     # convert_to_invoice deducted stock for this sale -- voiding it reverses
     # that exactly once (the `reference` below makes a second void attempt,
@@ -363,6 +366,7 @@ def create_payment_in(
         reference=payload.reference,
         notes=payload.notes,
         source="offline",
+        recorded_by=admin,
     )
     db.add(payment)
     db.flush()

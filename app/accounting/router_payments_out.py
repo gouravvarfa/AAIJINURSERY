@@ -66,6 +66,7 @@ def create_payment_out(
             reference=payload.reference,
             notes=payload.notes,
             source="offline",
+            recorded_by=admin,
         )
         db.add(payment)
         db.flush()
@@ -108,6 +109,7 @@ def create_payment_out(
         reference=payload.reference,
         notes=payload.notes,
         source="offline",
+        recorded_by=admin,
     )
     db.add(payment)
     db.flush()

@@ -94,6 +94,7 @@ class Contact(Base):
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String(80), default="")  # admin username; "system" for contacts mirrored from website customers
 
     customer = relationship("Customer")  # one-directional; Customer itself is untouched
 
@@ -160,6 +161,8 @@ class Invoice(Base):
     source = Column(String(10), nullable=False, default="offline", index=True)
     source_id = Column(String(40), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    voided_by = Column(String(80), default="")
+    voided_at = Column(DateTime, nullable=True)
 
     sales_order = relationship("SalesOrder", back_populates="invoices")
     contact = relationship("Contact")
@@ -203,6 +206,7 @@ class PaymentIn(Base):
     source = Column(String(10), nullable=False, default="offline", index=True)
     source_id = Column(String(60), nullable=True)  # e.g. f"order:{order.id}:payment"
     created_at = Column(DateTime, default=datetime.utcnow)
+    recorded_by = Column(String(80), default="")  # admin username; "system" for auto-synced online payments
 
     invoice = relationship("Invoice", back_populates="payments")
     contact = relationship("Contact")
@@ -311,6 +315,7 @@ class PaymentOut(Base):
     source = Column(String(10), nullable=False, default="offline", index=True)
     source_id = Column(String(60), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    recorded_by = Column(String(80), default="")
 
     purchase = relationship("Purchase")  # one-directional; Purchase itself is untouched
     expense = relationship("Expense", back_populates="payments")

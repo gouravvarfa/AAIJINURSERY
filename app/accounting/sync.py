@@ -80,6 +80,7 @@ def _get_or_create_contact(db, order):
         source="online",
         source_id=source_id,
         customer_id=order.customer_id,
+        created_by="system",
     )
     db.add(contact)
     db.flush()
@@ -188,6 +189,7 @@ def _sync_payment(db, order, invoice, contact):
             reference=order.razorpay_payment_id or "",
             source="online",
             source_id=source_id,
+            recorded_by="system",
         )
         db.add(payment)
         db.flush()

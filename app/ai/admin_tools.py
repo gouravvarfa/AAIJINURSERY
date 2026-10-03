@@ -22,10 +22,15 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.accounting.models import Contact, Employee, Invoice, SalesOrder
+from app.accounting.models import (
+    AuditLog, Contact, Employee, Expense, Invoice, PaymentIn, PaymentOut, SalesOrder,
+)
 from app.analytics_utils import money, now_ist, resolve_date_range, to_utc
-from app.delivery.models import Delivery, Driver, DeliveryTrip
-from app.models import AdminUser, Category, Customer, Order, OrderItem, Plant
+from app.delivery.models import Delivery, DeliveryStatusHistory, DeliveryTrip, Driver, Vehicle
+from app.models import (
+    AdminActivityLog, AdminUser, Category, Customer, InventoryTransaction, Order, OrderItem,
+    OrderStatusHistory, Plant, Purchase,
+)
 from app.permissions import check_permission
 
 MAX_RESULTS = 10
@@ -40,6 +45,109 @@ DELIVERY_TERMINAL_STATUSES = {"Delivered", "Partially Delivered", "Failed", "Can
 
 def _denied(module: str) -> dict:
     return {"error": f"You don't have permission to view {module} data."}
+
+
+IST_OFFSET = timedelta(hours=5, minutes=30)
+NOT_RECORDED = "not recorded"
+RANGE_KEYS = {
+    "today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days",
+    "week", "month", "last_month", "year", "last_year",
+}
+
+
+def _fmt(dt) -> str | None:
+    """Stored timestamps are UTC-naive; admins think in IST."""
+    if not dt:
+        return None
+    return (dt + IST_OFFSET).strftime("%Y-%m-%d %H:%M IST")
+
+
+def _parse_day(value: str):
+    return datetime.strptime(str(value).strip()[:10], "%Y-%m-%d")
+
+
+def _range(range_key: str = "today", from_date: str = None, to_date: str = None):
+    """Returns (start_utc, end_utc, error). A from_date (YYYY-MM-DD) wins
+    over range_key; from_date alone means that single day."""
+    try:
+        if from_date:
+            f = _parse_day(from_date)
+            t = _parse_day(to_date) if to_date else f
+            if t < f:
+                return None, None, "to_date is before from_date."
+            start, end = resolve_date_range("custom", f, t)
+            return start, end, None
+        key = range_key or "today"
+        if key not in RANGE_KEYS:
+            return None, None, f"Unknown range '{key}'. Use one of {sorted(RANGE_KEYS)} or from_date/to_date (YYYY-MM-DD)."
+        today = now_ist().replace(hour=0, minute=0, second=0, microsecond=0)
+        if key == "yesterday":
+            return to_utc(today - timedelta(days=1)), to_utc(today), None
+        if key == "day_before_yesterday":
+            return to_utc(today - timedelta(days=2)), to_utc(today - timedelta(days=1)), None
+        if key == "last_7_days":
+            return to_utc(today - timedelta(days=6)), to_utc(today + timedelta(days=1)), None
+        if key == "last_30_days":
+            return to_utc(today - timedelta(days=29)), to_utc(today + timedelta(days=1)), None
+        start, end = resolve_date_range(key)
+        return start, end, None
+    except ValueError:
+        return None, None, "Dates must be in YYYY-MM-DD format."
+
+
+def _first_actor(db: Session, table_name: str, record_id: int) -> str | None:
+    row = (
+        db.query(AuditLog.changed_by)
+        .filter(AuditLog.table_name == table_name, AuditLog.record_id == record_id)
+        .order_by(AuditLog.changed_at.asc(), AuditLog.id.asc())
+        .first()
+    )
+    return row[0] if row and row[0] else None
+
+
+def _first_actor_void(db: Session, invoice_id: int) -> str | None:
+    row = (
+        db.query(AuditLog.changed_by)
+        .filter(AuditLog.table_name == "accounting_invoices", AuditLog.record_id == invoice_id, AuditLog.action == "void")
+        .order_by(AuditLog.changed_at.desc())
+        .first()
+    )
+    return row[0] if row and row[0] else None
+
+
+def _tokens(name: str) -> list[str]:
+    return [t for t in re.split(r"[^a-zA-Z0-9]+", name or "") if t]
+
+
+def _ambiguous_matches(db: Session, name: str) -> list[dict]:
+    """More than one genuinely different person matching the query (case-
+    insensitive duplicates of the same name don't count). An exact full-name
+    match is never ambiguous."""
+    tokens = _tokens(name)
+    if not tokens:
+        return []
+    found: dict[str, dict] = {}
+    cq = db.query(Customer.name, Customer.mobile)
+    for t in tokens:
+        cq = cq.filter(Customer.name.ilike(f"%{t}%"))
+    for n, m in cq.limit(20).all():
+        found.setdefault(n.strip().lower(), {"name": n, "mobile": m, "channel": "online"})
+    kq = db.query(Contact.name, Contact.phone)
+    for t in tokens:
+        kq = kq.filter(Contact.name.ilike(f"%{t}%"))
+    for n, m in kq.limit(20).all():
+        found.setdefault(n.strip().lower(), {"name": n, "mobile": m, "channel": "offline"})
+    if name.strip().lower() in found or len(found) < 2:
+        return []
+    return list(found.values())[:8]
+
+
+def _ambiguity_reply(matches: list[dict]) -> dict:
+    return {
+        "ambiguous": True,
+        "message": "Multiple matching customers found. Ask the admin which one they mean (name + mobile).",
+        "matches": matches,
+    }
 
 
 def _find_customer(db: Session, name: str) -> Customer | None:
@@ -106,13 +214,15 @@ def _find_driver(db: Session, name: str) -> Driver | None:
 
 # ---------- Sales ----------
 
-def get_sales_summary(db: Session, admin: AdminUser, range: str = "today", channel: str = "all") -> dict:
+def get_sales_summary(db: Session, admin: AdminUser, range: str = "today", channel: str = "all", from_date: str = None, to_date: str = None) -> dict:
     """channel: 'all' | 'online' | 'offline'. Covers 'today's sales', and
     conversational follow-ups like 'online?'/'offline?' after it -- the
     model re-calls this with channel set instead of needing a second tool."""
     if not check_permission(db, admin, "analytics", "VIEW"):
         return _denied("analytics")
-    start, end = resolve_date_range(range)
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
 
     online_sales, online_orders = 0.0, 0
     if channel != "offline":
@@ -138,7 +248,7 @@ def get_sales_summary(db: Session, admin: AdminUser, range: str = "today", chann
         offline_sales, offline_invoices = money(row[0]), int(row[1] or 0)
 
     return {
-        "range": range,
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
         "channel": channel,
         "online_sales": online_sales,
         "online_orders": online_orders,
@@ -148,58 +258,82 @@ def get_sales_summary(db: Session, admin: AdminUser, range: str = "today", chann
     }
 
 
-def get_customers_who_purchased(db: Session, admin: AdminUser, range: str = "today", limit: int = 15) -> dict:
-    """Who bought what, for a date range -- online Orders and offline
-    Invoices, each with the customer name and the products on that
-    order/invoice. Answers "today kin customers ne kya khareeda"."""
+def get_customers_who_purchased(db: Session, admin: AdminUser, range: str = "today", limit: int = 15, from_date: str = None, to_date: str = None) -> dict:
+    """Who bought what in a period -- online Orders and offline Invoices,
+    with the customer, products and amount. Totals/highest/lowest are
+    computed over ALL matching purchases, not just the listed page."""
     if not check_permission(db, admin, "analytics", "VIEW"):
         return _denied("analytics")
-    start, end = resolve_date_range(range)
-    cap = min(limit, MAX_RESULTS)
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    cap = max(1, min(limit or 15, 25))
 
     purchases = []
-    online_orders = (
+    for o in (
         db.query(Order)
         .filter(Order.created_at >= start, Order.created_at < end, Order.status != "Cancelled")
         .order_by(Order.created_at.desc())
-        .limit(cap)
+        .limit(300)
         .all()
-    )
-    for o in online_orders:
+    ):
         purchases.append({
+            "order_ref": f"Order #{o.id}",
             "customer_name": o.delivery_name or (o.customer.name if o.customer else "Unknown"),
             "channel": "online",
+            "payment_method": o.payment_method,
             "amount": o.total_amount,
-            "products": [i.plant_name for i in o.items],
-            "created_at": o.created_at.isoformat(),
+            "products": [f"{i.plant_name} x{i.quantity}" for i in o.items],
+            "_t": o.created_at,
         })
-
-    offline_invoices = (
+    for inv in (
         db.query(Invoice)
         .filter(Invoice.invoice_date >= start, Invoice.invoice_date < end, Invoice.source == "offline", Invoice.status != "Voided")
         .order_by(Invoice.invoice_date.desc())
-        .limit(cap)
+        .limit(300)
         .all()
-    )
-    for inv in offline_invoices:
+    ):
         purchases.append({
+            "order_ref": f"Invoice {inv.invoice_number}",
             "customer_name": inv.contact.name if inv.contact else "Unknown",
             "channel": "offline",
+            "payment_status": inv.status,
             "amount": inv.total_amount,
-            "products": [i.description for i in inv.items],
-            "created_at": inv.invoice_date.isoformat(),
+            "products": [f"{i.description} x{i.quantity}" for i in inv.items],
+            "_t": inv.invoice_date,
         })
 
-    purchases.sort(key=lambda p: p["created_at"], reverse=True)
-    return {"range": range, "count": len(purchases), "purchases": purchases[:cap]}
+    purchases.sort(key=lambda p: p["_t"], reverse=True)
+    total = len(purchases)
+    summary = {
+        "total_purchases": total,
+        "distinct_customers": len({p["customer_name"].strip().lower() for p in purchases}),
+        "total_amount": money(sum(p["amount"] or 0 for p in purchases)),
+    }
+    if purchases:
+        hi = max(purchases, key=lambda p: p["amount"] or 0)
+        lo = min(purchases, key=lambda p: p["amount"] or 0)
+        summary["highest_order"] = {k: hi[k] for k in ("order_ref", "customer_name", "amount")}
+        summary["lowest_order"] = {k: lo[k] for k in ("order_ref", "customer_name", "amount")}
+    page = purchases[:cap]
+    for p in page:
+        p["when"] = _fmt(p.pop("_t"))
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        **summary,
+        "listed": len(page),
+        "purchases": page,
+    }
 
 
-def get_top_selling_plants(db: Session, admin: AdminUser, range: str = "month", limit: int = 5) -> dict:
+def get_top_selling_plants(db: Session, admin: AdminUser, range: str = "month", limit: int = 5, from_date: str = None, to_date: str = None) -> dict:
     if not check_permission(db, admin, "analytics", "VIEW"):
         return _denied("analytics")
     from app.analytics_utils import combined_sale_lines
 
-    start, end = resolve_date_range(range)
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
     lines = combined_sale_lines(db, start, end, "")
     totals: dict[int, int] = {}
     for line in lines:
@@ -285,6 +419,9 @@ def search_customer(db: Session, admin: AdminUser, name: str) -> dict:
 def get_customer_purchase_history(db: Session, admin: AdminUser, name: str, months: int = None) -> dict:
     if not check_permission(db, admin, "customers", "VIEW"):
         return _denied("customers")
+    amb = _ambiguous_matches(db, name)
+    if amb:
+        return _ambiguity_reply(amb)
     customer = _find_customer(db, name)
     if customer:
         q = db.query(Order).filter(Order.customer_id == customer.id, Order.status != "Cancelled")
@@ -346,6 +483,9 @@ def get_customer_purchase_history(db: Session, admin: AdminUser, name: str, mont
 def get_customer_outstanding(db: Session, admin: AdminUser, name: str) -> dict:
     if not check_permission(db, admin, "accounting", "VIEW"):
         return _denied("accounting")
+    amb = _ambiguous_matches(db, name)
+    if amb:
+        return _ambiguity_reply(amb)
     customer = _find_customer(db, name)
     if customer:
         contact = db.query(Contact).filter(Contact.customer_id == customer.id).first()
@@ -371,6 +511,9 @@ def get_customer_invoices(db: Session, admin: AdminUser, name: str, limit: int =
     used by get_customer_purchase_history)."""
     if not check_permission(db, admin, "accounting", "VIEW"):
         return _denied("accounting")
+    amb = _ambiguous_matches(db, name)
+    if amb:
+        return _ambiguity_reply(amb)
     customer = _find_customer(db, name)
     if customer:
         contact = db.query(Contact).filter(Contact.customer_id == customer.id).first()
@@ -395,9 +538,12 @@ def get_customer_invoices(db: Session, admin: AdminUser, name: str, limit: int =
         "count": len(invoices),
         "invoices": [
             {
+                "invoice_id": inv.id,
                 "invoice_number": inv.invoice_number,
                 "status": inv.status,
-                "invoice_date": inv.invoice_date.isoformat() if inv.invoice_date else None,
+                "voided_by": (inv.voided_by or _first_actor_void(db, inv.id) or NOT_RECORDED) if inv.status == "Voided" else None,
+                "voided_at": _fmt(inv.voided_at) if inv.voided_at else None,
+                "invoice_date": _fmt(inv.invoice_date),
                 "total_amount": inv.total_amount,
                 "amount_paid": inv.amount_paid,
                 "balance_due": inv.balance_due,
@@ -567,6 +713,511 @@ def get_business_summary(db: Session, admin: AdminUser, range: str = "today") ->
     return out
 
 
+# ---------- Audit / timeline / history tools ----------
+
+AUDIT_ENTITY_TABLES = {
+    "invoice": "accounting_invoices",
+    "sales_order": "accounting_sales_orders",
+    "contact": "accounting_contacts",
+    "expense": "accounting_expenses",
+    "payment_in": "accounting_payments_in",
+    "payment_out": "accounting_payments_out",
+    "purchase_order": "accounting_purchase_orders",
+    "bill": "purchases",
+}
+
+# Facts the system genuinely never stores -- returned with timeline tools so
+# the model can say so plainly instead of inventing an answer.
+KNOWN_GAPS = [
+    "Payment verification/approval: no such workflow exists; only who recorded the payment (and only for payments recorded after audit tracking began).",
+    "Delivery approval: offline deliveries have no approval step. For online orders the closest is the team confirmation (team_confirmed_by).",
+    "Refunds: no structured refund record (amount/actor/method) exists; 'Refund' is only a status label.",
+    "Delivery driver/status change history exists only for changes made after audit tracking began.",
+]
+
+
+def _event(events: list, when, event: str, by, details):
+    events.append({"_t": when, "when": _fmt(when), "event": event, "by": by or NOT_RECORDED, "details": details})
+
+
+def get_order_timeline(db: Session, admin: AdminUser, order_id: int) -> dict:
+    """Who did what on an online order and when: placement, acknowledgement,
+    team (delivery-feasibility) confirmation, every status change with the
+    admin's username, rejection reason, and stock movements."""
+    if not check_permission(db, admin, "orders", "VIEW"):
+        return _denied("orders")
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        return {"error": f"No order #{order_id} found."}
+    events: list = []
+    _event(events, order.created_at, "Order placed", "customer (website)",
+           f"total {money(order.total_amount)}, {order.payment_method}, payment {order.payment_status}")
+    if order.acknowledged_by and order.acknowledged_at:
+        _event(events, order.acknowledged_at, "Order acknowledged", order.acknowledged_by, None)
+    if order.team_confirmed_at:
+        _event(events, order.team_confirmed_at, "Team confirmation (delivery feasibility)", order.team_confirmed_by,
+               f"confirmation={order.team_confirmation_status}, feasibility={order.delivery_feasibility}")
+    for h in db.query(OrderStatusHistory).filter(OrderStatusHistory.order_id == order.id).order_by(OrderStatusHistory.created_at.asc(), OrderStatusHistory.id.asc()):
+        _event(events, h.created_at, f"Status {h.old_status or '-'} -> {h.new_status}", h.updated_by, h.remarks or None)
+    if check_permission(db, admin, "products", "VIEW"):
+        for t in db.query(InventoryTransaction).filter(
+            InventoryTransaction.source_id == str(order.id),
+            InventoryTransaction.source_type.in_(["ONLINE_ORDER", "ADMIN_CANCEL", "DELIVERY_REJECTED"]),
+        ).order_by(InventoryTransaction.created_at.asc()):
+            _event(events, t.created_at, f"Stock {t.transaction_type}", t.created_by,
+                   f"{t.plant.name if t.plant else t.plant_id}: {t.before_quantity} -> {t.after_quantity}")
+    events.sort(key=lambda e: e["_t"])
+    for e in events:
+        e.pop("_t")
+    return {
+        "order_id": order.id,
+        "customer_name": order.delivery_name,
+        "status": order.status,
+        "payment_status": order.payment_status,
+        "payment_method": order.payment_method,
+        "total_amount": order.total_amount,
+        "assigned_to": order.assigned_to or NOT_RECORDED,
+        "rejection_reason": order.delivery_rejection_reason or None,
+        "delivered_at": _fmt(order.delivered_at),
+        "items": [f"{i.plant_name} x{i.quantity}" for i in order.items],
+        "events": events,
+        "not_stored_by_system": KNOWN_GAPS,
+    }
+
+
+def get_payment_history(db: Session, admin: AdminUser, name: str = None, direction: str = "in", range: str = "month", from_date: str = None, to_date: str = None, limit: int = 15) -> dict:
+    """Payments received (in) and/or paid out (out) in a period, optionally
+    for one customer/party. Includes totals by method (Cash/UPI/...) and who
+    recorded each payment where that is known."""
+    if not check_permission(db, admin, "accounting", "VIEW"):
+        return _denied("accounting")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    cap = max(1, min(limit or 15, 25))
+    contact_ids = None
+    display = None
+    if name:
+        amb = _ambiguous_matches(db, name)
+        if amb:
+            return _ambiguity_reply(amb)
+        customer = _find_customer(db, name)
+        ids = set()
+        if customer:
+            display = customer.name
+            ids |= {c.id for c in db.query(Contact.id).filter(Contact.customer_id == customer.id)}
+        else:
+            c = _find_contact(db, name)
+            if c:
+                display = c.name
+                ids.add(c.id)
+        if not ids:
+            return {"error": f"No customer/party found matching '{name}'."}
+        contact_ids = ids
+
+    out: dict = {"range": f"{from_date}..{to_date or from_date}" if from_date else range, "party": display}
+
+    def block(model, date_col, table, label_fn):
+        q = db.query(model).filter(date_col >= start, date_col < end)
+        if contact_ids is not None:
+            q = q.filter(model.contact_id.in_(contact_ids))
+        rows = q.order_by(date_col.desc()).all()
+        by_method: dict = {}
+        for r in rows:
+            by_method[r.method] = money(by_method.get(r.method, 0) + (r.amount or 0))
+        items = []
+        for r in rows[:cap]:
+            items.append({
+                "payment_id": r.id,
+                "when": _fmt(r.payment_date),
+                "amount": r.amount,
+                "method": r.method,
+                "reference": r.reference or None,
+                "for": label_fn(r),
+                "recorded_by": r.recorded_by or _first_actor(db, table, r.id) or NOT_RECORDED,
+            })
+        return {"count": len(rows), "total": money(sum(r.amount or 0 for r in rows)), "by_method": by_method, "listed": items}
+
+    if direction in ("in", "both"):
+        out["payments_in"] = block(PaymentIn, PaymentIn.payment_date, "accounting_payments_in",
+                                   lambda r: f"Invoice {r.invoice.invoice_number}" if r.invoice else None)
+    if direction in ("out", "both"):
+        out["payments_out"] = block(PaymentOut, PaymentOut.payment_date, "accounting_payments_out",
+                                    lambda r: ("Expense: " + (r.expense.description or r.expense.category)) if r.expense else (f"Bill #{r.purchase_id}" if r.purchase_id else None))
+    out["not_stored_by_system"] = [KNOWN_GAPS[0], KNOWN_GAPS[2]]
+    return out
+
+
+def get_audit_history(db: Session, admin: AdminUser, entity: str, record_id: int, limit: int = 30) -> dict:
+    """Field-level change history (who changed what, old -> new, when) for
+    one accounting record. entity: invoice | sales_order | contact | expense |
+    payment_in | payment_out | purchase_order | bill."""
+    if not check_permission(db, admin, "accounting", "VIEW"):
+        return _denied("accounting")
+    table = AUDIT_ENTITY_TABLES.get(entity)
+    if not table:
+        return {"error": f"Unknown entity '{entity}'. Use one of {sorted(AUDIT_ENTITY_TABLES)}."}
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.table_name == table, AuditLog.record_id == record_id)
+        .order_by(AuditLog.changed_at.asc(), AuditLog.id.asc())
+        .limit(max(1, min(limit or 30, 60)))
+        .all()
+    )
+    if not rows:
+        return {"entity": entity, "record_id": record_id, "count": 0, "note": "No audit history recorded for this record."}
+    return {
+        "entity": entity,
+        "record_id": record_id,
+        "count": len(rows),
+        "history": [
+            {"when": _fmt(r.changed_at), "action": r.action, "field": r.field_name, "old": r.old_value, "new": r.new_value, "by": r.changed_by or NOT_RECORDED}
+            for r in rows
+        ],
+    }
+
+
+def get_inventory_history(db: Session, admin: AdminUser, plant_name: str = None, range: str = "month", from_date: str = None, to_date: str = None, limit: int = 20) -> dict:
+    """Stock movement ledger: sales, reversals (cancel/void), purchases
+    received, manual adjustments -- with before/after quantity and who."""
+    if not check_permission(db, admin, "products", "VIEW"):
+        return _denied("products")
+    from app.ai.tools import _find_plant_by_name
+
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    q = db.query(InventoryTransaction).filter(InventoryTransaction.created_at >= start, InventoryTransaction.created_at < end)
+    plant = None
+    if plant_name:
+        plant = _find_plant_by_name(db, plant_name)
+        if not plant:
+            return {"error": f"No plant found matching '{plant_name}'."}
+        q = q.filter(InventoryTransaction.plant_id == plant.id)
+    rows = q.order_by(InventoryTransaction.created_at.desc()).all()
+    sold = sum(r.quantity for r in rows if r.transaction_type == "SALE")
+    restored = sum(r.quantity for r in rows if r.transaction_type == "SALE_REVERSAL")
+    received = sum(r.quantity for r in rows if r.transaction_type == "PURCHASE_RECEIVED")
+    return {
+        "plant": plant.name if plant else "all plants",
+        "current_stock": plant.stock_quantity if plant else None,
+        "movements": len(rows),
+        "units_sold": sold,
+        "units_restored": restored,
+        "units_received": received,
+        "recent": [
+            {
+                "when": _fmt(r.created_at),
+                "plant": r.plant.name if r.plant else r.plant_id,
+                "type": r.transaction_type,
+                "qty": r.quantity,
+                "before": r.before_quantity,
+                "after": r.after_quantity,
+                "source": f"{r.source_type}:{r.source_id}" if r.source_id else r.source_type,
+                "by": r.created_by or NOT_RECORDED,
+                "notes": r.notes or None,
+            }
+            for r in rows[: max(1, min(limit or 20, 40))]
+        ],
+    }
+
+
+def get_expenses(db: Session, admin: AdminUser, range: str = "month", from_date: str = None, to_date: str = None, category: str = None, limit: int = 15) -> dict:
+    if not check_permission(db, admin, "accounting", "VIEW"):
+        return _denied("accounting")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    q = db.query(Expense).filter(Expense.expense_date >= start, Expense.expense_date < end, Expense.status.notin_(["Voided", "Cancelled"]))
+    if category:
+        q = q.filter(Expense.category.ilike(f"%{category.strip()}%"))
+    rows = q.order_by(Expense.expense_date.desc()).all()
+    by_cat: dict = {}
+    for r in rows:
+        key = r.category or "Uncategorised"
+        by_cat[key] = money(by_cat.get(key, 0) + (r.total_amount or 0))
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "count": len(rows),
+        "total": money(sum(r.total_amount or 0 for r in rows)),
+        "paid": money(sum(r.amount_paid or 0 for r in rows)),
+        "unpaid": money(sum(r.balance_due or 0 for r in rows)),
+        "by_category": by_cat,
+        "listed": [
+            {"expense_id": r.id, "when": _fmt(r.expense_date), "category": r.category, "description": r.description,
+             "amount": r.total_amount, "status": r.status, "entered_by": r.created_by or NOT_RECORDED}
+            for r in rows[: max(1, min(limit or 15, 25))]
+        ],
+    }
+
+
+def get_purchase_summary(db: Session, admin: AdminUser, range: str = "month", from_date: str = None, to_date: str = None, supplier: str = None, limit: int = 15) -> dict:
+    """Stock purchases / supplier bills."""
+    if not check_permission(db, admin, "products", "VIEW"):
+        return _denied("products")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    q = db.query(Purchase).filter(Purchase.purchase_date >= start, Purchase.purchase_date < end)
+    if supplier:
+        q = q.filter(Purchase.supplier.ilike(f"%{supplier.strip()}%"))
+    rows = q.order_by(Purchase.purchase_date.desc()).all()
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "count": len(rows),
+        "total_cost": money(sum(r.total_cost or 0 for r in rows)),
+        "listed": [
+            {"purchase_id": r.id, "when": _fmt(r.purchase_date), "supplier": r.supplier, "invoice_number": r.invoice_number or None,
+             "total_cost": r.total_cost, "status": r.status, "entered_by": r.created_by or NOT_RECORDED}
+            for r in rows[: max(1, min(limit or 15, 25))]
+        ],
+    }
+
+
+def get_deliveries(db: Session, admin: AdminUser, range: str = "today", from_date: str = None, to_date: str = None, status: str = None, driver_name: str = None, vehicle: str = None, customer_name: str = None, limit: int = 15) -> dict:
+    """List deliveries by date, optionally filtered by status, driver,
+    vehicle (registration or model) or customer. Includes counts per
+    status and per driver."""
+    if not check_permission(db, admin, "delivery", "VIEW"):
+        return _denied("delivery")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    q = db.query(Delivery).filter(Delivery.delivery_date >= start, Delivery.delivery_date < end)
+    if status:
+        q = q.filter(Delivery.status.ilike(status.strip()))
+    if driver_name:
+        d = _find_driver(db, driver_name)
+        if not d:
+            return {"error": f"No driver found matching '{driver_name}'."}
+        q = q.filter(Delivery.driver_id == d.id)
+    if vehicle:
+        like = f"%{vehicle.strip()}%"
+        v = db.query(Vehicle).filter(Vehicle.registration_number.ilike(like) | Vehicle.name_model.ilike(like)).first()
+        if not v:
+            return {"error": f"No vehicle found matching '{vehicle}'."}
+        q = q.filter(Delivery.vehicle_id == v.id)
+    if customer_name:
+        ids = [c.id for c in db.query(Contact.id).filter(Contact.name.ilike(f"%{customer_name.strip()}%"))]
+        q = q.filter(Delivery.contact_id.in_(ids or [-1]))
+    rows = q.order_by(Delivery.delivery_date.asc()).all()
+    by_status: dict = {}
+    by_driver: dict = {}
+    for r in rows:
+        by_status[r.status] = by_status.get(r.status, 0) + 1
+        dn = r.driver.name if r.driver else "Unassigned"
+        by_driver[dn] = by_driver.get(dn, 0) + 1
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "count": len(rows),
+        "by_status": by_status,
+        "by_driver": by_driver,
+        "listed": [
+            {"delivery_number": r.delivery_number, "date": _fmt(r.delivery_date), "status": r.status,
+             "customer": r.contact.name if r.contact else None, "driver": r.driver.name if r.driver else "Unassigned",
+             "vehicle": r.vehicle.registration_number if r.vehicle else None, "created_by": r.created_by or NOT_RECORDED}
+            for r in rows[: max(1, min(limit or 15, 25))]
+        ],
+    }
+
+
+def get_delivery_timeline(db: Session, admin: AdminUser, delivery_number: str) -> dict:
+    """Full history of one delivery (e.g. 'DEL-12' or just 12): creation,
+    each driver/vehicle assignment, each status change and completion --
+    with who did it."""
+    if not check_permission(db, admin, "delivery", "VIEW"):
+        return _denied("delivery")
+    key = str(delivery_number).strip().upper()
+    d = db.query(Delivery).filter(Delivery.delivery_number == key).first()
+    if not d and key.isdigit():
+        d = db.query(Delivery).filter(Delivery.id == int(key)).first()
+    if not d:
+        return {"error": f"No delivery found matching '{delivery_number}'."}
+    hist = (
+        db.query(DeliveryStatusHistory)
+        .filter(DeliveryStatusHistory.delivery_id == d.id)
+        .order_by(DeliveryStatusHistory.created_at.asc(), DeliveryStatusHistory.id.asc())
+        .all()
+    )
+    names = {x.id: x.name for x in db.query(Driver)}
+    vehicles = {x.id: x.registration_number for x in db.query(Vehicle)}
+
+    def label(event, v):
+        if v is None:
+            return "-"
+        if event == "DRIVER_ASSIGNED" and str(v).isdigit():
+            return names.get(int(v), v)
+        if event == "VEHICLE_ASSIGNED" and str(v).isdigit():
+            return vehicles.get(int(v), v)
+        return v
+
+    events = [
+        {"when": _fmt(h.created_at), "event": h.event, "change": f"{label(h.event, h.old_value)} -> {label(h.event, h.new_value)}",
+         "by": h.changed_by or NOT_RECORDED, "remarks": h.remarks or None}
+        for h in hist
+    ]
+    return {
+        "delivery_number": d.delivery_number,
+        "customer": d.contact.name if d.contact else None,
+        "status": d.status,
+        "delivery_date": _fmt(d.delivery_date),
+        "current_driver": d.driver.name if d.driver else "Unassigned",
+        "current_vehicle": d.vehicle.registration_number if d.vehicle else None,
+        "created_by": d.created_by or NOT_RECORDED,
+        "created_at": _fmt(d.created_at),
+        "remarks": d.delivery_remarks or None,
+        "items": [f"{i.description} ordered {i.ordered_quantity}, delivered {i.delivered_quantity if i.delivered_quantity is not None else '-'}" for i in d.items],
+        "events": events,
+        "note": None if events else "No change history recorded for this delivery (it predates audit tracking, or nothing changed after creation).",
+        "not_stored_by_system": [KNOWN_GAPS[1], KNOWN_GAPS[3]],
+    }
+
+
+def get_customer_timeline(db: Session, admin: AdminUser, name: str) -> dict:
+    """Complete business history of one customer, oldest first: account/
+    contact creation, orders, status changes, sales orders, invoices (and
+    voids), payments (method, who recorded), stock movements, deliveries
+    (driver/vehicle/status history). Sections the admin lacks permission for
+    are listed in `sections_hidden_due_to_permissions`; stages the system
+    never stored are in `not_stored_by_system`."""
+    if not check_permission(db, admin, "customers", "VIEW"):
+        return _denied("customers")
+    amb = _ambiguous_matches(db, name)
+    if amb:
+        return _ambiguity_reply(amb)
+    customer = _find_customer(db, name)
+    contacts: list = []
+    if customer:
+        contacts = db.query(Contact).filter(Contact.customer_id == customer.id).all()
+    else:
+        c = _find_contact(db, name)
+        if c:
+            contacts = [c]
+    if not customer and not contacts:
+        return {"error": f"No customer found matching '{name}'."}
+    display = customer.name if customer else contacts[0].name
+    contact_ids = [c.id for c in contacts]
+
+    can_orders = check_permission(db, admin, "orders", "VIEW")
+    can_acc = check_permission(db, admin, "accounting", "VIEW")
+    can_del = check_permission(db, admin, "delivery", "VIEW")
+    can_stock = check_permission(db, admin, "products", "VIEW")
+    hidden = [m for m, ok in (("orders", can_orders), ("accounting", can_acc), ("delivery", can_del), ("stock", can_stock)) if not ok]
+    events: list = []
+
+    if customer:
+        _event(events, customer.created_at, "Website account created", "customer (self-registered)", f"{customer.name}, {customer.mobile or 'no mobile'}")
+    for c in contacts:
+        if c.source == "offline":
+            _event(events, c.created_at, "Offline customer/party created", c.created_by or _first_actor(db, "accounting_contacts", c.id),
+                   f"{c.name}, {c.phone or 'no phone'}")
+
+    if can_orders and customer:
+        for o in db.query(Order).filter(Order.customer_id == customer.id).order_by(Order.created_at.asc()).limit(25):
+            _event(events, o.created_at, f"Online order #{o.id} placed", "customer (website)",
+                   f"total {money(o.total_amount)}, {o.payment_method}, items: " + ", ".join(f"{i.plant_name} x{i.quantity}" for i in o.items))
+            if o.team_confirmed_at:
+                _event(events, o.team_confirmed_at, f"Order #{o.id} team confirmation (delivery feasibility)", o.team_confirmed_by, o.delivery_feasibility)
+            for h in o.history:
+                _event(events, h.created_at, f"Order #{o.id} status {h.old_status or '-'} -> {h.new_status}", h.updated_by, h.remarks or None)
+            if can_stock:
+                for t in db.query(InventoryTransaction).filter(
+                    InventoryTransaction.source_id == str(o.id),
+                    InventoryTransaction.source_type.in_(["ONLINE_ORDER", "ADMIN_CANCEL", "DELIVERY_REJECTED"]),
+                ):
+                    _event(events, t.created_at, f"Order #{o.id} stock {t.transaction_type}", t.created_by,
+                           f"{t.plant.name if t.plant else t.plant_id}: {t.before_quantity} -> {t.after_quantity}")
+
+    if can_acc and contact_ids:
+        for so in db.query(SalesOrder).filter(SalesOrder.contact_id.in_(contact_ids), SalesOrder.source == "offline").order_by(SalesOrder.created_at.asc()).limit(25):
+            _event(events, so.created_at, f"Sales order {so.order_number} created", so.created_by or _first_actor(db, "accounting_sales_orders", so.id),
+                   f"total {money(so.total_amount)}, items: " + ", ".join(f"{i.description} x{i.quantity}" for i in so.items))
+            if can_stock:
+                for t in db.query(InventoryTransaction).filter(
+                    InventoryTransaction.source_id == str(so.id),
+                    InventoryTransaction.source_type.in_(["SALES_ORDER", "SALES_ORDER_VOID"]),
+                ):
+                    _event(events, t.created_at, f"Sales order {so.order_number} stock {t.transaction_type}", t.created_by,
+                           f"{t.plant.name if t.plant else t.plant_id}: {t.before_quantity} -> {t.after_quantity}")
+        for inv in db.query(Invoice).filter(Invoice.contact_id.in_(contact_ids), Invoice.source == "offline").order_by(Invoice.created_at.asc()).limit(25):
+            _event(events, inv.created_at, f"Invoice {inv.invoice_number} created", _first_actor(db, "accounting_invoices", inv.id),
+                   f"total {money(inv.total_amount)}, paid {money(inv.amount_paid)}, balance {money(inv.balance_due)}, status {inv.status}")
+            if inv.status == "Voided":
+                vrow = (
+                    db.query(AuditLog)
+                    .filter(AuditLog.table_name == "accounting_invoices", AuditLog.record_id == inv.id, AuditLog.action == "void")
+                    .order_by(AuditLog.changed_at.desc())
+                    .first()
+                )
+                when = inv.voided_at or (vrow.changed_at if vrow else None)
+                if when:
+                    _event(events, when, f"Invoice {inv.invoice_number} voided", inv.voided_by or (vrow.changed_by if vrow else None), None)
+        for p in db.query(PaymentIn).filter(PaymentIn.contact_id.in_(contact_ids)).order_by(PaymentIn.payment_date.asc()).limit(40):
+            _event(events, p.payment_date, f"Payment {money(p.amount)} via {p.method}", p.recorded_by or _first_actor(db, "accounting_payments_in", p.id),
+                   f"invoice {p.invoice.invoice_number if p.invoice else '-'}, ref {p.reference or '-'}")
+
+    if can_del and contact_ids:
+        names = {x.id: x.name for x in db.query(Driver)}
+        vehicles = {x.id: x.registration_number for x in db.query(Vehicle)}
+
+        def lab(ev, v):
+            if v is not None and str(v).isdigit() and ev == "DRIVER_ASSIGNED":
+                return names.get(int(v), v)
+            if v is not None and str(v).isdigit() and ev == "VEHICLE_ASSIGNED":
+                return vehicles.get(int(v), v)
+            return v if v is not None else "-"
+
+        for d in db.query(Delivery).filter(Delivery.contact_id.in_(contact_ids)).order_by(Delivery.created_at.asc()).limit(15):
+            _event(events, d.created_at, f"Delivery {d.delivery_number} created", d.created_by,
+                   f"now {d.status}, driver {d.driver.name if d.driver else 'unassigned'}, vehicle {d.vehicle.registration_number if d.vehicle else '-'}")
+            for h in db.query(DeliveryStatusHistory).filter(DeliveryStatusHistory.delivery_id == d.id).order_by(DeliveryStatusHistory.created_at.asc()):
+                if h.event == "CREATED":
+                    continue
+                _event(events, h.created_at, f"Delivery {d.delivery_number} {h.event}", h.changed_by,
+                       f"{lab(h.event, h.old_value)} -> {lab(h.event, h.new_value)}" + (f" ({h.remarks})" if h.remarks else ""))
+
+    events.sort(key=lambda e: e["_t"])
+    truncated = len(events) > 80
+    events = events[:80]
+    for e in events:
+        e.pop("_t")
+    return {
+        "customer_name": display,
+        "channels": sorted(({"online"} if customer else set()) | {c.source for c in contacts}),
+        "event_count": len(events),
+        "truncated": truncated,
+        "events": events,
+        "sections_hidden_due_to_permissions": hidden,
+        "not_stored_by_system": KNOWN_GAPS,
+    }
+
+
+def get_admin_activity(db: Session, admin: AdminUser, username: str = None, range: str = "today", from_date: str = None, to_date: str = None, limit: int = 20) -> dict:
+    """What admins did (order actions, role/permission changes, ...) from the
+    admin activity log. Restricted to users with the Users & Roles
+    permission."""
+    if not check_permission(db, admin, "users_roles", "VIEW"):
+        return _denied("users & roles")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    q = db.query(AdminActivityLog).filter(AdminActivityLog.created_at >= start, AdminActivityLog.created_at < end)
+    if username:
+        q = q.filter(AdminActivityLog.admin_username.ilike(username.strip()))
+    rows = q.order_by(AdminActivityLog.created_at.desc()).all()
+    by_action: dict = {}
+    for r in rows:
+        by_action[r.action] = by_action.get(r.action, 0) + 1
+    return {
+        "count": len(rows),
+        "by_action": by_action,
+        "recent": [
+            {"when": _fmt(r.created_at), "admin": r.admin_username, "action": r.action, "detail": (r.detail or "")[:160]}
+            for r in rows[: max(1, min(limit or 20, 30))]
+        ],
+    }
+
+
 # name -> function. Every function's first two params are always (db, admin)
 # -- execute_admin_tool below injects both itself; the model-supplied
 # arguments can never override either one.
@@ -585,6 +1236,16 @@ ADMIN_TOOLS = {
     "get_customer_invoices": get_customer_invoices,
     "get_employee_details": get_employee_details,
     "get_business_summary": get_business_summary,
+    "get_order_timeline": get_order_timeline,
+    "get_payment_history": get_payment_history,
+    "get_audit_history": get_audit_history,
+    "get_inventory_history": get_inventory_history,
+    "get_expenses": get_expenses,
+    "get_purchase_summary": get_purchase_summary,
+    "get_deliveries": get_deliveries,
+    "get_delivery_timeline": get_delivery_timeline,
+    "get_customer_timeline": get_customer_timeline,
+    "get_admin_activity": get_admin_activity,
 }
 
 ADMIN_TOOL_SCHEMAS = [
@@ -726,6 +1387,16 @@ ADMIN_TOOL_SCHEMAS = [
             "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "week", "month"]}}},
         },
     },
+    {"type": "function", "function": {"name": "get_order_timeline", "description": "Who did what on an online order and when (placed, acknowledged, team-confirmed, every status change + actor, rejection reason, stock moves).", "parameters": {"type": "object", "properties": {"order_id": {"type": "integer"}}, "required": ["order_id"]}}},
+    {"type": "function", "function": {"name": "get_customer_timeline", "description": "Complete history of ONE customer oldest-first: creation (+who), orders, sales orders, invoices/voids, payments (+who recorded), stock moves, deliveries (+driver/vehicle changes). Use for 'complete history/timeline' questions.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "get_payment_history", "description": "Payments received/paid out for a period, optionally for one customer: totals by method (cash/UPI/...), who recorded each.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "direction": {"type": "string", "enum": ["in", "out", "both"]}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_audit_history", "description": "Field-level change history (who changed what, old->new) of one accounting record by id.", "parameters": {"type": "object", "properties": {"entity": {"type": "string", "enum": ["invoice", "sales_order", "contact", "expense", "payment_in", "payment_out", "purchase_order", "bill"]}, "record_id": {"type": "integer"}}, "required": ["entity", "record_id"]}}},
+    {"type": "function", "function": {"name": "get_inventory_history", "description": "Stock movement ledger (sold, restored, received, adjusted; before/after; who) for a plant or all plants.", "parameters": {"type": "object", "properties": {"plant_name": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_expenses", "description": "Expenses total/paid/unpaid, by category, list with who entered.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "category": {"type": "string"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_purchase_summary", "description": "Stock purchases / supplier bills for a period, optionally by supplier.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "supplier": {"type": "string"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_deliveries", "description": "List deliveries for a date, filter by status/driver/vehicle/customer; counts per status and per driver.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "status": {"type": "string"}, "driver_name": {"type": "string"}, "vehicle": {"type": "string"}, "customer_name": {"type": "string"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_delivery_timeline", "description": "History of one delivery by number (e.g. DEL-12): creation, driver/vehicle assignment, status changes, completion, each with who.", "parameters": {"type": "object", "properties": {"delivery_number": {"type": "string"}}, "required": ["delivery_number"]}}},
+    {"type": "function", "function": {"name": "get_admin_activity", "description": "What admins did (activity log) for a period, optionally one admin username. Needs Users & Roles permission.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
 ]
 
 

@@ -173,3 +173,34 @@ class VehicleFuelLog(Base):
 
     vehicle = relationship("Vehicle")
     driver = relationship("Driver")
+
+
+class DeliveryStatusHistory(Base):
+    """Append-only who/when trail for a Delivery -- the Delivery row itself
+    is mutated in place (driver, vehicle, status) with no actor, so every
+    such mutation also writes one row here. Only covers changes made after
+    this table was introduced; earlier events have no record."""
+
+    __tablename__ = "delivery_status_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    delivery_id = Column(Integer, ForeignKey("deliveries.id"), nullable=False, index=True)
+    event = Column(String(30), nullable=False)  # CREATED | DRIVER_ASSIGNED | VEHICLE_ASSIGNED | STATUS_CHANGED | COMPLETED
+    old_value = Column(String(120), nullable=True)
+    new_value = Column(String(120), nullable=True)
+    changed_by = Column(String(80), default="")
+    remarks = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+def record_delivery_event(db, delivery_id: int, event: str, old_value=None, new_value=None, changed_by: str = "", remarks: str = ""):
+    db.add(
+        DeliveryStatusHistory(
+            delivery_id=delivery_id,
+            event=event,
+            old_value=None if old_value is None else str(old_value),
+            new_value=None if new_value is None else str(new_value),
+            changed_by=changed_by,
+            remarks=remarks or "",
+        )
+    )

@@ -273,6 +273,21 @@ with engine.connect() as conn:
     # table (Phase 2's simple directory) with real HR/payroll fields. The
     # existing simple CRUD page/router keep working unchanged -- they just
     # never read or write these new columns.
+    # Ask AAIJI audit trail: who-recorded/who-voided/who-created columns on
+    # pre-existing accounting tables. Additive, defaulted; rows created
+    # before this migration simply have no recorded actor.
+    for _table, _col, _ddl in [
+        ("accounting_payments_in", "recorded_by", "VARCHAR(80) DEFAULT ''"),
+        ("accounting_payments_out", "recorded_by", "VARCHAR(80) DEFAULT ''"),
+        ("accounting_invoices", "voided_by", "VARCHAR(80) DEFAULT ''"),
+        ("accounting_invoices", "voided_at", "DATETIME"),
+        ("accounting_contacts", "created_by", "VARCHAR(80) DEFAULT ''"),
+    ]:
+        _cols = {row[1] for row in conn.execute(text(f"PRAGMA table_info({_table})"))}
+        if _col not in _cols:
+            conn.execute(text(f"ALTER TABLE {_table} ADD COLUMN {_col} {_ddl}"))
+            conn.commit()
+
     employee_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_employees)"))}
     if "department" not in employee_columns:
         conn.execute(text("ALTER TABLE accounting_employees ADD COLUMN department VARCHAR(100) DEFAULT ''"))

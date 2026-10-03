@@ -173,7 +173,7 @@ def create_contact(
     _role: str = Depends(require_accounting_action("CREATE", CONTACT_WRITE_ROLES)),
     db: Session = Depends(get_db),
 ):
-    item = Contact(**payload.model_dump(), source="offline")
+    item = Contact(**payload.model_dump(), source="offline", created_by=admin)
     db.add(item)
     db.commit()
     db.refresh(item)

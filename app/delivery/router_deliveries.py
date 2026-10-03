@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.accounting.models import Contact, SalesOrder, SalesOrderItem
 from app.database import get_db
-from app.delivery.models import Delivery, DeliveryItem, DeliveryTrip, Driver, Vehicle, VehicleFuelLog
+from app.delivery.models import Delivery, DeliveryItem, DeliveryTrip, Driver, Vehicle, VehicleFuelLog, record_delivery_event
 from app.delivery.permissions import require_roles
 from app.delivery.schemas import (
     DeliveryAssignIn,
@@ -186,6 +186,11 @@ def create_delivery(
     db.add(delivery)
     db.flush()
     delivery.delivery_number = f"DEL-{delivery.id}"
+    record_delivery_event(db, delivery.id, "CREATED", None, delivery.status, admin)
+    if payload.driver_id:
+        record_delivery_event(db, delivery.id, "DRIVER_ASSIGNED", None, payload.driver_id, admin)
+    if payload.vehicle_id:
+        record_delivery_event(db, delivery.id, "VEHICLE_ASSIGNED", None, payload.vehicle_id, admin)
 
     items = payload.items
     if not items and sales_order:
@@ -225,13 +230,18 @@ def assign_delivery(
         driver = db.query(Driver).filter(Driver.id == payload.driver_id).first()
         if not driver or driver.status != "Active":
             raise HTTPException(status_code=400, detail="Selected driver is not available")
+        if delivery.driver_id != payload.driver_id:
+            record_delivery_event(db, delivery.id, "DRIVER_ASSIGNED", delivery.driver_id, payload.driver_id, admin)
         delivery.driver_id = payload.driver_id
     if payload.vehicle_id is not None:
         vehicle = db.query(Vehicle).filter(Vehicle.id == payload.vehicle_id).first()
         if not vehicle or vehicle.status == "Inactive":
             raise HTTPException(status_code=400, detail="Selected vehicle is not available")
+        if delivery.vehicle_id != payload.vehicle_id:
+            record_delivery_event(db, delivery.id, "VEHICLE_ASSIGNED", delivery.vehicle_id, payload.vehicle_id, admin)
         delivery.vehicle_id = payload.vehicle_id
     if delivery.driver_id and delivery.vehicle_id and delivery.status == "Ready":
+        record_delivery_event(db, delivery.id, "STATUS_CHANGED", delivery.status, "Assigned", admin)
         delivery.status = "Assigned"
     db.commit()
     result = _get_or_404(db, item_id)
@@ -256,6 +266,7 @@ def update_delivery_status(
         raise HTTPException(status_code=400, detail="Invalid status")
     if delivery.status in TERMINAL_STATUSES:
         raise HTTPException(status_code=400, detail=f"This delivery is already {delivery.status} and can't be changed")
+    record_delivery_event(db, delivery.id, "STATUS_CHANGED", delivery.status, payload.status, admin)
     delivery.status = payload.status
     db.commit()
     result = _get_or_404(db, item_id)
@@ -287,7 +298,9 @@ def complete_delivery(
         if entry.delivered_quantity < item.ordered_quantity:
             fully_delivered = False
 
-    delivery.status = "Delivered" if fully_delivered else "Partially Delivered"
+    new_status = "Delivered" if fully_delivered else "Partially Delivered"
+    record_delivery_event(db, delivery.id, "COMPLETED", delivery.status, new_status, admin, payload.remarks)
+    delivery.status = new_status
     delivery.delivery_remarks = payload.remarks
     delivery.proof_photo_url = payload.proof_photo_url
     delivery.proof_signature_note = payload.proof_signature_note

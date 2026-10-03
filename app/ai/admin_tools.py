@@ -28,8 +28,8 @@ from app.accounting.models import (
 from app.analytics_utils import money, now_ist, resolve_date_range, to_utc
 from app.delivery.models import Delivery, DeliveryStatusHistory, DeliveryTrip, Driver, Vehicle
 from app.models import (
-    AdminActivityLog, AdminUser, Category, Customer, Inquiry, InventoryTransaction, Order,
-    OrderItem, OrderStatusHistory, Plant, Purchase,
+    AdminActivityLog, AdminUser, Category, Customer, CustomerActivityLog, Inquiry,
+    InventoryTransaction, LoginAttempt, Order, OrderItem, OrderStatusHistory, Plant, Purchase,
 )
 from app.permissions import check_permission
 
@@ -1267,6 +1267,399 @@ def get_admin_activity(db: Session, admin: AdminUser, username: str = None, rang
     }
 
 
+# ---------- Fraud / anomaly ("is an employee doing something suspicious") ----------
+
+def get_admin_risk_summary(db: Session, admin: AdminUser, username: str = None, range: str = "month", from_date: str = None, to_date: str = None) -> dict:
+    """Per-admin activity that's worth a second look: invoices voided,
+    orders cancelled, manual stock adjustments, price overrides below
+    catalog price, failed login attempts. Not proof of wrongdoing by
+    itself -- a high count is a prompt to go look at the actual records,
+    not an accusation."""
+    if not check_permission(db, admin, "users_roles", "VIEW"):
+        return _denied("users & roles")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+
+    def grouped(q, col):
+        rows = q.all()
+        out: dict = {}
+        for name, *_ in rows:
+            out[name or NOT_RECORDED] = out.get(name or NOT_RECORDED, 0) + 1
+        return out
+
+    voids = dict(
+        db.query(AuditLog.changed_by, func.count(AuditLog.id))
+        .filter(AuditLog.table_name == "accounting_invoices", AuditLog.action == "void",
+                AuditLog.changed_at >= start, AuditLog.changed_at < end)
+        .group_by(AuditLog.changed_by).all()
+    )
+    cancellations = dict(
+        db.query(OrderStatusHistory.updated_by, func.count(OrderStatusHistory.id))
+        .filter(OrderStatusHistory.new_status == "Cancelled", OrderStatusHistory.created_at >= start, OrderStatusHistory.created_at < end)
+        .group_by(OrderStatusHistory.updated_by).all()
+    )
+    adjustments = dict(
+        db.query(InventoryTransaction.created_by, func.count(InventoryTransaction.id))
+        .filter(InventoryTransaction.transaction_type == "MANUAL_ADJUSTMENT", InventoryTransaction.created_at >= start, InventoryTransaction.created_at < end)
+        .group_by(InventoryTransaction.created_by).all()
+    )
+    failed_logins = dict(
+        db.query(LoginAttempt.identifier, func.count(LoginAttempt.id))
+        .filter(LoginAttempt.success.is_(False), LoginAttempt.created_at >= start, LoginAttempt.created_at < end)
+        .group_by(LoginAttempt.identifier).all()
+    )
+    overrides = _price_override_rows(db, start, end)
+    override_by_admin: dict = {}
+    for r in overrides:
+        override_by_admin[r["created_by"]] = override_by_admin.get(r["created_by"], 0) + 1
+
+    admins = set(voids) | set(cancellations) | set(adjustments) | set(override_by_admin)
+    admins.discard(None)
+    admins.discard("")
+    if username:
+        admins = {a for a in admins if a.lower() == username.strip().lower()}
+
+    summary = []
+    for a in sorted(admins):
+        summary.append({
+            "admin": a,
+            "invoices_voided": voids.get(a, 0),
+            "orders_cancelled": cancellations.get(a, 0),
+            "manual_stock_adjustments": adjustments.get(a, 0),
+            "price_overrides": override_by_admin.get(a, 0),
+        })
+    summary.sort(key=lambda r: sum(v for k, v in r.items() if k != "admin"), reverse=True)
+
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "by_admin": summary,
+        "failed_logins_by_identifier": failed_logins,
+        "note": "High numbers are a prompt to review the actual records (get_audit_history, get_price_overrides, get_order_timeline), not proof of a problem.",
+    }
+
+
+def _price_override_rows(db: Session, start, end, threshold_percent: float = 10.0) -> list:
+    from app.accounting.models import SalesOrderItem
+
+    rows = []
+    for item, so in (
+        db.query(SalesOrderItem, SalesOrder)
+        .join(SalesOrder, SalesOrder.id == SalesOrderItem.sales_order_id)
+        .filter(SalesOrderItem.plant_id.isnot(None), SalesOrder.created_at >= start, SalesOrder.created_at < end)
+        .all()
+    ):
+        plant = db.query(Plant).filter(Plant.id == item.plant_id).first()
+        if not plant or not plant.price:
+            continue
+        diff_pct = (plant.price - item.unit_price) / plant.price * 100
+        if diff_pct >= threshold_percent:
+            rows.append({
+                "sales_order": so.order_number,
+                "when": _fmt(so.created_at),
+                "plant": plant.name,
+                "catalog_price": plant.price,
+                "sold_at": item.unit_price,
+                "discount_percent": round(diff_pct, 1),
+                "created_by": so.created_by or _first_actor(db, "accounting_sales_orders", so.id) or NOT_RECORDED,
+            })
+    return rows
+
+
+def get_price_overrides(db: Session, admin: AdminUser, range: str = "month", from_date: str = None, to_date: str = None, threshold_percent: float = 10.0, limit: int = 20) -> dict:
+    """Offline sales order lines sold noticeably below the plant's catalog
+    price -- a manually-typed unit_price, not validated against the
+    catalog. Useful to check an employee isn't under-billing."""
+    if not check_permission(db, admin, "accounting", "VIEW"):
+        return _denied("accounting")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    rows = _price_override_rows(db, start, end, threshold_percent)
+    rows.sort(key=lambda r: r["discount_percent"], reverse=True)
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "threshold_percent": threshold_percent,
+        "count": len(rows),
+        "listed": rows[: max(1, min(limit or 20, 30))],
+    }
+
+
+def get_failed_logins(db: Session, admin: AdminUser, username: str = None, range: str = "week", from_date: str = None, to_date: str = None, limit: int = 20) -> dict:
+    """Failed login attempts (wrong password, unknown user, locked,
+    inactive) -- across admin and customer logins alike."""
+    if not check_permission(db, admin, "users_roles", "VIEW"):
+        return _denied("users & roles")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    q = db.query(LoginAttempt).filter(LoginAttempt.created_at >= start, LoginAttempt.created_at < end, LoginAttempt.success.is_(False))
+    if username:
+        q = q.filter(LoginAttempt.identifier.ilike(f"%{username.strip()}%"))
+    rows = q.order_by(LoginAttempt.created_at.desc()).all()
+    by_identifier: dict = {}
+    for r in rows:
+        by_identifier[r.identifier] = by_identifier.get(r.identifier, 0) + 1
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "count": len(rows),
+        "by_identifier": by_identifier,
+        "listed": [
+            {"when": _fmt(r.created_at), "identifier": r.identifier, "ip": r.ip_address, "reason": r.reason}
+            for r in rows[: max(1, min(limit or 20, 30))]
+        ],
+    }
+
+
+def get_voided_invoices(db: Session, admin: AdminUser, range: str = "month", from_date: str = None, to_date: str = None, limit: int = 20) -> dict:
+    """All invoices voided in a period, with who voided each one and the
+    amount -- use to review void activity across all admins at once."""
+    if not check_permission(db, admin, "accounting", "VIEW"):
+        return _denied("accounting")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    rows = (
+        db.query(Invoice)
+        .filter(Invoice.status == "Voided", Invoice.voided_at.isnot(None), Invoice.voided_at >= start, Invoice.voided_at < end)
+        .order_by(Invoice.voided_at.desc())
+        .all()
+    )
+    by_admin: dict = {}
+    for r in rows:
+        by_admin[r.voided_by or NOT_RECORDED] = by_admin.get(r.voided_by or NOT_RECORDED, 0) + 1
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "count": len(rows),
+        "total_amount": money(sum(r.total_amount or 0 for r in rows)),
+        "by_admin": by_admin,
+        "listed": [
+            {"invoice_number": r.invoice_number, "customer": r.contact.name if r.contact else None,
+             "amount": r.total_amount, "voided_by": r.voided_by or NOT_RECORDED, "voided_at": _fmt(r.voided_at)}
+            for r in rows[: max(1, min(limit or 20, 30))]
+        ],
+    }
+
+
+def get_stock_adjustments(db: Session, admin: AdminUser, username: str = None, range: str = "month", from_date: str = None, to_date: str = None, limit: int = 20) -> dict:
+    """Manual stock adjustments (not a sale/purchase/order) -- who
+    adjusted what, by how much, and any note given."""
+    if not check_permission(db, admin, "products", "VIEW"):
+        return _denied("products")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    q = db.query(InventoryTransaction).filter(
+        InventoryTransaction.transaction_type == "MANUAL_ADJUSTMENT",
+        InventoryTransaction.created_at >= start, InventoryTransaction.created_at < end,
+    )
+    if username:
+        q = q.filter(InventoryTransaction.created_by.ilike(f"%{username.strip()}%"))
+    rows = q.order_by(InventoryTransaction.created_at.desc()).all()
+    by_admin: dict = {}
+    for r in rows:
+        by_admin[r.created_by or NOT_RECORDED] = by_admin.get(r.created_by or NOT_RECORDED, 0) + 1
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "count": len(rows),
+        "by_admin": by_admin,
+        "listed": [
+            {"when": _fmt(r.created_at), "plant": r.plant.name if r.plant else r.plant_id, "qty": r.quantity,
+             "before": r.before_quantity, "after": r.after_quantity, "by": r.created_by or NOT_RECORDED, "notes": r.notes or None}
+            for r in rows[: max(1, min(limit or 20, 30))]
+        ],
+    }
+
+
+# ---------- Labour & Payroll ----------
+
+def get_attendance_summary(db: Session, admin: AdminUser, worker_name: str = None, range: str = "week", from_date: str = None, to_date: str = None, limit: int = 20) -> dict:
+    """Attendance for monthly-salary employees and daily-wage labour --
+    present/absent/overtime counts, optionally for one worker by name."""
+    if not check_permission(db, admin, "labour", "VIEW"):
+        return _denied("labour")
+    from app.labour.models import EmployeeAttendance, Labour, LabourAttendance
+
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    rows = []
+    eq = db.query(EmployeeAttendance).filter(EmployeeAttendance.attendance_date >= start, EmployeeAttendance.attendance_date < end)
+    lq = db.query(LabourAttendance).filter(LabourAttendance.attendance_date >= start, LabourAttendance.attendance_date < end)
+    if worker_name:
+        emp_ids = [e.id for e in db.query(Employee.id).filter(Employee.name.ilike(f"%{worker_name.strip()}%"))]
+        lab_ids = [l.id for l in db.query(Labour.id).filter(Labour.name.ilike(f"%{worker_name.strip()}%"))]
+        eq = eq.filter(EmployeeAttendance.employee_id.in_(emp_ids or [-1]))
+        lq = lq.filter(LabourAttendance.labour_id.in_(lab_ids or [-1]))
+    emp_names = {e.id: e.name for e in db.query(Employee)}
+    lab_names = {l.id: l.name for l in db.query(Labour)}
+    for r in eq.all():
+        rows.append({"who": emp_names.get(r.employee_id, "Unknown"), "type": "employee", "date": _fmt(r.attendance_date), "status": r.status, "overtime_hours": r.overtime_hours, "amount": None})
+    for r in lq.all():
+        rows.append({"who": lab_names.get(r.labour_id, "Unknown"), "type": "labour", "date": _fmt(r.attendance_date), "status": r.status, "overtime_hours": r.overtime_hours, "amount": r.earned_amount})
+    by_status: dict = {}
+    for r in rows:
+        by_status[r["status"]] = by_status.get(r["status"], 0) + 1
+    rows.sort(key=lambda r: r["date"] or "", reverse=True)
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "count": len(rows),
+        "by_status": by_status,
+        "listed": rows[: max(1, min(limit or 20, 30))],
+    }
+
+
+def get_payroll_summary(db: Session, admin: AdminUser, year: int = None, month: int = None, worker_name: str = None, limit: int = 20) -> dict:
+    """Payroll rows (monthly salary/wage calculation) -- gross, advance
+    recovery, deductions, net payable, status (Draft/Finalized), and who
+    generated/finalized each one."""
+    if not check_permission(db, admin, "labour", "VIEW"):
+        return _denied("labour")
+    from app.labour.models import Labour, Payroll
+
+    now = now_ist()
+    year = year or now.year
+    month = month or now.month
+    q = db.query(Payroll).filter(Payroll.period_year == year, Payroll.period_month == month)
+    emp_names = {e.id: e.name for e in db.query(Employee)}
+    lab_names = {l.id: l.name for l in db.query(Labour)}
+    rows = q.all()
+    if worker_name:
+        key = worker_name.strip().lower()
+        rows = [r for r in rows if key in (emp_names.get(r.employee_id, "") or lab_names.get(r.labour_id, "")).lower()]
+    return {
+        "period": f"{year}-{month:02d}",
+        "count": len(rows),
+        "total_net_payable": money(sum(r.net_payable or 0 for r in rows)),
+        "listed": [
+            {
+                "worker": emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or "Unknown",
+                "worker_type": r.worker_type, "gross_earnings": r.gross_earnings, "advance_recovery": r.advance_recovery,
+                "deductions": r.deductions, "net_payable": r.net_payable, "status": r.status,
+                "generated_by": r.generated_by or NOT_RECORDED, "finalized_by": r.finalized_by or None,
+            }
+            for r in rows[: max(1, min(limit or 20, 30))]
+        ],
+    }
+
+
+def get_worker_advances(db: Session, admin: AdminUser, worker_name: str = None, range: str = "month", from_date: str = None, to_date: str = None, limit: int = 20) -> dict:
+    """Advances (loans) given to employees/labour, who gave it and why,
+    and outstanding balance after recoveries."""
+    if not check_permission(db, admin, "labour", "VIEW"):
+        return _denied("labour")
+    from app.labour.models import AdvanceRecovery, Labour, WorkerAdvance
+
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    q = db.query(WorkerAdvance).filter(WorkerAdvance.advance_date >= start, WorkerAdvance.advance_date < end)
+    emp_names = {e.id: e.name for e in db.query(Employee)}
+    lab_names = {l.id: l.name for l in db.query(Labour)}
+    rows = q.order_by(WorkerAdvance.advance_date.desc()).all()
+    if worker_name:
+        key = worker_name.strip().lower()
+        rows = [r for r in rows if key in (emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or "").lower()]
+    listed = []
+    for r in rows[: max(1, min(limit or 20, 30))]:
+        recovered = db.query(func.coalesce(func.sum(AdvanceRecovery.amount), 0)).filter(AdvanceRecovery.advance_id == r.id).scalar() or 0
+        listed.append({
+            "worker": emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or "Unknown",
+            "amount": r.amount, "recovered": money(recovered), "outstanding": money(r.amount - recovered),
+            "reason": r.reason or None, "given_by": r.created_by or NOT_RECORDED, "when": _fmt(r.advance_date),
+        })
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "count": len(rows),
+        "total_given": money(sum(r.amount or 0 for r in rows)),
+        "listed": listed,
+    }
+
+
+# ---------- Communications (WhatsApp) ----------
+
+def get_whatsapp_activity(db: Session, admin: AdminUser, status: str = None, range: str = "today", from_date: str = None, to_date: str = None, limit: int = 20) -> dict:
+    """WhatsApp notifications sent to customers/drivers -- counts by
+    status (sent/delivered/read/failed) and the failed ones with error."""
+    if not check_permission(db, admin, "communications", "VIEW"):
+        return _denied("communications")
+    from app.communications.models import WhatsAppMessage
+
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    q = db.query(WhatsAppMessage).filter(WhatsAppMessage.created_at >= start, WhatsAppMessage.created_at < end)
+    if status:
+        q = q.filter(WhatsAppMessage.status == status.strip().upper())
+    rows = q.order_by(WhatsAppMessage.created_at.desc()).all()
+    by_status: dict = {}
+    for r in rows:
+        by_status[r.status] = by_status.get(r.status, 0) + 1
+    failed = [r for r in rows if r.status == "FAILED"][: max(1, min(limit or 20, 30))]
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "count": len(rows),
+        "by_status": by_status,
+        "failed_messages": [
+            {"when": _fmt(r.created_at), "to": r.customer_name or r.mobile, "template": r.template_name, "error": r.error_message or r.error_code or None}
+            for r in failed
+        ],
+    }
+
+
+# ---------- Website content (simple counts) ----------
+
+def get_website_content_summary(db: Session, admin: AdminUser) -> dict:
+    """Quick counts of website-facing content -- categories, plants
+    (active/inactive), services, testimonials, blog posts, FAQs, pricing
+    plans, gallery images, reviews."""
+    if not check_permission(db, admin, "website", "VIEW"):
+        return _denied("website")
+    from app.models import FAQ, BlogPost, GalleryImage, PlantReview, PricingPlan, Service, Testimonial
+
+    active_plants = db.query(func.count(Plant.id)).filter(Plant.is_active.is_(True)).scalar() or 0
+    total_plants = db.query(func.count(Plant.id)).scalar() or 0
+    return {
+        "categories": db.query(func.count(Category.id)).scalar() or 0,
+        "plants_active": active_plants,
+        "plants_total": total_plants,
+        "services": db.query(func.count(Service.id)).scalar() or 0,
+        "testimonials": db.query(func.count(Testimonial.id)).scalar() or 0,
+        "blog_posts": db.query(func.count(BlogPost.id)).scalar() or 0,
+        "faqs": db.query(func.count(FAQ.id)).scalar() or 0,
+        "pricing_plans": db.query(func.count(PricingPlan.id)).scalar() or 0,
+        "gallery_images": db.query(func.count(GalleryImage.id)).scalar() or 0,
+        "plant_reviews": db.query(func.count(PlantReview.id)).scalar() or 0,
+    }
+
+
+# ---------- Customer activity ----------
+
+def get_customer_activity(db: Session, admin: AdminUser, name: str, limit: int = 20) -> dict:
+    """Website login/activity log for one customer (the Customer Logs
+    page) -- separate from purchase history."""
+    if not check_permission(db, admin, "customers", "VIEW"):
+        return _denied("customers")
+    amb = _ambiguous_matches(db, name)
+    if amb:
+        return _ambiguity_reply(amb)
+    customer = _find_customer(db, name)
+    if not customer:
+        return {"error": f"No customer found matching '{name}'."}
+    rows = (
+        db.query(CustomerActivityLog)
+        .filter(CustomerActivityLog.customer_id == customer.id)
+        .order_by(CustomerActivityLog.created_at.desc())
+        .limit(max(1, min(limit or 20, 30)))
+        .all()
+    )
+    return {
+        "customer_name": customer.name,
+        "count": len(rows),
+        "activity": [{"when": _fmt(r.created_at), "action": r.action} for r in rows],
+    }
+
+
 # name -> function. Every function's first two params are always (db, admin)
 # -- execute_admin_tool below injects both itself; the model-supplied
 # arguments can never override either one.
@@ -1297,6 +1690,17 @@ ADMIN_TOOLS = {
     "get_delivery_timeline": get_delivery_timeline,
     "get_customer_timeline": get_customer_timeline,
     "get_admin_activity": get_admin_activity,
+    "get_admin_risk_summary": get_admin_risk_summary,
+    "get_price_overrides": get_price_overrides,
+    "get_failed_logins": get_failed_logins,
+    "get_voided_invoices": get_voided_invoices,
+    "get_stock_adjustments": get_stock_adjustments,
+    "get_attendance_summary": get_attendance_summary,
+    "get_payroll_summary": get_payroll_summary,
+    "get_worker_advances": get_worker_advances,
+    "get_whatsapp_activity": get_whatsapp_activity,
+    "get_website_content_summary": get_website_content_summary,
+    "get_customer_activity": get_customer_activity,
 }
 
 ADMIN_TOOL_SCHEMAS = [
@@ -1450,6 +1854,17 @@ ADMIN_TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "get_admin_activity", "description": "What admins did (activity log) for a period, optionally one admin username. Needs Users & Roles permission.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_customer_counts", "description": "How many customers exist: online (website accounts) vs offline-only (walk-in/manual contacts), and the total. Use for 'kitne online customer hai', 'total customers kitne hain'.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "get_inquiries", "description": "Website contact/product enquiries: who asked, about which plant, when, and reply status (new/replied). Use for 'kisi customer ki enquiry aayi', 'naye enquiries'.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "status": {"type": "string", "description": "'new' or 'replied'"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_admin_risk_summary", "description": "Per-admin activity worth reviewing: invoices voided, orders cancelled, manual stock adjustments, price overrides, failed logins. Use for 'koi employee gadbadi toh nahi kar raha', 'suspicious activity', 'kisne zyada cancel/void kiye'.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}}}}},
+    {"type": "function", "function": {"name": "get_price_overrides", "description": "Offline sales lines sold notably below the plant's catalog price (possible under-billing) -- who sold it and by how much.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "threshold_percent": {"type": "number"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_failed_logins", "description": "Failed login attempts (wrong password/unknown user/locked/inactive), optionally for one username. Security check.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_voided_invoices", "description": "All invoices voided in a period across all admins, with who voided each and the amount.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_stock_adjustments", "description": "Manual stock adjustments (not sale/purchase) -- who adjusted what plant, by how much, any note.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_attendance_summary", "description": "Attendance for salaried employees and daily-wage labour -- present/absent/overtime, optionally for one worker by name.", "parameters": {"type": "object", "properties": {"worker_name": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_payroll_summary", "description": "Monthly payroll: gross earnings, advance recovery, deductions, net payable, status, who generated/finalized -- for a year/month, optionally one worker.", "parameters": {"type": "object", "properties": {"year": {"type": "integer"}, "month": {"type": "integer"}, "worker_name": {"type": "string"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_worker_advances", "description": "Advances/loans given to employees or labour -- amount, reason, who gave it, recovered vs outstanding.", "parameters": {"type": "object", "properties": {"worker_name": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_whatsapp_activity", "description": "WhatsApp notification activity -- counts by status (sent/delivered/read/failed) and failed messages with their error.", "parameters": {"type": "object", "properties": {"status": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_website_content_summary", "description": "Quick counts of website content: categories, plants, services, testimonials, blog posts, FAQs, pricing plans, gallery images, reviews.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "get_customer_activity", "description": "Website login/activity log for one customer by name (separate from purchase history).", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["name"]}}},
 ]
 
 

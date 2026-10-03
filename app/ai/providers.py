@@ -132,7 +132,11 @@ class GroqProvider(_OpenAICompatibleProvider):
     base_url = "https://api.groq.com/openai/v1/chat/completions"
     env_key = "GROQ_API_KEY"
     default_model_env = "GROQ_MODEL"
-    default_model = "llama-3.1-8b-instant"
+    # Groq's free-tier model lineup is retired/rotated on their end over
+    # time (llama-3.1-8b-instant, the original default here, is gone as of
+    # Oct 2026) -- override via GROQ_MODEL without a code change if this one
+    # is ever retired too. Current model list: GET /openai/v1/models.
+    default_model = "openai/gpt-oss-20b"
 
 
 class OpenRouterProvider(_OpenAICompatibleProvider):

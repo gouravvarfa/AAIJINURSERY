@@ -12,7 +12,7 @@ from app.accounting.sync import sync_order_to_accounting
 from app.analytics_utils import INACTIVE_DAYS
 from app.audit import SUPER_ACCESS_GRANTED, SUPER_ACCESS_REVOKED, record_admin_audit
 from app.auth import hash_password
-from app.database import BASE_DIR, get_db
+from app.database import get_db
 from app.deps import get_current_admin, get_current_developer
 from app.inventory import adjust_stock, restore_stock
 from app.permissions import require_permission
@@ -324,8 +324,35 @@ def system_info(admin: str = Depends(get_current_developer), db: Session = Depen
 
 @router.get("/backup")
 def download_backup(admin: str = Depends(get_current_developer)):
-    db_path = BASE_DIR / "aaiji_nursery.db"
-    return FileResponse(db_path, filename="aaiji_nursery_backup.db", media_type="application/octet-stream")
+    # The live DB lives wherever DATABASE_URL points (shared/ on the server,
+    # not the code directory), and copying a SQLite file mid-write can yield
+    # a corrupt backup -- so take a consistent snapshot via sqlite3's backup API.
+    import sqlite3
+    import tempfile
+
+    from starlette.background import BackgroundTask
+
+    from app.database import engine
+
+    src_path = engine.url.database
+    if not src_path or not os.path.exists(src_path):
+        raise HTTPException(status_code=500, detail="Database file not found.")
+    fd, tmp_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    src = sqlite3.connect(src_path)
+    dst = sqlite3.connect(tmp_path)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+    stamp = datetime.utcnow().strftime("%Y%m%d-%H%M")
+    return FileResponse(
+        tmp_path,
+        filename=f"aaiji_nursery_backup_{stamp}.db",
+        media_type="application/octet-stream",
+        background=BackgroundTask(os.remove, tmp_path),
+    )
 
 
 # ---------- Dashboard ----------

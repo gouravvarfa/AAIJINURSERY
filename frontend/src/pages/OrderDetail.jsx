@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
-import GoogleReviewButton from "../components/GoogleReviewButton";
+import GoogleReviewCTA from "../components/GoogleReviewCTA";
 import { Loading, Empty } from "../components/Loading";
 import OrderTracker from "../components/OrderTracker";
 import CancelOrderModal from "../components/CancelOrderModal";
@@ -162,7 +162,7 @@ export default function OrderDetail() {
       </section>
 
       <section className="section">
-        <div className="container" style={{ maxWidth: 760 }}>
+        <div className="container" style={{ maxWidth: 960 }}>
           <Link
             to="/orders"
             className="btn btn-sm btn-outline dark"
@@ -240,39 +240,46 @@ export default function OrderDetail() {
                   </div>
                 )}
 
-              <div className="card" style={{ marginBottom: 20 }}>
-                <div className="card-body">
-                  <div className="orders-row-body" style={{ marginBottom: 0 }}>
-                    <div>
-                      <div className="orders-row-id">Order #{order.id}</div>
-                      <div className="orders-row-date">
-                        Placed on {new Date(order.created_at).toLocaleDateString()}
+              <div className="order-detail-layout" style={{ marginBottom: 20 }}>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="orders-row-body" style={{ marginBottom: 0 }}>
+                      <div>
+                        <div className="orders-row-id">Order #{order.id}</div>
+                        <div className="orders-row-date">
+                          Placed on {new Date(order.created_at).toLocaleDateString()}
+                        </div>
                       </div>
+                      <span className="badge badge-muted">{statusLabel(order.status)}</span>
                     </div>
-                    <span className="badge badge-muted">{statusLabel(order.status)}</span>
+
+                    <OrderTracker status={order.status} />
+
+                    {order.status === "Delivered" && (
+                      <div className="delivery-success-banner">
+                        <span className="delivery-success-icon">&#10003;</span>
+                        <div>
+                          <strong>Your order has been delivered successfully!</strong>
+                          <p>We hope you're happy with your plants. Thank you for choosing AAIJI Nursery!</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {CANCELLABLE_STATUSES.includes(order.status) && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-danger"
+                        style={{ marginTop: 20 }}
+                        disabled={cancelling}
+                        onClick={() => setShowCancelModal(true)}
+                      >
+                        Cancel Order
+                      </button>
+                    )}
                   </div>
-
-                  <OrderTracker status={order.status} />
-
-                  {order.status === "Delivered" && settings?.google_review_url && (
-                    <div className="google-review-prompt">
-                      <p>Thank you for shopping with us! Please share your honest experience with AAIJI Nursery.</p>
-                      <GoogleReviewButton url={settings.google_review_url} />
-                    </div>
-                  )}
-
-                  {CANCELLABLE_STATUSES.includes(order.status) && (
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-danger"
-                      style={{ marginTop: 20 }}
-                      disabled={cancelling}
-                      onClick={() => setShowCancelModal(true)}
-                    >
-                      Cancel Order
-                    </button>
-                  )}
                 </div>
+
+                <GoogleReviewCTA orderStatus={order.status} reviewUrl={settings?.google_review_url} />
               </div>
 
               <div className="card" style={{ marginBottom: 20 }}>

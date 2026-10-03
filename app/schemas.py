@@ -611,6 +611,13 @@ class OrderSummaryOut(BaseModel):
     created_at: datetime
     customer: Optional[CustomerOut] = None
     items: List[OrderItemOut] = []
+    # Additive, read-only fields (already on the Order model) so the
+    # customer-facing My Orders list can show delivery details per card
+    # without a second /orders/{id} round-trip -- no business logic touched.
+    delivered_at: Optional[datetime] = None
+    delivery_partner: str = ""
+    delivery_city: str = ""
+    delivery_state: str = ""
 
 
 class OrderSummaryAdminOut(OrderSummaryOut):

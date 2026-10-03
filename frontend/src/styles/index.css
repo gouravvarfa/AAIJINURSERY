@@ -1049,22 +1049,32 @@ select:focus-visible {
    tablet/desktop — stay untouched), and the account menu becoming a
    dropdown instead of a bare Logout link. */
 @media (max-width: 767px) {
-  /* nowrap is deliberate: row 1 (logo/quicklinks/cart/account/hamburger)
-     must never spill onto a third line, in either auth state — it only
-     ever has two rows, with search on its own row via position:absolute
-     below (which doesn't participate in this flex flow either way). If
-     row 1's content is ever too wide, .nav-quicklinks (the only flexible
-     item here) shrinks first; everything else keeps its size. */
+  /* nowrap is deliberate: row 1 (logo/search/cart/account/hamburger) must
+     never spill onto a second line, in either auth state. .nav-search is
+     the only flexible item here (flex: 1 1 auto below), so it's the one
+     that gives up width first if the row gets tight. */
   .navbar .container {
     height: auto;
     min-height: 60px;
     gap: 6px;
     flex-wrap: nowrap;
     position: relative;
-    padding-bottom: 58px;
   }
   .brand-logo {
     height: 32px;
+  }
+  /* Without the old quicklinks row acting as the flexible middle spacer,
+     nav-right/nav-actions need to grow themselves so .nav-search's own
+     flex: 1 (above) actually has space to expand into, instead of the
+     whole icon cluster just hugging the right edge with a dead gap next
+     to the logo. */
+  .nav-right {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .nav-actions {
+    flex: 1 1 auto;
+    min-width: 0;
   }
   /* Dimmed backdrop behind the drawer — same pattern as .explorer-filters-backdrop. */
   .nav-links-backdrop {
@@ -1284,14 +1294,15 @@ select:focus-visible {
 }
 
 /* Placed right after the base rule above so it wins the cascade (same
-   specificity, later source order) — moves search onto its own full-width
-   row below the compact top row, without touching the DOM or desktop. */
+   specificity, later source order) — inline in row 1 now that the
+   quicklinks row it used to sit below has been removed (the bottom tab
+   bar covers Home/Shop/Contact), so search takes that freed-up space
+   instead of needing its own row. */
 @media (max-width: 767px) {
   .nav-search {
-    position: absolute;
-    left: clamp(12px, 2vw, 28px);
-    right: clamp(12px, 2vw, 28px);
-    bottom: 8px;
+    position: static;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }
 

@@ -4,9 +4,10 @@ import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
 import AuthShell from "../components/AuthShell";
+import GoogleSignInButton from "../components/GoogleSignInButton";
 
 export default function Signup() {
-  const { session, register } = useAuth();
+  const { session, register, loginWithGoogle } = useAuth();
   const { resumePendingAction } = useCart();
   const { resumePendingAction: resumeWishlistPendingAction } = useWishlist();
   const navigate = useNavigate();
@@ -28,6 +29,17 @@ export default function Signup() {
     return <Navigate to={isAdminType ? "/admin" : "/"} replace />;
   }
 
+  async function afterAuth() {
+    navigatedRef.current = true;
+    const resumed = await resumePendingAction();
+    await resumeWishlistPendingAction();
+    if (resumed?.navigateTo) {
+      navigate(resumed.navigateTo, { state: resumed.state, replace: true });
+    } else {
+      navigate(location.state?.from || "/", { replace: true });
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (submittingRef.current) return;
@@ -36,16 +48,25 @@ export default function Signup() {
     setError("");
     try {
       await register(form);
-      navigatedRef.current = true;
-      const resumed = await resumePendingAction();
-      await resumeWishlistPendingAction();
-      if (resumed?.navigateTo) {
-        navigate(resumed.navigateTo, { state: resumed.state, replace: true });
-      } else {
-        navigate(location.state?.from || "/", { replace: true });
-      }
+      await afterAuth();
     } catch (err) {
       setError(err.message || "Unable to create account. Please try again.");
+    } finally {
+      submittingRef.current = false;
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleCredential(credential) {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setLoading(true);
+    setError("");
+    try {
+      await loginWithGoogle(credential);
+      await afterAuth();
+    } catch (err) {
+      setError(err.message || "Google sign-in failed. Please try again.");
     } finally {
       submittingRef.current = false;
       setLoading(false);
@@ -102,6 +123,12 @@ export default function Signup() {
           {loading ? "Creating account..." : "Sign Up"}
         </button>
       </form>
+
+      <div className="auth-divider">
+        <span>or</span>
+      </div>
+      <GoogleSignInButton onCredential={handleGoogleCredential} onError={(err) => setError(err.message)} />
+
       <p className="auth-modal-footer-text">
         Already have an account? <Link to="/login" state={location.state}>Login</Link>
       </p>

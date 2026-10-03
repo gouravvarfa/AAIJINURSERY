@@ -3,6 +3,8 @@ import PublicLayout from "./components/PublicLayout";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Home from "./pages/Home";
 import About from "./pages/About";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import Plants from "./pages/Plants";
 import PlantDetail from "./pages/PlantDetail";
 import Cart from "./pages/Cart";
@@ -115,6 +117,8 @@ export default function App() {
         <Route element={<PublicLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<About />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms-of-service" element={<TermsOfService />} />
           <Route path="/plants" element={<Plants />} />
           <Route path="/plants/:slug" element={<PlantDetail />} />
           <Route path="/cart" element={<Cart />} />

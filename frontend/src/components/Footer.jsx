@@ -61,7 +61,8 @@ export default function Footer() {
         </div>
         <div className="footer-bottom">
           &copy; {new Date().getFullYear()} {settings.business_name || "Aaiji Nursery"}. All
-          rights reserved.
+          rights reserved. &middot; <Link to="/privacy-policy">Privacy Policy</Link> &middot;{" "}
+          <Link to="/terms-of-service">Terms of Service</Link>
         </div>
       </div>
     </footer>

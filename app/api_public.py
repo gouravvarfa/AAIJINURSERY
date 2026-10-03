@@ -3,11 +3,13 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.audit import LOGIN_LOCKED_OUT, record_admin_audit
-from app.auth import verify_password
+from app.auth import hash_password, verify_password
 from app.database import get_db
 from app.deps import get_current_admin
 from app.permissions import get_permissions_map
@@ -39,6 +41,7 @@ from app.schemas import (
     EnquiryCreateIn,
     FAQOut,
     GalleryImageOut,
+    GoogleAuthIn,
     InquiryIn,
     InquiryOut,
     PlantOut,
@@ -57,6 +60,15 @@ router = APIRouter(prefix="/api")
 # system_health_retention_days.
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
+
+# "Sign in with Google" (customer-facing only -- see POST /auth/google
+# below). This Client ID is not a secret -- Google's own Identity Services
+# JS on the frontend sends it in the clear on every page load, so hard-
+# coding it here (same value the frontend uses) is the normal, documented
+# way to wire this up; nothing sensitive is ever exchanged except the
+# signed ID token, which this endpoint verifies against Google's own public
+# keys before trusting anything in it.
+GOOGLE_CLIENT_ID = "566577575077-2n0jo8rp263fltulupcfrvelg04mcjkg.apps.googleusercontent.com"
 
 
 def _client_ip(request: Request) -> str:
@@ -425,6 +437,58 @@ def unified_login(payload: UnifiedLoginIn, request: Request, db: Session = Depen
     _record_attempt(False, "invalid_credentials")
     db.commit()
     raise HTTPException(status_code=401, detail="Invalid email or password")
+
+
+@router.post("/auth/google")
+def google_login(payload: GoogleAuthIn, request: Request, db: Session = Depends(get_db)):
+    """Customer-only "Sign in with Google" -- the ID token is verified
+    against Google's own public keys (never trusted as-is), so a forged or
+    tampered token is rejected before anything inside it is read. Admin
+    login is untouched; this never sets request.session["admin_username"]."""
+    try:
+        claims = google_id_token.verify_oauth2_token(
+            payload.credential, google_requests.Request(), GOOGLE_CLIENT_ID
+        )
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google sign-in token")
+
+    google_sub = claims["sub"]
+    email = (claims.get("email") or "").strip().lower()
+    name = claims.get("name") or email.split("@")[0]
+    if not email:
+        raise HTTPException(status_code=400, detail="Your Google account has no email address")
+    if not claims.get("email_verified", False):
+        raise HTTPException(status_code=400, detail="Please verify your email address with Google first")
+
+    customer = db.query(Customer).filter(Customer.google_sub == google_sub).first()
+    if not customer:
+        # First-ever Google sign-in for this person -- if an account with
+        # this email already exists (they signed up the normal way before),
+        # link this Google identity to it instead of creating a duplicate.
+        customer = db.query(Customer).filter(Customer.email == email).first()
+        if customer:
+            customer.google_sub = google_sub
+        else:
+            customer = Customer(
+                name=name,
+                email=email,
+                mobile="",
+                # Unguessable, never handed to the user -- this account can
+                # only ever be signed into via Google, unless they later use
+                # "Forgot password" to set a real one for themselves.
+                hashed_password=hash_password(secrets.token_urlsafe(32)),
+                google_sub=google_sub,
+            )
+            db.add(customer)
+        db.commit()
+        db.refresh(customer)
+        db.add(CustomerActivityLog(customer_id=customer.id, action="register_google"))
+
+    request.session["customer_id"] = customer.id
+    request.session.pop("admin_username", None)
+    db.add(CustomerActivityLog(customer_id=customer.id, action="login_google"))
+    db.commit()
+    return {"type": "customer", "id": customer.id, "name": customer.name, "email": customer.email}
 
 
 @router.post("/auth/logout")

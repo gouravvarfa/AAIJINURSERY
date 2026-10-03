@@ -531,6 +531,11 @@ class Customer(Base):
     hashed_password = Column(String(200), nullable=False)
     reset_token = Column(String(100), nullable=True, index=True)
     reset_token_expires = Column(DateTime, nullable=True)
+    # Set when this account was created or linked via "Sign in with Google"
+    # (Google's stable per-account "sub" claim -- not the email, since a
+    # Google account's email can change but its sub never does). NULL for
+    # every customer who only ever used email/password.
+    google_sub = Column(String(100), nullable=True, unique=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

@@ -4,11 +4,12 @@ import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
 import AuthShell from "./AuthShell";
+import GoogleSignInButton from "./GoogleSignInButton";
 
 const REMEMBER_KEY = "rememberedIdentifier";
 
 export default function LoginModal() {
-  const { session, login } = useAuth();
+  const { session, login, loginWithGoogle } = useAuth();
   const { resumePendingAction } = useCart();
   const { resumePendingAction: resumeWishlistPendingAction } = useWishlist();
   const navigate = useNavigate();
@@ -45,6 +46,22 @@ export default function LoginModal() {
     return <Navigate to={isAdminType ? "/admin" : fromPath || "/"} replace />;
   }
 
+  async function afterLogin(data) {
+    navigatedRef.current = true;
+    const isAdminType = data.type === "admin" || data.type === "developer";
+    if (isAdminType) {
+      navigate("/admin", { replace: true });
+      return;
+    }
+    const resumed = await resumePendingAction();
+    await resumeWishlistPendingAction();
+    if (resumed?.navigateTo) {
+      navigate(resumed.navigateTo, { state: resumed.state, replace: true });
+    } else {
+      navigate(fromPath || "/", { replace: true });
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (submittingRef.current) return;
@@ -53,24 +70,27 @@ export default function LoginModal() {
     setError("");
     try {
       const data = await login(form.identifier, form.password);
-      navigatedRef.current = true;
       if (remember) localStorage.setItem(REMEMBER_KEY, form.identifier);
       else localStorage.removeItem(REMEMBER_KEY);
-
-      const isAdminType = data.type === "admin" || data.type === "developer";
-      if (isAdminType) {
-        navigate("/admin", { replace: true });
-      } else {
-        const resumed = await resumePendingAction();
-        await resumeWishlistPendingAction();
-        if (resumed?.navigateTo) {
-          navigate(resumed.navigateTo, { state: resumed.state, replace: true });
-        } else {
-          navigate(fromPath || "/", { replace: true });
-        }
-      }
+      await afterLogin(data);
     } catch (err) {
       setError(err.message || "Invalid email or password.");
+    } finally {
+      submittingRef.current = false;
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleCredential(credential) {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await loginWithGoogle(credential);
+      await afterLogin(data);
+    } catch (err) {
+      setError(err.message || "Google sign-in failed. Please try again.");
     } finally {
       submittingRef.current = false;
       setLoading(false);
@@ -125,6 +145,11 @@ export default function LoginModal() {
           {loading ? "Signing in..." : "Sign In"}
         </button>
       </form>
+
+      <div className="auth-divider">
+        <span>or</span>
+      </div>
+      <GoogleSignInButton onCredential={handleGoogleCredential} onError={(err) => setError(err.message)} />
 
       <p className="auth-modal-footer-text">
         New here? <Link to="/signup" state={location.state}>Create an account</Link>

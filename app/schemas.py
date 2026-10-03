@@ -311,6 +311,10 @@ class UnifiedLoginIn(BaseModel):
     password: str
 
 
+class GoogleAuthIn(BaseModel):
+    credential: str  # the ID token JWT from Google Identity Services
+
+
 class AdminUserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

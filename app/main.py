@@ -127,6 +127,10 @@ with engine.connect() as conn:
     if "reset_token_expires" not in customer_columns:
         conn.execute(text("ALTER TABLE customers ADD COLUMN reset_token_expires DATETIME"))
         conn.commit()
+    if "google_sub" not in customer_columns:
+        conn.execute(text("ALTER TABLE customers ADD COLUMN google_sub VARCHAR(100)"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_customers_google_sub ON customers(google_sub)"))
+        conn.commit()
 
     order_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(orders)"))}
     if "razorpay_order_id" not in order_columns:

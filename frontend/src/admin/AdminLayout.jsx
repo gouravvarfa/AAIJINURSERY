@@ -154,6 +154,17 @@ function MoreIcon() {
     </svg>
   );
 }
+// Same leaf mark as the customer-facing AAIJI Assistant floating button
+// (frontend/src/components/AIChatWidget.jsx) -- kept as its own copy here
+// rather than importing a customer-site component into the admin bundle.
+function LeafIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 20A7 7 0 0 1 4 13c0-4 3-8 10-10 1 6-1 10-3 13" />
+      <path d="M11 20c2-1 4-3 5-6" />
+    </svg>
+  );
+}
 
 function AdminBottomNav({ onMore }) {
   return (
@@ -293,6 +304,11 @@ export default function AdminLayout() {
           </ErrorBoundary>
         </div>
       </div>
+      {location.pathname !== "/admin/ai" && (
+        <NavLink to="/admin/ai" className="admin-ai-fab" aria-label="Ask AAIJI" title="Ask AAIJI">
+          <LeafIcon />
+        </NavLink>
+      )}
       <AdminBottomNav onMore={() => setDrawerOpen(true)} />
     </div>
     </OrderAlertProvider>

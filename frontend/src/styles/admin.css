@@ -1271,3 +1271,43 @@ table.admin-table .row-actions {
     justify-content: space-between;
   }
 }
+
+/* ---------- Ask AAIJI floating launcher (every admin page) ---------- */
+/* Same visual language as the customer site's .ai-chat-fab -- round, dark
+   green, leaf icon -- so it reads as "the same assistant" across both
+   sides of the product, just reached a different way here. */
+
+.admin-ai-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  /* Below the mobile drawer overlay (70) so opening the drawer correctly
+     covers it instead of the fab poking through on top. */
+  z-index: 42;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-ai-fab:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26);
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .admin-ai-fab {
+    width: 50px;
+    height: 50px;
+    right: 16px;
+    /* Above the fixed admin bottom tab bar (its own height + safe-area). */
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+}

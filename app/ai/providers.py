@@ -165,7 +165,11 @@ class GeminiProvider(AIProvider):
         return bool(os.environ.get("GEMINI_API_KEY"))
 
     def _model(self) -> str:
-        return os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+        # "gemini-1.5-flash" was retired on Google's end (same situation as
+        # Groq's default model, see GroqProvider) -- "-latest" aliases
+        # auto-point at Google's current flash model, so this shouldn't need
+        # another manual update when the underlying model is next retired.
+        return os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 
     @staticmethod
     def _to_gemini_tools(tools: list[dict]) -> list[dict]:

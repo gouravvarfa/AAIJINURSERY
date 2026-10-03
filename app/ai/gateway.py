@@ -33,7 +33,10 @@ SYSTEM_PROMPT = (
     "or no results, say so plainly instead of "
     "making something up. Keep answers short, friendly, and conversational. You cannot "
     "place orders, process payments, or modify any account data -- for that, direct the "
-    "customer to the website's normal cart/checkout flow or WhatsApp support."
+    "customer to the website's normal cart/checkout flow or WhatsApp support. "
+    "Reply in plain text only -- the chat window does not render Markdown, so never use "
+    "**bold**, *italics*, headings, or bullet characters like '-'/'*'; write plain "
+    "sentences or simple numbered lines instead."
 )
 
 MAX_TOOL_ROUNDS = 3

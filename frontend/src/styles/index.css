@@ -1066,32 +1066,6 @@ select:focus-visible {
   .brand-logo {
     height: 32px;
   }
-  .nav-quicklinks {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-  }
-  .nav-quicklinks a {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 44px;
-    padding: 0 6px;
-    border-radius: 999px;
-    font-weight: 600;
-    font-size: 0.78rem;
-    color: var(--color-text);
-    white-space: nowrap;
-    transition: background-color 0.15s ease, color 0.15s ease;
-  }
-  .nav-quicklinks a.active {
-    color: var(--color-accent);
-    background: rgba(64, 145, 108, 0.1);
-  }
   /* Dimmed backdrop behind the drawer — same pattern as .explorer-filters-backdrop. */
   .nav-links-backdrop {
     display: block;

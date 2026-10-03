@@ -22,15 +22,6 @@ const LINKS = [
   { to: "/contact", label: "Contact", icon: "\u{1F4DE}" },
 ];
 
-// Compact, always-visible subset of LINKS shown on the mobile quick-links row
-// (see .nav-quicklinks in index.css) — the full list above still lives in the
-// hamburger drawer for mobile, and is the only nav shown on desktop.
-const QUICK_LINKS = [
-  { to: "/", label: "Home", end: true },
-  { to: "/plants", label: "Shop" },
-  { to: "/contact", label: "Contact" },
-];
-
 // Matches the existing "collapse to hamburger" breakpoint in index.css
 // (.nav-links goes fixed/off-canvas at this width) — the account dropdown
 // should only intercept clicks in that same regime, never on desktop.
@@ -88,14 +79,6 @@ export default function Navbar() {
         <NavLink to="/" className="brand" onClick={() => setOpen(false)}>
           <img className="brand-logo" src={logoImg} alt={settings.business_name || "Shri Aaiji Hightech Nursery"} />
         </NavLink>
-
-        <nav className="nav-quicklinks" aria-label="Quick links">
-          {QUICK_LINKS.map((link) => (
-            <NavLink key={link.to} to={link.to} end={link.end}>
-              {link.label}
-            </NavLink>
-          ))}
-        </nav>
 
         {open && (
           <div className="nav-links-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />

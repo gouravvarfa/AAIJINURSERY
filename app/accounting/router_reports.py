@@ -108,25 +108,32 @@ def range_dep(
 @router.get("/sales", response_model=SalesReportOut)
 def sales_report(
     range_info: tuple = Depends(range_dep),
+    source: Optional[str] = Query(None, description="online|offline -- omit for both (default, unchanged behavior)"),
     admin: str = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     range_key, start, end = range_info
-    base = db.query(Invoice).filter(
-        Invoice.invoice_date >= start, Invoice.invoice_date < end, Invoice.status != "Voided"
-    )
-    total_sales = money(db.query(func.coalesce(func.sum(Invoice.total_amount), 0)).filter(
-        Invoice.invoice_date >= start, Invoice.invoice_date < end, Invoice.status != "Voided"
-    ).scalar())
+    base_filters = [Invoice.invoice_date >= start, Invoice.invoice_date < end, Invoice.status != "Voided"]
+    # `source` only narrows total_sales/invoice_count/monthly `rows` below --
+    # online_sales/offline_sales stay full-range totals regardless, so the
+    # existing Accounting Reports page (which never passes this param) keeps
+    # getting the exact same response it always has.
+    if source in ("online", "offline"):
+        base_filters.append(Invoice.source == source)
+
+    base = db.query(Invoice).filter(*base_filters)
+    total_sales = money(db.query(func.coalesce(func.sum(Invoice.total_amount), 0)).filter(*base_filters).scalar())
     online_sales = money(db.query(func.coalesce(func.sum(
         case((Invoice.source == "online", Invoice.total_amount), else_=0)
     ), 0)).filter(Invoice.invoice_date >= start, Invoice.invoice_date < end, Invoice.status != "Voided").scalar())
-    offline_sales = money(total_sales - online_sales)
+    offline_sales = money(db.query(func.coalesce(func.sum(
+        case((Invoice.source == "offline", Invoice.total_amount), else_=0)
+    ), 0)).filter(Invoice.invoice_date >= start, Invoice.invoice_date < end, Invoice.status != "Voided").scalar())
     invoice_count = base.count()
 
     monthly = (
         db.query(month_bucket(Invoice.invoice_date), func.sum(Invoice.total_amount), func.count(Invoice.id))
-        .filter(Invoice.invoice_date >= start, Invoice.invoice_date < end, Invoice.status != "Voided")
+        .filter(*base_filters)
         .group_by(month_bucket(Invoice.invoice_date))
         .order_by(month_bucket(Invoice.invoice_date))
         .all()

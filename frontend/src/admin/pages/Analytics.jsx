@@ -5,6 +5,7 @@ import { useAnalyticsFilters, rangeQuery } from "../analytics/useAnalyticsFilter
 import DateRangePicker from "../analytics/DateRangePicker";
 import KpiCard from "../analytics/KpiCard";
 import SalesChart from "../analytics/SalesChart";
+import SalesBySource from "../analytics/SalesBySource";
 import CategoryBreakdown from "../analytics/CategoryBreakdown";
 import TopPlants from "../analytics/TopPlants";
 import PlantsPerformanceTable from "../analytics/PlantsPerformanceTable";
@@ -19,6 +20,7 @@ import { printWholePage } from "../analytics/exportUtils";
 
 const JUMP_NAV = [
   { id: "sales", label: "Sales" },
+  { id: "sales-by-source", label: "Sales by Source" },
   { id: "categories", label: "Categories" },
   { id: "top-plants", label: "Top Plants" },
   { id: "plants", label: "All Plants" },
@@ -124,6 +126,7 @@ export default function Analytics() {
       )}
 
       <SalesChart filters={filters} />
+      <SalesBySource filters={filters} />
       <CategoryBreakdown filters={filters} onSelectCategory={filters.setCategoryId} />
       <TopPlants filters={filters} onSelectPlant={filters.setPlantId} />
       <PlantsPerformanceTable filters={filters} />

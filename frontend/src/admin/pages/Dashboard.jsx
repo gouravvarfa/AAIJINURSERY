@@ -63,10 +63,14 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <h2 style={{ fontSize: "1.15rem" }}>🚨 New Orders</h2>
       {alerts.length === 0 ? (
-        <p style={{ color: "var(--color-text-muted)" }}>✓ No new orders</p>
+        <div className="admin-status-banner">
+          <span className="admin-status-banner-icon">✓</span>
+          No new orders right now
+        </div>
       ) : (
+        <>
+      <h2 style={{ fontSize: "1.15rem" }}>🚨 New Orders</h2>
         <div className="admin-table-wrap" style={{ marginBottom: 28 }}>
           <table className="admin-table">
             <thead>
@@ -104,6 +108,7 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <div className="stat-cards" style={{ marginBottom: 28 }}>
@@ -115,11 +120,38 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <h2 style={{ fontSize: "1.15rem" }}>Recent Inquiries</h2>
+      <div className="admin-page-head" style={{ marginBottom: 10 }}>
+        <h2 style={{ fontSize: "1.15rem", margin: 0 }}>Recent Inquiries</h2>
+        <Link to="/admin/inquiries" style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+          View all
+        </Link>
+      </div>
       {data.recent_inquiries.length === 0 ? (
         <p style={{ color: "var(--color-text-muted)" }}>No inquiries yet.</p>
       ) : (
-        <div className="admin-table-wrap">
+        <>
+        <div className="admin-mobile-list">
+          {data.recent_inquiries.map((i) => (
+            <div className="admin-mobile-list-row" key={i.id}>
+              <span className="admin-mobile-list-avatar">
+                {i.name
+                  .split(" ")
+                  .map((p) => p[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase()}
+              </span>
+              <span className="admin-mobile-list-body">
+                <span className="admin-mobile-list-name">{i.name}</span>
+                <span className="admin-mobile-list-sub">{i.requirement || i.plant?.name || "General inquiry"}</span>
+              </span>
+              <span className={`admin-mobile-list-pill${i.status === "new" ? " new" : " replied"}`}>
+                {i.status === "new" ? "New" : i.status}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="admin-table-wrap admin-dashboard-table-wrap">
           <table className="admin-table">
             <thead>
               <tr>
@@ -153,6 +185,7 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

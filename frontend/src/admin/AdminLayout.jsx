@@ -1,4 +1,5 @@
-import { Navigate, NavLink, Outlet } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Loading } from "../components/Loading";
 import ErrorBoundary from "../components/ErrorBoundary";
@@ -105,23 +106,118 @@ function NavGroup({ heading, items, hasPermission }) {
   );
 }
 
+function HamburgerIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M3 6h18M3 12h18M3 18h18" />
+    </svg>
+  );
+}
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+function HomeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h14V9.5" />
+    </svg>
+  );
+}
+function OrdersIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3h2l2.4 12.2a2 2 0 0 0 2 1.8h8.6a2 2 0 0 0 2-1.6L21 7H6" />
+      <circle cx="9" cy="21" r="1" /><circle cx="19" cy="21" r="1" />
+    </svg>
+  );
+}
+function ProductsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 7h12l1 13H5L6 7z" /><path d="M9 7a3 3 0 0 1 6 0" />
+    </svg>
+  );
+}
+function MoreIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
+    </svg>
+  );
+}
+
+function AdminBottomNav({ onMore }) {
+  return (
+    <nav className="admin-bottom-nav" aria-label="Admin quick navigation">
+      <NavLink to="/admin" end>
+        <HomeIcon />
+        Home
+      </NavLink>
+      <NavLink to="/admin/orders">
+        <OrdersIcon />
+        Orders
+      </NavLink>
+      <NavLink to="/admin/plants">
+        <ProductsIcon />
+        Products
+      </NavLink>
+      <button type="button" onClick={onMore}>
+        <MoreIcon />
+        More
+      </button>
+    </nav>
+  );
+}
+
 export default function AdminLayout() {
   const { username, role, hasPermission, logout } = useAuth();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [devOpen, setDevOpen] = useState(false);
+  const location = useLocation();
+  const navRef = useRef(null);
+
+  // Close the drawer automatically on route change (covers link clicks,
+  // including ones not caught by the delegated click handler below).
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = drawerOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [drawerOpen]);
 
   if (username === undefined) return <Loading />;
   if (username === null) return <Navigate to="/login" replace />;
 
+  function closeDrawerOnLinkClick(e) {
+    if (e.target.closest("a")) setDrawerOpen(false);
+  }
+
   return (
     <OrderAlertProvider>
     <div className="admin-shell">
-      <aside className="admin-sidebar">
+      {drawerOpen && <div className="admin-drawer-overlay" onClick={() => setDrawerOpen(false)} aria-hidden="true" />}
+      <aside className={`admin-sidebar${drawerOpen ? " open" : ""}`}>
         <div className="brand">
-          <span className="admin-logo-chip">
-            <img src={logoImg} alt="Aaiji Nursery" />
+          <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="admin-logo-chip">
+              <img src={logoImg} alt="Aaiji Nursery" />
+            </span>
+            Aaiji Nursery
           </span>
-          Aaiji Nursery
+          <button type="button" className="admin-drawer-close" aria-label="Close menu" onClick={() => setDrawerOpen(false)}>
+            &times;
+          </button>
         </div>
-        <nav className="admin-nav">
+        <nav className="admin-nav" ref={navRef} onClick={closeDrawerOnLinkClick}>
           <NavGroup items={NAV} hasPermission={hasPermission} />
           <NavGroup heading="Accounting" items={ACCOUNTING_NAV} hasPermission={hasPermission} />
           <NavGroup heading="Employees & Labour" items={WORKFORCE_NAV} hasPermission={hasPermission} />
@@ -129,33 +225,60 @@ export default function AdminLayout() {
           <NavGroup heading="Communications" items={COMMUNICATIONS_NAV} hasPermission={hasPermission} />
           {role === "developer" && (
             <>
-              <div className="admin-nav-heading">Developer</div>
-              {DEVELOPER_NAV.map((item) => (
-                <NavLink key={item.to} to={item.to} end={item.end}>
-                  {item.label}
-                </NavLink>
-              ))}
+              {/* Desktop: plain heading, always-expanded list (unchanged).
+                  Mobile (<=768px, see admin.css): becomes a collapsible
+                  toggle -- .admin-dev-toggle/.admin-dev-group are display:none
+                  above that breakpoint, so desktop renders exactly as before. */}
+              <div className="admin-nav-heading admin-dev-toggle-label-desktop">Developer</div>
+              <button
+                type="button"
+                className="admin-dev-toggle"
+                aria-expanded={devOpen}
+                onClick={() => setDevOpen((v) => !v)}
+              >
+                Developer
+                <ChevronIcon />
+              </button>
+              <div className={`admin-dev-group${devOpen ? " open" : ""}`}>
+                {DEVELOPER_NAV.map((item) => (
+                  <NavLink key={item.to} to={item.to} end={item.end}>
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
             </>
           )}
-          <div className="logout-btn">
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                if (confirm("Are you sure you want to log out?")) logout();
-              }}
-            >
-              Log Out
-            </a>
-          </div>
         </nav>
+        <div className="admin-drawer-footer">
+          <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <span className="admin-logo-chip" style={{ borderRadius: "50%", background: "rgba(255,255,255,0.15)", color: "#fff", fontWeight: 700 }}>
+              {(username || "A").charAt(0).toUpperCase()}
+            </span>
+            <span style={{ color: "#fff", fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {username}
+            </span>
+          </span>
+          <a
+            href="#"
+            style={{ color: "#f3a6a0", fontSize: "0.85rem", fontWeight: 600, flexShrink: 0 }}
+            onClick={(e) => {
+              e.preventDefault();
+              if (confirm("Are you sure you want to log out?")) logout();
+            }}
+          >
+            Log out
+          </a>
+        </div>
       </aside>
       <div className="admin-main">
         <div className="admin-topbar">
+          <button type="button" className="admin-hamburger" aria-label="Open menu" onClick={() => setDrawerOpen(true)}>
+            <HamburgerIcon />
+          </button>
           <strong>Admin Dashboard</strong>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <OrderAlertBell />
-            <span style={{ color: "var(--color-text-muted)", fontSize: "0.88rem" }}>
+            <span className="admin-topbar-username" style={{ color: "var(--color-text-muted)", fontSize: "0.88rem" }}>
               Signed in as {username}
             </span>
           </div>
@@ -166,6 +289,7 @@ export default function AdminLayout() {
           </ErrorBoundary>
         </div>
       </div>
+      <AdminBottomNav onMore={() => setDrawerOpen(true)} />
     </div>
     </OrderAlertProvider>
   );

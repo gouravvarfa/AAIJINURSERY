@@ -686,6 +686,21 @@ def get_driver_details(db: Session, admin: AdminUser, name: str) -> dict:
     }
 
 
+def get_customer_counts(db: Session, admin: AdminUser) -> dict:
+    """How many customers exist, by channel: online (registered on the
+    website) vs offline-only (accounting contacts with no website
+    account). Use for 'kitne online customer hai', 'total customers'."""
+    if not check_permission(db, admin, "customers", "VIEW"):
+        return _denied("customers")
+    online = db.query(func.count(Customer.id)).scalar() or 0
+    offline_only = db.query(func.count(Contact.id)).filter(Contact.customer_id.is_(None), Contact.contact_type.in_(["customer", "both"])).scalar() or 0
+    return {
+        "online_customers": online,
+        "offline_only_customers": offline_only,
+        "total_customers": online + offline_only,
+    }
+
+
 # ---------- Business overview ----------
 
 def get_business_summary(db: Session, admin: AdminUser, range: str = "today") -> dict:
@@ -1235,6 +1250,7 @@ ADMIN_TOOLS = {
     "get_driver_details": get_driver_details,
     "get_customer_invoices": get_customer_invoices,
     "get_employee_details": get_employee_details,
+    "get_customer_counts": get_customer_counts,
     "get_business_summary": get_business_summary,
     "get_order_timeline": get_order_timeline,
     "get_payment_history": get_payment_history,
@@ -1397,6 +1413,7 @@ ADMIN_TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "get_deliveries", "description": "List deliveries for a date, filter by status/driver/vehicle/customer; counts per status and per driver.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "status": {"type": "string"}, "driver_name": {"type": "string"}, "vehicle": {"type": "string"}, "customer_name": {"type": "string"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_delivery_timeline", "description": "History of one delivery by number (e.g. DEL-12): creation, driver/vehicle assignment, status changes, completion, each with who.", "parameters": {"type": "object", "properties": {"delivery_number": {"type": "string"}}, "required": ["delivery_number"]}}},
     {"type": "function", "function": {"name": "get_admin_activity", "description": "What admins did (activity log) for a period, optionally one admin username. Needs Users & Roles permission.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_customer_counts", "description": "How many customers exist: online (website accounts) vs offline-only (walk-in/manual contacts), and the total. Use for 'kitne online customer hai', 'total customers kitne hain'.", "parameters": {"type": "object", "properties": {}}}},
 ]
 
 

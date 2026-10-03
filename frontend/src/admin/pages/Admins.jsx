@@ -205,13 +205,14 @@ export default function Admins() {
   }
 
   async function handleRoleChange(item, newRole, customRoleId) {
-    if (newRole === item.role && newRole !== "custom") return;
+    if (newRole === item.role && (newRole !== "custom" || customRoleId === item.custom_role_id)) return;
+    const roleLabel = newRole === "custom" ? customRoles.find((r) => r.id === customRoleId)?.name || "Custom" : ROLE_LABELS[newRole];
     const warning =
       newRole === "super_access"
         ? `Grant SUPER ACCESS to "${item.username}"? This gives complete access to every business module.`
         : item.role === "super_access"
-        ? `Revoke Super Access from "${item.username}" and set their role to ${ROLE_LABELS[newRole]}?`
-        : `Change "${item.username}"'s role to ${ROLE_LABELS[newRole]}?`;
+        ? `Revoke Super Access from "${item.username}" and set their role to ${roleLabel}?`
+        : `Change "${item.username}"'s role to ${roleLabel}?`;
     if (!confirm(warning)) return;
     try {
       await api.put(`/admin/admins/${item.id}/role`, {
@@ -367,7 +368,9 @@ export default function Admins() {
                     </td>
                     <td>
                       <span className={`badge ${ROLE_BADGE_CLASS[item.role] || "badge-muted"}`}>
-                        {ROLE_LABELS[item.role] || item.role}
+                        {item.role === "custom"
+                          ? customRoles.find((r) => r.id === item.custom_role_id)?.name || "Custom"
+                          : ROLE_LABELS[item.role] || item.role}
                       </span>
                     </td>
                     <td>
@@ -380,25 +383,26 @@ export default function Admins() {
                         <div className="row-actions">
                           <select
                             className="form-control"
-                            style={{ width: "auto", display: "inline-block" }}
-                            value={item.role}
+                            style={{ width: "auto", minWidth: 150, display: "inline-block" }}
+                            value={item.role === "custom" ? `custom:${item.custom_role_id}` : item.role}
                             onChange={(e) => {
-                              if (e.target.value === "custom") {
-                                const roleId = customRoles[0]?.id;
-                                if (!roleId) {
-                                  alert("Create a custom role first under Roles & Permissions.");
-                                  return;
-                                }
-                                handleRoleChange(item, "custom", roleId);
+                              const val = e.target.value;
+                              if (val.startsWith("custom:")) {
+                                handleRoleChange(item, "custom", Number(val.slice(7)));
                               } else {
-                                handleRoleChange(item, e.target.value);
+                                handleRoleChange(item, val);
                               }
                             }}
                           >
                             <option value="admin">Admin</option>
                             <option value="super_access">Super Access</option>
-                            <option value="custom">Custom Role</option>
                             <option value="developer">Developer</option>
+                            {customRoles.map((r) => (
+                              <option key={r.id} value={`custom:${r.id}`}>
+                                {r.name}
+                              </option>
+                            ))}
+                            {customRoles.length === 0 && <option value="custom" disabled>No custom roles yet</option>}
                           </select>
                           <button className="btn btn-sm btn-outline dark" onClick={() => handleResetPassword(item)}>
                             Reset Password

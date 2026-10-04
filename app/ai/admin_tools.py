@@ -587,6 +587,26 @@ def get_employee_details(db: Session, admin: AdminUser, name: str) -> dict:
     }
 
 
+def list_employees(db: Session, admin: AdminUser, active_only: bool = True, limit: int = 50) -> dict:
+    """List all monthly-salary employees (name, role, department, status) --
+    use for 'kaun kaun employee hai', 'saare employees dikhao', 'total kitne
+    employees hain'. For daily-wage Labour workers use get_attendance_summary
+    or get_worker_advances instead; they are a separate worker category."""
+    if not check_permission(db, admin, "labour", "VIEW"):
+        return _denied("employees")
+    q = db.query(Employee)
+    if active_only:
+        q = q.filter(Employee.is_active.is_(True))
+    rows = q.order_by(Employee.name.asc()).limit(max(1, min(limit or 50, 100))).all()
+    return {
+        "count": len(rows),
+        "employees": [
+            {"name": e.name, "role": e.role, "department": e.department, "status": e.status, "is_active": e.is_active}
+            for e in rows
+        ],
+    }
+
+
 # ---------- Inventory ----------
 
 def get_low_stock_plants(db: Session, admin: AdminUser, threshold: int = LOW_STOCK_THRESHOLD) -> dict:
@@ -1859,6 +1879,7 @@ ADMIN_TOOLS = {
     "get_driver_details": get_driver_details,
     "get_customer_invoices": get_customer_invoices,
     "get_employee_details": get_employee_details,
+    "list_employees": list_employees,
     "get_inquiries": get_inquiries,
     "get_customer_counts": get_customer_counts,
     "get_business_summary": get_business_summary,
@@ -2016,6 +2037,14 @@ ADMIN_TOOL_SCHEMAS = [
             "name": "get_employee_details",
             "description": "Get full profile for one employee by name -- role, department, contact info, status, salary, joining date. (Bank account details are never included.)",
             "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_employees",
+            "description": "List all monthly-salary employees (name, role, department, status). Use for 'kaun kaun employee hai', 'saare employees dikhao', 'total kitne employees hain'.",
+            "parameters": {"type": "object", "properties": {"active_only": {"type": "boolean", "description": "Defaults to true"}, "limit": {"type": "integer"}}},
         },
     },
     {

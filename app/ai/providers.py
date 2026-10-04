@@ -157,6 +157,20 @@ class OpenRouterProvider(_OpenAICompatibleProvider):
     extra_headers = {"HTTP-Referer": "https://shreeaaijihightechnursery.in", "X-Title": "Aaiji Nursery"}
 
 
+class OpenAIProvider(_OpenAICompatibleProvider):
+    """Fourth, paid fallback -- OpenAI's own API. Unlike Groq/Gemini/
+    OpenRouter above, this is NOT free (billed per token), so it only
+    gets tried when all three free providers have failed -- it exists
+    purely as a backstop for when the free-tier quotas are simultaneously
+    exhausted, not as a primary provider."""
+
+    name = "openai"
+    base_url = "https://api.openai.com/v1/chat/completions"
+    env_key = "OPENAI_API_KEY"
+    default_model_env = "OPENAI_MODEL"
+    default_model = "gpt-4o-mini"
+
+
 class GeminiProvider(AIProvider):
     """Fallback provider -- Gemini's free tier. Gemini's REST API shape
     (contents/parts, functionDeclarations, functionCall/functionResponse)
@@ -271,4 +285,4 @@ def build_provider_chain() -> list[AIProvider]:
     them. Each entry always exists (so the list length/order never changes
     based on config), is_configured() is what actually gates whether the
     gateway attempts it."""
-    return [GroqProvider(), GeminiProvider(), OpenRouterProvider()]
+    return [GroqProvider(), GeminiProvider(), OpenRouterProvider(), OpenAIProvider()]

@@ -1660,6 +1660,59 @@ def get_customer_activity(db: Session, admin: AdminUser, name: str, limit: int =
     }
 
 
+def get_billing_audit(db: Session, admin: AdminUser, range: str = "month", from_date: str = None, to_date: str = None, limit: int = 20) -> dict:
+    """Checks every offline invoice in the period for numbers that don't
+    add up: line items vs invoice total, recorded payments vs amount_paid,
+    balance_due vs total-minus-paid, and status that contradicts the
+    balance. Use for 'bill match nahi ho raha', 'saare bills check karo'."""
+    if not check_permission(db, admin, "accounting", "VIEW"):
+        return _denied("accounting")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    invoices = (
+        db.query(Invoice)
+        .filter(Invoice.invoice_date >= start, Invoice.invoice_date < end, Invoice.status != "Voided")
+        .order_by(Invoice.invoice_date.desc())
+        .limit(500)
+        .all()
+    )
+    issues = []
+    for inv in invoices:
+        found = []
+        items_total = round(sum(i.line_total or 0 for i in inv.items), 2)
+        expected_total = round((inv.subtotal or 0) + (inv.tax_total or 0) - (inv.discount_total or 0), 2)
+        if inv.items and abs(items_total - (inv.subtotal or 0)) > 0.01:
+            found.append(f"line items add up to {items_total} but invoice subtotal is {inv.subtotal}")
+        if abs(expected_total - (inv.total_amount or 0)) > 0.01:
+            found.append(f"subtotal+tax-discount = {expected_total} but total_amount is {inv.total_amount}")
+        paid = round(sum(p.amount or 0 for p in inv.payments), 2)
+        if abs(paid - (inv.amount_paid or 0)) > 0.01:
+            found.append(f"payments recorded add up to {paid} but amount_paid shows {inv.amount_paid}")
+        expected_balance = round(max((inv.total_amount or 0) - paid, 0), 2)
+        if abs(expected_balance - (inv.balance_due or 0)) > 0.01:
+            found.append(f"balance_due is {inv.balance_due} but total minus payments = {expected_balance}")
+        if inv.status == "Paid" and (inv.balance_due or 0) > 0.01:
+            found.append(f"status is Paid but balance_due is {inv.balance_due}")
+        if inv.sales_order and abs((inv.sales_order.total_amount or 0) - (inv.total_amount or 0)) > 0.01:
+            found.append(f"invoice total {inv.total_amount} differs from its sales order total {inv.sales_order.total_amount}")
+        if found:
+            issues.append({
+                "invoice_id": inv.id,
+                "invoice_number": inv.invoice_number,
+                "customer": inv.contact.name if inv.contact else None,
+                "date": _fmt(inv.invoice_date),
+                "problems": found,
+            })
+    return {
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "invoices_checked": len(invoices),
+        "invoices_with_problems": len(issues),
+        "listed": issues[: max(1, min(limit or 20, 30))],
+        "note": "Only offline/accounting invoices are checked; none found means every checked invoice's numbers are internally consistent.",
+    }
+
+
 # name -> function. Every function's first two params are always (db, admin)
 # -- execute_admin_tool below injects both itself; the model-supplied
 # arguments can never override either one.
@@ -1701,6 +1754,7 @@ ADMIN_TOOLS = {
     "get_whatsapp_activity": get_whatsapp_activity,
     "get_website_content_summary": get_website_content_summary,
     "get_customer_activity": get_customer_activity,
+    "get_billing_audit": get_billing_audit,
 }
 
 ADMIN_TOOL_SCHEMAS = [
@@ -1865,6 +1919,7 @@ ADMIN_TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "get_whatsapp_activity", "description": "WhatsApp notification activity -- counts by status (sent/delivered/read/failed) and failed messages with their error.", "parameters": {"type": "object", "properties": {"status": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_website_content_summary", "description": "Quick counts of website content: categories, plants, services, testimonials, blog posts, FAQs, pricing plans, gallery images, reviews.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "get_customer_activity", "description": "Website login/activity log for one customer by name (separate from purchase history).", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "get_billing_audit", "description": "Audit all invoices in a period for numbers that don't match (items vs total, payments vs amount paid, balance, status). Use for 'bill proper match nahi ho raha', 'saare bills khud check karo', 'accounts mein gadbad'.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
 ]
 
 

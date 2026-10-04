@@ -1261,6 +1261,92 @@ def get_customer_timeline(db: Session, admin: AdminUser, name: str) -> dict:
     }
 
 
+def get_employee_activity_timeline(db: Session, admin: AdminUser, username: str, range: str = "today", from_date: str = None, to_date: str = None, limit: int = 60) -> dict:
+    """Everything one admin/employee actually did in a period, chronological
+    -- combined from every actor-tagged source in the system (orders,
+    customers/contacts, sales orders, invoices, payments, stock, deliveries,
+    expenses, purchases, logins, and generic accounting edits via AuditLog).
+    Use for "Ishwar ne aaj kya kiya", "what did this employee do today".
+    This does NOT cover every possible action (e.g. plain page views are
+    never recorded) -- absence here means no recorded activity, not proof
+    nothing happened."""
+    if not check_permission(db, admin, "users_roles", "VIEW"):
+        return _denied("users & roles")
+    start, end, err = _range(range, from_date, to_date)
+    if err:
+        return {"error": err}
+    uname = username.strip()
+    events: list = []
+
+    for r in db.query(LoginAttempt).filter(LoginAttempt.identifier.ilike(uname), LoginAttempt.success.is_(True), LoginAttempt.created_at >= start, LoginAttempt.created_at < end):
+        _event(events, r.created_at, "Login", uname, f"from {r.ip_address}")
+
+    for r in db.query(Contact).filter(Contact.created_by.ilike(uname), Contact.created_at >= start, Contact.created_at < end):
+        _event(events, r.created_at, "Customer/contact created", uname, r.name)
+
+    for r in db.query(SalesOrder).filter(SalesOrder.created_by.ilike(uname), SalesOrder.created_at >= start, SalesOrder.created_at < end):
+        _event(events, r.created_at, f"Sales order {r.order_number} created", uname, f"{r.contact.name if r.contact else '-'}, {money(r.total_amount)}")
+
+    for r in db.query(Delivery).filter(Delivery.created_by.ilike(uname), Delivery.created_at >= start, Delivery.created_at < end):
+        _event(events, r.created_at, f"Delivery {r.delivery_number} created", uname, r.contact.name if r.contact else None)
+    for r in db.query(DeliveryStatusHistory).filter(DeliveryStatusHistory.changed_by.ilike(uname), DeliveryStatusHistory.created_at >= start, DeliveryStatusHistory.created_at < end):
+        _event(events, r.created_at, f"Delivery #{r.delivery_id} {r.event}", uname, f"{r.old_value or '-'} -> {r.new_value or '-'}")
+
+    for r in db.query(PaymentIn).filter(PaymentIn.recorded_by.ilike(uname), PaymentIn.payment_date >= start, PaymentIn.payment_date < end):
+        _event(events, r.payment_date, f"Payment received ({r.method})", uname, money(r.amount))
+    for r in db.query(PaymentOut).filter(PaymentOut.recorded_by.ilike(uname), PaymentOut.payment_date >= start, PaymentOut.payment_date < end):
+        _event(events, r.payment_date, f"Payment made ({r.method})", uname, money(r.amount))
+
+    for r in db.query(InventoryTransaction).filter(InventoryTransaction.created_by.ilike(uname), InventoryTransaction.created_at >= start, InventoryTransaction.created_at < end):
+        _event(events, r.created_at, f"Stock {r.transaction_type}", uname, f"{r.plant.name if r.plant else r.plant_id}: {r.before_quantity} -> {r.after_quantity}")
+
+    for r in db.query(Expense).filter(Expense.created_by.ilike(uname), Expense.expense_date >= start, Expense.expense_date < end):
+        _event(events, r.expense_date, "Expense recorded", uname, f"{r.category}: {money(r.total_amount)}")
+
+    for r in db.query(Purchase).filter(Purchase.created_by.ilike(uname), Purchase.purchase_date >= start, Purchase.purchase_date < end):
+        _event(events, r.purchase_date, "Purchase/bill recorded", uname, f"{r.supplier}: {money(r.total_cost)}")
+
+    for r in db.query(OrderStatusHistory).filter(OrderStatusHistory.updated_by.ilike(uname), OrderStatusHistory.created_at >= start, OrderStatusHistory.created_at < end):
+        _event(events, r.created_at, f"Order #{r.order_id} status {r.old_status or '-'} -> {r.new_status}", uname, r.remarks or None)
+    for r in db.query(Order).filter(Order.acknowledged_by.ilike(uname), Order.acknowledged_at.isnot(None), Order.acknowledged_at >= start, Order.acknowledged_at < end):
+        _event(events, r.acknowledged_at, f"Order #{r.id} acknowledged", uname, None)
+    for r in db.query(Order).filter(Order.team_confirmed_by.ilike(uname), Order.team_confirmed_at.isnot(None), Order.team_confirmed_at >= start, Order.team_confirmed_at < end):
+        _event(events, r.team_confirmed_at, f"Order #{r.id} team-confirmed", uname, r.delivery_feasibility)
+
+    # action != "create" only -- creates are already covered by the specific
+    # per-table loops above (Contact/SalesOrder/Expense/Purchase); this adds
+    # edits/voids/deletes that have no dedicated event source.
+    for r in db.query(AuditLog).filter(AuditLog.changed_by.ilike(uname), AuditLog.changed_at >= start, AuditLog.changed_at < end, AuditLog.action != "create"):
+        _event(events, r.changed_at, f"{r.table_name} {r.action}" + (f" ({r.field_name})" if r.field_name else ""), uname, f"{r.old_value} -> {r.new_value}" if r.field_name else None)
+
+    # "login" excluded -- already covered by LoginAttempt above, same event.
+    for r in db.query(AdminActivityLog).filter(AdminActivityLog.admin_username.ilike(uname), AdminActivityLog.created_at >= start, AdminActivityLog.created_at < end, AdminActivityLog.action != "login"):
+        _event(events, r.created_at, r.action, uname, (r.detail or "")[:160] or None)
+
+    events.sort(key=lambda e: e["_t"])
+    truncated = len(events) > limit
+    page = events[: max(1, min(limit or 60, 100))]
+    by_category: dict = {}
+    for e in events:
+        cat = e["event"].split(" ")[0]
+        by_category[cat] = by_category.get(cat, 0) + 1
+    for e in page:
+        e.pop("_t")
+
+    return {
+        "employee": uname,
+        "range": f"{from_date}..{to_date or from_date}" if from_date else range,
+        "total_recorded_activities": len(events),
+        "first_activity": page[0]["when"] if page else None,
+        "last_activity": events[-1]["when"] if events else None,
+        "activity_by_type": by_category,
+        "truncated": truncated,
+        "timeline": page,
+        "note": "No recorded activity was found for this employee in the selected period." if not events else None,
+        "coverage_note": "Covers logins, customer/contact creation, sales orders, invoices/edits (via audit log), payments, stock movements, deliveries, expenses, purchases, order status changes, and general accounting edits. Plain page views are never recorded.",
+    }
+
+
 def get_admin_activity(db: Session, admin: AdminUser, username: str = None, range: str = "today", from_date: str = None, to_date: str = None, limit: int = 20) -> dict:
     """What admins did (order actions, role/permission changes, ...) from the
     admin activity log. Restricted to users with the Users & Roles
@@ -1775,6 +1861,7 @@ ADMIN_TOOLS = {
     "get_website_content_summary": get_website_content_summary,
     "get_customer_activity": get_customer_activity,
     "get_billing_audit": get_billing_audit,
+    "get_employee_activity_timeline": get_employee_activity_timeline,
 }
 
 ADMIN_TOOL_SCHEMAS = [
@@ -1940,6 +2027,7 @@ ADMIN_TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "get_website_content_summary", "description": "Quick counts of website content: categories, plants, services, testimonials, blog posts, FAQs, pricing plans, gallery images, reviews.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "get_customer_activity", "description": "Website login/activity log for one customer by name (separate from purchase history).", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["name"]}}},
     {"type": "function", "function": {"name": "get_billing_audit", "description": "Audit all invoices in a period for numbers that don't match (items vs total, payments vs amount paid, balance, status). Use for 'bill proper match nahi ho raha', 'saare bills khud check karo', 'accounts mein gadbad'.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_employee_activity_timeline", "description": "Everything one admin/employee actually did in a period, in chronological order, combined across every module (orders, customers, sales orders, invoices, payments, stock, deliveries, expenses, purchases, logins, accounting edits). Use for 'Ishwar ne aaj kya kiya', 'what did this employee do today'.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}, "required": ["username"]}}},
 ]
 
 

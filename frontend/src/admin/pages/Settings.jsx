@@ -23,13 +23,99 @@ const FIELDS = [
   { key: "refund_policy", label: "Refund Policy", type: "textarea" },
 ];
 
+const MAX_SLIDES = 10;
+
+function HeroSliderEditor({ images, setImages, seconds, setSeconds }) {
+  function setAt(i, value) {
+    setImages(images.map((src, idx) => (idx === i ? value : src)));
+  }
+  function move(i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= images.length) return;
+    const next = [...images];
+    [next[i], next[j]] = [next[j], next[i]];
+    setImages(next);
+  }
+  function remove(i) {
+    setImages(images.filter((_, idx) => idx !== i));
+  }
+
+  return (
+    <div className="form-group">
+      <label>Home Page Slider Images</label>
+      <small style={{ display: "block", color: "var(--color-text-muted)", marginBottom: 10 }}>
+        Photos that rotate in the home page banner, in this order. Paste an image link (https://...) for each.
+        Wide or square photos of at least 900px look best.
+      </small>
+      {images.map((src, i) => (
+        <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+          <div
+            style={{
+              width: 88, height: 60, borderRadius: 8, flexShrink: 0, overflow: "hidden",
+              background: "var(--color-bg)", border: "1px solid var(--color-border)",
+            }}
+          >
+            {src.trim() && (
+              <img src={src.trim()} alt={`Slide ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            )}
+          </div>
+          <input
+            className="form-control"
+            style={{ flex: "1 1 260px", minWidth: 0 }}
+            placeholder="https://..."
+            value={src}
+            onChange={(e) => setAt(i, e.target.value)}
+            aria-label={`Slide ${i + 1} image link`}
+          />
+          <div className="row-actions">
+            <button type="button" className="btn btn-sm btn-outline dark" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up">
+              ↑
+            </button>
+            <button type="button" className="btn btn-sm btn-outline dark" onClick={() => move(i, 1)} disabled={i === images.length - 1} aria-label="Move down">
+              ↓
+            </button>
+            <button type="button" className="btn btn-sm btn-danger" onClick={() => remove(i)} disabled={images.length === 1}>
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn btn-sm btn-outline dark"
+        onClick={() => setImages([...images, ""])}
+        disabled={images.length >= MAX_SLIDES}
+      >
+        + Add Image
+      </button>
+      <div style={{ marginTop: 14, maxWidth: 220 }}>
+        <label htmlFor="hero_slide_seconds">Change photo every (seconds)</label>
+        <input
+          id="hero_slide_seconds"
+          type="number"
+          min={2}
+          max={30}
+          className="form-control"
+          value={seconds}
+          onChange={(e) => setSeconds(e.target.value)}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const [values, setValues] = useState(null);
+  const [heroImages, setHeroImages] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    api.get("/admin/settings").then(setValues);
+    api.get("/admin/settings").then((v) => {
+      setValues(v);
+      setHeroImages((v.hero_images || "").split("\n").map((s) => s.trim()).filter(Boolean));
+    });
   }, []);
 
   function update(key, value) {
@@ -37,12 +123,26 @@ export default function Settings() {
     setSaved(false);
   }
 
+  function updateHeroImages(list) {
+    setHeroImages(list);
+    setSaved(false);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true);
-    await api.put("/admin/settings", { values });
-    setSaving(false);
-    setSaved(true);
+    setError("");
+    try {
+      const payload = { ...values, hero_images: heroImages.map((s) => s.trim()).filter(Boolean).join("\n") };
+      const fresh = await api.put("/admin/settings", { values: payload });
+      setValues(fresh);
+      setHeroImages((fresh.hero_images || "").split("\n").filter(Boolean));
+      setSaved(true);
+    } catch (err) {
+      setError(err.message || "Could not save settings.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (!values) return <Loading />;
@@ -54,7 +154,14 @@ export default function Settings() {
       </div>
       <div className="admin-form-card">
         {saved && <div className="alert alert-success">Settings saved.</div>}
+        {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleSubmit}>
+          <HeroSliderEditor
+            images={heroImages}
+            setImages={updateHeroImages}
+            seconds={values.hero_slide_seconds || "4"}
+            setSeconds={(s) => update("hero_slide_seconds", s)}
+          />
           {FIELDS.map((field) => (
             <div className="form-group" key={field.key}>
               <label htmlFor={field.key}>{field.label}</label>

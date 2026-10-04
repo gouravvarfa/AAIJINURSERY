@@ -21,6 +21,14 @@ DEFAULT_SETTINGS = {
     "facebook_url": "",
     "instagram_url": "",
     "google_review_url": "",
+    # Home page hero slider -- one image URL per line, shown in this order.
+    "hero_images": "\n".join([
+        "https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=900",
+        "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=900",
+        "https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=900",
+        "https://images.unsplash.com/photo-1466781783364-36c955e42a7f?w=900",
+    ]),
+    "hero_slide_seconds": "4",
 }
 
 

@@ -1621,6 +1621,24 @@ def read_settings(admin: str = Depends(get_current_admin), db: Session = Depends
 def update_settings(
     payload: SettingsIn, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)
 ):
+    if "hero_images" in payload.values:
+        lines = [l.strip() for l in (payload.values["hero_images"] or "").splitlines() if l.strip()]
+        if not lines:
+            raise HTTPException(status_code=400, detail="Add at least one slider image.")
+        if len(lines) > 10:
+            raise HTTPException(status_code=400, detail="At most 10 slider images are allowed.")
+        for line in lines:
+            if not (line.startswith("https://") or line.startswith("http://") or line.startswith("/")):
+                raise HTTPException(status_code=400, detail=f"Slider image must be a web link (https://...): {line[:60]}")
+        payload.values["hero_images"] = "\n".join(lines)
+    if "hero_slide_seconds" in payload.values:
+        try:
+            secs = int(str(payload.values["hero_slide_seconds"]).strip())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Slide time must be a whole number of seconds.")
+        if not 2 <= secs <= 30:
+            raise HTTPException(status_code=400, detail="Slide time must be between 2 and 30 seconds.")
+        payload.values["hero_slide_seconds"] = str(secs)
     for key, value in payload.values.items():
         setting = db.query(SiteSetting).filter(SiteSetting.key == key).first()
         if setting:

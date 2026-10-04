@@ -5,7 +5,7 @@ import { useSettings } from "../context/SettingsContext";
 import PlantCard from "../components/PlantCard";
 import PlantCarousel from "../components/PlantCarousel";
 import PlantExplorer from "../components/PlantExplorer";
-import HeroImageSlider from "../components/HeroImageSlider";
+import HeroImageSlider, { parseHeroImages } from "../components/HeroImageSlider";
 import Stars from "../components/Stars";
 import Avatar from "../components/Avatar";
 import { Loading } from "../components/Loading";
@@ -63,7 +63,11 @@ export default function Home() {
             </div>
           </div>
           <div className="hero-image">
-            <HeroImageSlider alt="Lush green plants" />
+            <HeroImageSlider
+              alt="Lush green plants"
+              images={parseHeroImages(settings.hero_images)}
+              intervalSeconds={settings.hero_slide_seconds}
+            />
           </div>
         </div>
       </section>

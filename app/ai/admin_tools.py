@@ -1306,6 +1306,25 @@ def get_employee_activity_timeline(db: Session, admin: AdminUser, username: str,
     for r in db.query(Purchase).filter(Purchase.created_by.ilike(uname), Purchase.purchase_date >= start, Purchase.purchase_date < end):
         _event(events, r.purchase_date, "Purchase/bill recorded", uname, f"{r.supplier}: {money(r.total_cost)}")
 
+    from app.labour.models import EmployeeAttendance, Labour, LabourAttendance, Payroll, WorkerAdvance, WorkerPayment, WorkRequirement
+
+    emp_names = {e.id: e.name for e in db.query(Employee)}
+    lab_names = {l.id: l.name for l in db.query(Labour)}
+    for r in db.query(EmployeeAttendance).filter(EmployeeAttendance.created_by.ilike(uname), EmployeeAttendance.created_at >= start, EmployeeAttendance.created_at < end):
+        _event(events, r.created_at, "Employee attendance marked", uname, f"{emp_names.get(r.employee_id, '?')}: {r.status}")
+    for r in db.query(LabourAttendance).filter(LabourAttendance.created_by.ilike(uname), LabourAttendance.created_at >= start, LabourAttendance.created_at < end):
+        _event(events, r.created_at, "Labour attendance marked", uname, f"{lab_names.get(r.labour_id, '?')}: {r.status}, earned {money(r.earned_amount)}")
+    for r in db.query(WorkRequirement).filter(WorkRequirement.created_by.ilike(uname), WorkRequirement.created_at >= start, WorkRequirement.created_at < end):
+        _event(events, r.created_at, "Work requirement created", uname, f"{r.work_type}, {r.required_count} workers")
+    for r in db.query(Payroll).filter(Payroll.generated_by.ilike(uname), Payroll.generated_at >= start, Payroll.generated_at < end):
+        _event(events, r.generated_at, "Payroll generated", uname, f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}, {r.period_year}-{r.period_month:02d}, net {money(r.net_payable)}")
+    for r in db.query(Payroll).filter(Payroll.finalized_by.ilike(uname), Payroll.finalized_at.isnot(None), Payroll.finalized_at >= start, Payroll.finalized_at < end):
+        _event(events, r.finalized_at, "Payroll finalized", uname, f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}, {r.period_year}-{r.period_month:02d}")
+    for r in db.query(WorkerAdvance).filter(WorkerAdvance.created_by.ilike(uname), WorkerAdvance.advance_date >= start, WorkerAdvance.advance_date < end):
+        _event(events, r.advance_date, "Advance given", uname, f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}: {money(r.amount)}")
+    for r in db.query(WorkerPayment).filter(WorkerPayment.created_by.ilike(uname), WorkerPayment.payment_date >= start, WorkerPayment.payment_date < end):
+        _event(events, r.payment_date, "Worker payment recorded", uname, f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}: {money(r.amount)} ({r.method})")
+
     for r in db.query(OrderStatusHistory).filter(OrderStatusHistory.updated_by.ilike(uname), OrderStatusHistory.created_at >= start, OrderStatusHistory.created_at < end):
         _event(events, r.created_at, f"Order #{r.order_id} status {r.old_status or '-'} -> {r.new_status}", uname, r.remarks or None)
     for r in db.query(Order).filter(Order.acknowledged_by.ilike(uname), Order.acknowledged_at.isnot(None), Order.acknowledged_at >= start, Order.acknowledged_at < end):
@@ -1343,7 +1362,7 @@ def get_employee_activity_timeline(db: Session, admin: AdminUser, username: str,
         "truncated": truncated,
         "timeline": page,
         "note": "No recorded activity was found for this employee in the selected period." if not events else None,
-        "coverage_note": "Covers logins, customer/contact creation, sales orders, invoices/edits (via audit log), payments, stock movements, deliveries, expenses, purchases, order status changes, and general accounting edits. Plain page views are never recorded.",
+        "coverage_note": "Covers logins, customer/contact creation, sales orders, invoices/edits (via audit log), payments, stock movements, deliveries, expenses, purchases, order status changes, general accounting edits, and labour/employee actions (attendance marked, work requirements, payroll generated/finalized, advances given, worker payments). Plain page views are never recorded.",
     }
 
 
@@ -1621,7 +1640,7 @@ def get_payroll_summary(db: Session, admin: AdminUser, year: int = None, month: 
     generated/finalized each one."""
     if not check_permission(db, admin, "labour", "VIEW"):
         return _denied("labour")
-    from app.labour.models import Labour, Payroll
+    from app.labour.models import Labour, Payroll, WorkerPayment
 
     now = now_ist()
     year = year or now.year
@@ -1643,6 +1662,10 @@ def get_payroll_summary(db: Session, admin: AdminUser, year: int = None, month: 
                 "worker_type": r.worker_type, "gross_earnings": r.gross_earnings, "advance_recovery": r.advance_recovery,
                 "deductions": r.deductions, "net_payable": r.net_payable, "status": r.status,
                 "generated_by": r.generated_by or NOT_RECORDED, "finalized_by": r.finalized_by or None,
+                # Net payable is what payroll CALCULATES is owed; actual_paid is what
+                # WorkerPayment rows actually RECORD as paid for this payroll -- these
+                # are two different things and may legitimately differ.
+                "actual_paid": money(db.query(func.coalesce(func.sum(WorkerPayment.amount), 0)).filter(WorkerPayment.payroll_id == r.id).scalar() or 0),
             }
             for r in rows[: max(1, min(limit or 20, 30))]
         ],
@@ -2021,13 +2044,13 @@ ADMIN_TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "get_voided_invoices", "description": "All invoices voided in a period across all admins, with who voided each and the amount.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_stock_adjustments", "description": "Manual stock adjustments (not sale/purchase) -- who adjusted what plant, by how much, any note.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_attendance_summary", "description": "Attendance for salaried employees and daily-wage labour -- present/absent/overtime, optionally for one worker by name.", "parameters": {"type": "object", "properties": {"worker_name": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
-    {"type": "function", "function": {"name": "get_payroll_summary", "description": "Monthly payroll: gross earnings, advance recovery, deductions, net payable, status, who generated/finalized -- for a year/month, optionally one worker.", "parameters": {"type": "object", "properties": {"year": {"type": "integer"}, "month": {"type": "integer"}, "worker_name": {"type": "string"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_payroll_summary", "description": "Monthly payroll: gross earnings, advance recovery, deductions, net payable, status, who generated/finalized, and actual_paid (from real payment records -- compare against net_payable, they can legitimately differ) -- for a year/month, optionally one worker.", "parameters": {"type": "object", "properties": {"year": {"type": "integer"}, "month": {"type": "integer"}, "worker_name": {"type": "string"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_worker_advances", "description": "Advances/loans given to employees or labour -- amount, reason, who gave it, recovered vs outstanding.", "parameters": {"type": "object", "properties": {"worker_name": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_whatsapp_activity", "description": "WhatsApp notification activity -- counts by status (sent/delivered/read/failed) and failed messages with their error.", "parameters": {"type": "object", "properties": {"status": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_website_content_summary", "description": "Quick counts of website content: categories, plants, services, testimonials, blog posts, FAQs, pricing plans, gallery images, reviews.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "get_customer_activity", "description": "Website login/activity log for one customer by name (separate from purchase history).", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["name"]}}},
     {"type": "function", "function": {"name": "get_billing_audit", "description": "Audit all invoices in a period for numbers that don't match (items vs total, payments vs amount paid, balance, status). Use for 'bill proper match nahi ho raha', 'saare bills khud check karo', 'accounts mein gadbad'.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
-    {"type": "function", "function": {"name": "get_employee_activity_timeline", "description": "Everything one admin/employee actually did in a period, in chronological order, combined across every module (orders, customers, sales orders, invoices, payments, stock, deliveries, expenses, purchases, logins, accounting edits). Use for 'Ishwar ne aaj kya kiya', 'what did this employee do today'.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}, "required": ["username"]}}},
+    {"type": "function", "function": {"name": "get_employee_activity_timeline", "description": "Everything one admin/employee actually did in a period, in chronological order, combined across every module (orders, customers, sales orders, invoices, payments, stock, deliveries, expenses, purchases, logins, accounting edits, labour/employee attendance, payroll, advances, worker payments). Use for 'Ishwar ne aaj kya kiya', 'what did this employee do today'.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}, "required": ["username"]}}},
 ]
 
 

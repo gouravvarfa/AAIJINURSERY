@@ -1070,18 +1070,38 @@ def get_deliveries(db: Session, admin: AdminUser, range: str = "today", from_dat
     }
 
 
-def get_delivery_timeline(db: Session, admin: AdminUser, delivery_number: str) -> dict:
-    """Full history of one delivery (e.g. 'DEL-12' or just 12): creation,
-    each driver/vehicle assignment, each status change and completion --
-    with who did it."""
+def get_delivery_timeline(db: Session, admin: AdminUser, delivery_number: str = None, customer_name: str = None) -> dict:
+    """Full history of one delivery: creation, each driver/vehicle
+    assignment, each status change and completion -- with who did it.
+    Identify the delivery either by delivery_number (e.g. 'DEL-12') or by
+    customer_name (picks that customer's most recent delivery) -- pass
+    whichever the admin gave; customer_name is for questions like 'Raju
+    ki delivery kisne assign ki'."""
     if not check_permission(db, admin, "delivery", "VIEW"):
         return _denied("delivery")
-    key = str(delivery_number).strip().upper()
-    d = db.query(Delivery).filter(Delivery.delivery_number == key).first()
-    if not d and key.isdigit():
-        d = db.query(Delivery).filter(Delivery.id == int(key)).first()
-    if not d:
-        return {"error": f"No delivery found matching '{delivery_number}'."}
+    d = None
+    if delivery_number:
+        key = str(delivery_number).strip().upper()
+        d = db.query(Delivery).filter(Delivery.delivery_number == key).first()
+        if not d and key.isdigit():
+            d = db.query(Delivery).filter(Delivery.id == int(key)).first()
+        if not d:
+            return {"error": f"No delivery found matching '{delivery_number}'."}
+    elif customer_name:
+        amb = _ambiguous_matches(db, customer_name)
+        if amb:
+            return _ambiguity_reply(amb)
+        ids = [c.id for c in db.query(Contact.id).filter(Contact.name.ilike(f"%{customer_name.strip()}%"))]
+        d = (
+            db.query(Delivery)
+            .filter(Delivery.contact_id.in_(ids or [-1]))
+            .order_by(Delivery.created_at.desc())
+            .first()
+        )
+        if not d:
+            return {"error": f"No delivery found for a customer matching '{customer_name}'."}
+    else:
+        return {"error": "Provide either delivery_number or customer_name."}
     hist = (
         db.query(DeliveryStatusHistory)
         .filter(DeliveryStatusHistory.delivery_id == d.id)
@@ -1904,7 +1924,7 @@ ADMIN_TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "get_expenses", "description": "Expenses total/paid/unpaid, by category, list with who entered.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "category": {"type": "string"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_purchase_summary", "description": "Stock purchases / supplier bills for a period, optionally by supplier.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "supplier": {"type": "string"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_deliveries", "description": "List deliveries for a date, filter by status/driver/vehicle/customer; counts per status and per driver.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "status": {"type": "string"}, "driver_name": {"type": "string"}, "vehicle": {"type": "string"}, "customer_name": {"type": "string"}, "limit": {"type": "integer"}}}}},
-    {"type": "function", "function": {"name": "get_delivery_timeline", "description": "History of one delivery by number (e.g. DEL-12): creation, driver/vehicle assignment, status changes, completion, each with who.", "parameters": {"type": "object", "properties": {"delivery_number": {"type": "string"}}, "required": ["delivery_number"]}}},
+    {"type": "function", "function": {"name": "get_delivery_timeline", "description": "History of one delivery: creation, driver/vehicle assignment, status changes, completion, each with who. Identify it by delivery_number (e.g. DEL-12) OR by customer_name (most recent delivery for that customer) -- use customer_name for questions like 'Raju ki delivery kisne assign ki'.", "parameters": {"type": "object", "properties": {"delivery_number": {"type": "string"}, "customer_name": {"type": "string"}}}}},
     {"type": "function", "function": {"name": "get_admin_activity", "description": "What admins did (activity log) for a period, optionally one admin username. Needs Users & Roles permission.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_customer_counts", "description": "How many customers exist: online (website accounts) vs offline-only (walk-in/manual contacts), and the total. Use for 'kitne online customer hai', 'total customers kitne hain'.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "get_inquiries", "description": "Website contact/product enquiries: who asked, about which plant, when, and reply status (new/replied). Use for 'kisi customer ki enquiry aayi', 'naye enquiries'.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "status": {"type": "string", "description": "'new' or 'replied'"}, "limit": {"type": "integer"}}}}},

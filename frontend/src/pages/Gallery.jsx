@@ -16,7 +16,7 @@ export default function Gallery() {
       <section className="page-hero">
         <div className="container">
           <h1>Gallery</h1>
-          <p>Visual proof of quality - our work and plants in action.</p>
+          <p>A look inside our nursery, our plants and our work.</p>
         </div>
       </section>
 

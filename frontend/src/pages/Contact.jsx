@@ -53,7 +53,7 @@ export default function Contact() {
       <section className="page-hero">
         <div className="container">
           <h1>Contact Us</h1>
-          <p>Makes reaching out effortless.</p>
+          <p>We're here to help. Reach out anytime.</p>
         </div>
       </section>
 

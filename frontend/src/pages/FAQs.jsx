@@ -17,7 +17,7 @@ export default function FAQs() {
       <section className="page-hero">
         <div className="container">
           <h1>Frequently Asked Questions</h1>
-          <p>The most important section - answers repetitive questions.</p>
+          <p>Quick answers about our plants, orders, delivery and care.</p>
         </div>
       </section>
 

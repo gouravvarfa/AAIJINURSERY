@@ -33,7 +33,7 @@ export default function About() {
       <section className="page-hero">
         <div className="container">
           <h1>About Us</h1>
-          <p>Builds trust and credibility, one plant at a time.</p>
+          <p>Growing quality plants and lasting trust, one season at a time.</p>
         </div>
       </section>
 

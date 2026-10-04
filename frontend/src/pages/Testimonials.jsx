@@ -18,7 +18,7 @@ export default function Testimonials() {
       <section className="page-hero">
         <div className="container">
           <h1>Testimonials</h1>
-          <p>Social proof from real customers.</p>
+          <p>What our customers say about us.</p>
         </div>
       </section>
 

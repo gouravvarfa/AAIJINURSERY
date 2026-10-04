@@ -17,7 +17,7 @@ export default function Pricing() {
       <section className="page-hero">
         <div className="container">
           <h1>Pricing Plans</h1>
-          <p>Removes pricing-related queries - transparent plans for every need.</p>
+          <p>Simple, transparent plans for every need.</p>
         </div>
       </section>
 

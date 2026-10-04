@@ -17,7 +17,7 @@ export default function Blog() {
       <section className="page-hero">
         <div className="container">
           <h1>Blog & Updates</h1>
-          <p>Keeps the audience engaged - offers, tips, and announcements.</p>
+          <p>Growing tips, seasonal advice, offers and nursery news.</p>
         </div>
       </section>
 

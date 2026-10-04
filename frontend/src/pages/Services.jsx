@@ -17,7 +17,7 @@ export default function Services() {
       <section className="page-hero">
         <div className="container">
           <h1>Our Services</h1>
-          <p>Clarifies exactly what is offered - from one-time setup to ongoing care.</p>
+          <p>From one-time setup to ongoing care, everything your plants need.</p>
         </div>
       </section>
 

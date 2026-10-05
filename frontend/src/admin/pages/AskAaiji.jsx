@@ -34,6 +34,41 @@ const SpeechRecognitionCtor =
 // scoped by the logged-in admin's real RBAC permissions on the backend,
 // never decided here. Conversation lives only in this page's state for the
 // current session -- gone on refresh/navigation, never persisted server-side.
+function SpeakerIcon({ muted }) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 5 6 9H2v6h4l5 4V5z" />
+      {muted ? <path d="m23 9-6 6M17 9l6 6" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" />}
+    </svg>
+  );
+}
+
+const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
+
+// Browser's built-in text-to-speech -- free, no API key. Prefers a Hindi
+// voice (reads Hinglish naturally), then Indian English, then the default.
+function speak(text) {
+  if (!canSpeak || !text) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text.replace(/₹\s?/g, "rupees ").replace(/--/g, ", "));
+  const voices = window.speechSynthesis.getVoices();
+  const voice =
+    voices.find((v) => v.lang === "hi-IN") || voices.find((v) => v.lang === "en-IN") || voices.find((v) => v.lang.startsWith("en"));
+  if (voice) {
+    utter.voice = voice;
+    utter.lang = voice.lang;
+  }
+  window.speechSynthesis.speak(utter);
+}
+
+function readSpeakPref() {
+  try {
+    return localStorage.getItem("askAaijiSpeak") === "1";
+  } catch {
+    return false;
+  }
+}
+
 export default function AskAaiji() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -42,9 +77,26 @@ export default function AskAaiji() {
   const [status, setStatus] = useState(null);
   const [lastFailedText, setLastFailedText] = useState(null);
   const [listening, setListening] = useState(false);
+  const [speakReplies, setSpeakReplies] = useState(readSpeakPref);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
+  const transcriptRef = useRef("");
+  const speakRepliesRef = useRef(speakReplies);
+  speakRepliesRef.current = speakReplies;
+
+  useEffect(() => () => canSpeak && window.speechSynthesis.cancel(), []);
+
+  function toggleSpeakReplies() {
+    const next = !speakReplies;
+    setSpeakReplies(next);
+    if (!next && canSpeak) window.speechSynthesis.cancel();
+    try {
+      localStorage.setItem("askAaijiSpeak", next ? "1" : "0");
+    } catch {
+      // preference just won't persist
+    }
+  }
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -55,7 +107,11 @@ export default function AskAaiji() {
   }, []);
 
   useEffect(() => {
-    return () => recognitionRef.current?.stop();
+    return () => {
+      transcriptRef.current = "";
+      if (recognitionRef.current) recognitionRef.current.onend = null;
+      recognitionRef.current?.stop();
+    };
   }, []);
 
   function toggleListening() {
@@ -64,6 +120,9 @@ export default function AskAaiji() {
       recognitionRef.current?.stop();
       return;
     }
+    // Don't let the bot's own voice get picked up as the next question.
+    if (canSpeak) window.speechSynthesis.cancel();
+    transcriptRef.current = "";
     const recognition = new SpeechRecognitionCtor();
     recognition.lang = "en-IN";
     recognition.interimResults = true;
@@ -71,16 +130,27 @@ export default function AskAaiji() {
     recognition.onresult = (e) => {
       let transcript = "";
       for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+      transcriptRef.current = transcript;
       setInput(transcript);
     };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    // Voice-to-voice: when the admin stops talking, send what was heard
+    // straight away and read the answer back -- no typing or tapping Send.
+    recognition.onend = () => {
+      setListening(false);
+      const heard = transcriptRef.current.trim();
+      transcriptRef.current = "";
+      if (heard) sendText(heard, true);
+    };
+    recognition.onerror = () => {
+      transcriptRef.current = "";
+      setListening(false);
+    };
     recognitionRef.current = recognition;
     setListening(true);
     recognition.start();
   }
 
-  async function sendText(text) {
+  async function sendText(text, viaVoice = false) {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     setInput("");
@@ -92,6 +162,7 @@ export default function AskAaiji() {
     try {
       const data = await api.post("/admin/ai/chat", { message: trimmed, history });
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply, provider: data.provider }]);
+      if (viaVoice || speakRepliesRef.current) speak(data.reply);
       setStatus(data.provider !== "none" ? "online" : "offline");
     } catch (err) {
       setLastFailedText(trimmed);
@@ -147,6 +218,19 @@ export default function AskAaiji() {
               <span className={`ai-chat-status-dot${status === "offline" ? " offline" : ""}`} style={{ background: status === "online" ? "var(--color-accent)" : undefined }} />
               {status === "online" ? "Online" : "Temporarily unavailable"}
             </span>
+          )}
+          {canSpeak && (
+            <button
+              type="button"
+              className="btn btn-sm btn-outline dark"
+              onClick={toggleSpeakReplies}
+              aria-pressed={speakReplies}
+              title={speakReplies ? "Voice replies on -- click to mute" : "Read replies aloud"}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <SpeakerIcon muted={!speakReplies} />
+              {speakReplies ? "Voice on" : "Voice off"}
+            </button>
           )}
           {messages.length > 0 && (
             <button type="button" className="btn btn-sm btn-outline dark" onClick={clearConversation}>

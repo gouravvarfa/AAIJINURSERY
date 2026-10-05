@@ -1178,97 +1178,430 @@ table.admin-table .row-actions {
   }
 }
 
-/* ---------- Ask AAIJI (Admin BI chat page) ---------- */
-/* Reuses the customer AI widget's bubble/typing/chip/error styles
-   (.ai-chat-msg, .ai-chat-chip, .ai-chat-error, .ai-chat-typing-dots,
-   .ai-chat-send-btn, .ai-chat-status-dot -- all in index.css, globally
-   available) inside a full-page layout instead of a floating widget. */
+/* ---------- Ask AAIJI (Admin BI workspace) ---------- */
+/* Reuses the customer AI widget's bubble/typing/chip/error/input/mic/send
+   styles (.ai-chat-*, global in index.css). This block only lays out the
+   page itself: header, welcome + quick actions, and a Business Context side
+   panel on wide screens that stacks below on narrower ones. */
+
+.ask-aaiji-page {
+  --aaiji-green: #1b4332;
+  --aaiji-green-soft: #e8f3ec;
+  --aaiji-ink: #1f2a24;
+  --aaiji-line: #e3e8e4;
+  color: var(--aaiji-ink);
+}
+
+.ask-aaiji-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+
+.ask-aaiji-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.ask-aaiji-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--aaiji-green-soft);
+  color: var(--aaiji-green);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ask-aaiji-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ask-aaiji-title h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.ask-aaiji-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--aaiji-green);
+  background: var(--aaiji-green-soft);
+  border: 1px solid #cfe5d6;
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.ask-aaiji-badge.offline {
+  color: #8a4b00;
+  background: #fff6e8;
+  border-color: #f3dcb2;
+}
+
+.ask-aaiji-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2f9e5f;
+  display: inline-block;
+}
+
+.ask-aaiji-badge.offline .ask-aaiji-badge-dot {
+  background: #d08a1c;
+}
+
+.ask-aaiji-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--aaiji-ink);
+}
+
+.ask-aaiji-tagline {
+  margin: 2px 0 0;
+  font-size: 0.84rem;
+  color: #6b7770;
+}
 
 .ask-aaiji-header-right {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
+.ask-aaiji-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 22px;
+  align-items: start;
+}
+
+.ask-aaiji-main {
+  min-width: 0;
+}
+
+/* Chat workspace card -- the same card holds the welcome, the conversation
+   and the input, so the page transforms in place when the first question is
+   asked (no navigation). */
 .ask-aaiji-panel {
   display: flex;
   flex-direction: column;
-  height: min(640px, calc(100vh - 220px));
+  height: min(680px, calc(100vh - 260px));
+  min-height: 460px;
   background: #fff;
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
+  border: 1px solid var(--aaiji-line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(16, 40, 31, 0.04), 0 6px 18px rgba(16, 40, 31, 0.05);
   overflow: hidden;
 }
 
 .ask-aaiji-body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.ask-aaiji-msg {
-  max-width: 70%;
+.ask-aaiji-welcome {
+  margin: auto 0;
+  padding: 8px 4px 4px;
 }
 
-.ask-aaiji-empty {
-  margin: auto;
-  text-align: center;
-  max-width: 420px;
-  color: var(--color-text);
+.ask-aaiji-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--aaiji-green);
 }
 
-.ask-aaiji-empty-icon {
-  font-size: 2.2rem;
-  margin-bottom: 8px;
+.ask-aaiji-welcome h2 {
+  margin: 6px 0 4px;
+  font-size: 1.5rem;
+  font-weight: 700;
 }
 
-.ask-aaiji-empty p {
-  color: var(--color-text-muted);
-  font-size: 0.88rem;
-  margin: 6px 0 16px;
+.ask-aaiji-question {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
 }
 
-.ask-aaiji-suggestions {
+.ask-aaiji-lead {
+  margin: 6px 0 18px;
+  color: #6b7770;
+  font-size: 0.9rem;
+  max-width: 560px;
+}
+
+.ask-aaiji-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.ask-aaiji-action {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 13px 14px;
+  background: #fff;
+  border: 1px solid var(--aaiji-line);
+  border-radius: 12px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.ask-aaiji-action:hover:not(:disabled) {
+  border-color: #b9d4c3;
+  background: #fbfdfb;
+  box-shadow: 0 4px 12px rgba(16, 40, 31, 0.07);
+}
+
+.ask-aaiji-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ask-aaiji-action:focus-visible {
+  outline: 2px solid var(--aaiji-green);
+  outline-offset: 2px;
+}
+
+.ask-aaiji-action-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--aaiji-green-soft);
+  color: var(--aaiji-green);
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+
+.ask-aaiji-action-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.ask-aaiji-action-text strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.ask-aaiji-action-text small {
+  font-size: 0.78rem;
+  color: #6b7770;
+  margin-top: 2px;
+}
+
+.ask-aaiji-action-arrow {
+  color: #9aa8a0;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.ask-aaiji-msg {
+  max-width: 72%;
 }
 
 .ask-aaiji-input-row textarea {
   flex: 1;
   min-width: 0;
   max-height: 100px;
-  padding: 10px 14px;
-  border-radius: 18px;
-  border: 1.5px solid var(--color-border);
-  background: var(--color-bg, #f4f4f0);
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--aaiji-line);
+  background: #f8faf8;
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   resize: none;
 }
 
 .ask-aaiji-input-row textarea:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--aaiji-green);
   background: #fff;
 }
 
-@media (max-width: 768px) {
-  .ask-aaiji-panel {
-    height: calc(100vh - 260px);
-    border-radius: 12px;
+.ask-aaiji-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.ask-aaiji-footnote {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 0.76rem;
+  color: #7d8a83;
+}
+
+/* Business Context side panel -- a content card, not a second sidebar. */
+.ask-aaiji-side {
+  position: sticky;
+  top: 16px;
+}
+
+.ask-aaiji-context {
+  background: #fff;
+  border: 1px solid var(--aaiji-line);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 1px 2px rgba(16, 40, 31, 0.04);
+}
+
+.ask-aaiji-context h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.ask-aaiji-context-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--aaiji-line);
+  font-size: 0.86rem;
+}
+
+.ask-aaiji-context-label {
+  color: #6b7770;
+}
+
+.ask-aaiji-context-value {
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: right;
+}
+
+.ask-aaiji-context-value.live {
+  color: var(--aaiji-green);
+}
+
+.ask-aaiji-context-sub {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--aaiji-line);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7d8a83;
+}
+
+.ask-aaiji-modules {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.ask-aaiji-modules li {
+  padding: 8px 0;
+  font-size: 0.88rem;
+  border-bottom: 1px solid #f0f3f1;
+}
+
+.ask-aaiji-modules li:last-child {
+  border-bottom: 0;
+}
+
+.ask-aaiji-insights {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f4f9f5;
+  border: 1px solid #dcebe0;
+}
+
+.ask-aaiji-insights strong {
+  font-size: 0.9rem;
+}
+
+.ask-aaiji-insights p {
+  margin: 6px 0 10px;
+  font-size: 0.82rem;
+  color: #55635b;
+}
+
+.ask-aaiji-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--aaiji-green);
+}
+
+@media (max-width: 1100px) {
+  .ask-aaiji-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .ask-aaiji-msg {
-    max-width: 88%;
+  .ask-aaiji-side {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .ask-aaiji-head {
+    gap: 12px;
+  }
+  .ask-aaiji-title h1 {
+    font-size: 1.3rem;
   }
   .ask-aaiji-header-right {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
+  }
+  .ask-aaiji-panel {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+  .ask-aaiji-body {
+    padding: 16px;
+    min-height: 280px;
+  }
+  .ask-aaiji-msg {
+    max-width: 92%;
+  }
+  .ask-aaiji-actions {
+    grid-template-columns: 1fr;
+  }
+  .ask-aaiji-input-row textarea {
+    font-size: 0.85rem;
+    padding: 10px 12px;
   }
 }
 

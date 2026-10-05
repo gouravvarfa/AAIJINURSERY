@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Loading } from "../components/Loading";
 import ErrorBoundary from "../components/ErrorBoundary";
@@ -222,12 +222,17 @@ export default function AdminLayout() {
       {drawerOpen && <div className="admin-drawer-overlay" onClick={() => setDrawerOpen(false)} aria-hidden="true" />}
       <aside className={`admin-sidebar${drawerOpen ? " open" : ""}`}>
         <div className="brand">
-          <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Link
+            to="/"
+            title="Back to website"
+            aria-label="Back to website"
+            style={{ display: "flex", alignItems: "center", gap: 10, color: "inherit", textDecoration: "none" }}
+          >
             <span className="admin-logo-chip">
               <img src={logoImg} alt="Aaiji Nursery" />
             </span>
             Aaiji Nursery
-          </span>
+          </Link>
           <button type="button" className="admin-drawer-close" aria-label="Close menu" onClick={() => setDrawerOpen(false)}>
             &times;
           </button>
@@ -292,6 +297,14 @@ export default function AdminLayout() {
           </button>
           <strong>Admin Dashboard</strong>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <Link
+              to="/"
+              className="btn btn-sm btn-outline dark hide-mobile"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              title="Back to website"
+            >
+              &larr; Website
+            </Link>
             <OrderAlertBell />
             <span className="admin-topbar-username" style={{ color: "var(--color-text-muted)", fontSize: "0.88rem" }}>
               Signed in as {username}

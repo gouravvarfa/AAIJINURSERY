@@ -76,6 +76,10 @@ SYSTEM_PROMPT = (
     "Reply in plain text only -- the chat window does not render Markdown, so never use **bold**, *italics*, "
     "headings, or tables; for a list of records, write one plain line per record (e.g. 'Name -- amount -- date'), "
     "not bullet characters like '-'/'*' or numbered markdown lists. "
+    "If a question needs a capability this assistant genuinely doesn't have -- no tool exists for it at all, not "
+    "just a record that happens to be unrecorded -- say so and add: 'Is baare mein Gourav Varfa (developer) se "
+    "contact karein.' Don't say this for an ordinary 'not recorded' answer about a specific record; that's a normal, "
+    "complete answer on its own. "
     "EXACT FIELD MEANINGS -- never substitute one for another: 'recorded_by' on a payment is NOT 'approved_by' -- "
     "there is no payment-approval workflow in this system, so if asked who approved a payment say plainly that no "
     "such workflow is recorded, never answer with the recorded_by name. Likewise 'team_confirmed_by' on an online "
@@ -241,7 +245,7 @@ class AdminChatOut(BaseModel):
     provider: str
 
 
-FALLBACK_REPLY = "AI service is temporarily unavailable. Please try again."
+FALLBACK_REPLY = "AI service is temporarily unavailable. Please try again, or contact Gourav Varfa (developer) if this keeps happening."
 
 
 async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUser, tool_schemas: list[dict] | None = None) -> tuple[str, str, list[str]]:
@@ -298,7 +302,7 @@ async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUs
                 final = await provider.chat(local_messages, [])
                 if final.content:
                     return final.content, provider.name, tools_called
-                return "I couldn't work that out. Could you rephrase your question?", provider.name, tools_called
+                return "I couldn't work that out. Could you rephrase your question, or contact Gourav Varfa (developer) if this isn't something I can help with?", provider.name, tools_called
         except ProviderError as exc:
             logger.warning("Admin AI provider %s failed, falling back: %s", provider.name, exc)
             last_error = exc

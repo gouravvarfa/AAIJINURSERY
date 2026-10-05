@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
+import AskAaijiVoice, { voiceModeSupported } from "./AskAaijiVoice";
 
 const SUGGESTED_QUESTIONS = [
   "Today's sales",
@@ -78,6 +79,8 @@ export default function AskAaiji() {
   const [lastFailedText, setLastFailedText] = useState(null);
   const [listening, setListening] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(readSpeakPref);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const sendTextRef = useRef(null);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -150,7 +153,7 @@ export default function AskAaiji() {
     recognition.start();
   }
 
-  async function sendText(text, viaVoice = false) {
+  async function sendText(text, viaVoice = false, speakIt = true) {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     setInput("");
@@ -159,30 +162,31 @@ export default function AskAaiji() {
     const history = messages.filter((m) => m.provider !== "none").map((m) => ({ role: m.role, content: m.content }));
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setSending(true);
+    let errorResult = null;
     try {
       const data = await api.post("/admin/ai/chat", { message: trimmed, history });
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply, provider: data.provider }]);
-      if (viaVoice || speakRepliesRef.current) speak(data.reply);
+      if (speakIt && (viaVoice || speakRepliesRef.current)) speak(data.reply);
       setStatus(data.provider !== "none" ? "online" : "offline");
+      return { reply: data.reply };
     } catch (err) {
       setLastFailedText(trimmed);
-      if (err.status === 429) {
-        setError("Too many messages -- please wait a few minutes and try again.");
-      } else if (err.status === 403) {
-        setError(err.message || "You don't have access to Ask AAIJI.");
-      } else if (err.status === 401) {
-        setError("Your session has expired. Please log in again.");
-      } else {
-        setError("AI service is temporarily unavailable. Please try again.");
-        setStatus("offline");
-      }
+      let msg = "AI service is temporarily unavailable. Please try again.";
+      if (err.status === 429) msg = "Too many messages -- please wait a few minutes and try again.";
+      else if (err.status === 403) msg = err.message || "You don't have access to Ask AAIJI.";
+      else if (err.status === 401) msg = "Your session has expired. Please log in again.";
+      else setStatus("offline");
+      setError(msg);
+      errorResult = { error: msg };
       // Remove the optimistically-added user message so Retry can re-send
       // it cleanly instead of duplicating it.
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setSending(false);
     }
+    return errorResult;
   }
+  sendTextRef.current = sendText;
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -205,6 +209,9 @@ export default function AskAaiji() {
 
   return (
     <div className="ask-aaiji-page">
+      {voiceOpen && (
+        <AskAaijiVoice onAsk={(t) => sendTextRef.current(t, false, false)} onClose={() => setVoiceOpen(false)} />
+      )}
       <div className="admin-page-head">
         <div>
           <h1>🤖 Ask AAIJI</h1>
@@ -218,6 +225,11 @@ export default function AskAaiji() {
               <span className={`ai-chat-status-dot${status === "offline" ? " offline" : ""}`} style={{ background: status === "online" ? "var(--color-accent)" : undefined }} />
               {status === "online" ? "Online" : "Temporarily unavailable"}
             </span>
+          )}
+          {voiceModeSupported && (
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => setVoiceOpen(true)}>
+              Start Voice
+            </button>
           )}
           {canSpeak && (
             <button

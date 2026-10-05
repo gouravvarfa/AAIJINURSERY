@@ -1,0 +1,289 @@
+import { useEffect, useRef, useState } from "react";
+
+const SpeechRecognitionCtor =
+  typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+export const voiceModeSupported =
+  Boolean(SpeechRecognitionCtor) && typeof window !== "undefined" && "speechSynthesis" in window;
+
+const STATUS_TEXT = {
+  idle: "Ready when you are",
+  listening: "Listening...",
+  thinking: "Thinking...",
+  speaking: "AAIJI is speaking...",
+  muted: "Microphone muted",
+  denied: "Microphone permission is needed",
+};
+
+function MicIcon({ muted }) {
+  return (
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <path d="M12 19v3M8 22h8" />
+      {muted && <path d="M3 3l18 18" />}
+    </svg>
+  );
+}
+
+function EndIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
+// Full-screen voice conversation for Ask AAIJI. Owns only the voice loop
+// (listen -> ask -> speak -> listen) and its visuals; the actual question is
+// answered by the page's existing sendText via `onAsk`, so the conversation
+// history, permissions and backend behaviour are exactly the same as typing.
+export default function AskAaijiVoice({ onAsk, onClose }) {
+  const [state, setState] = useState("idle");
+  const [muted, setMuted] = useState(false);
+  const [heard, setHeard] = useState("");
+  const orbRef = useRef(null);
+  const endRef = useRef(null);
+  const onAskRef = useRef(onAsk);
+  onAskRef.current = onAsk;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  // Everything the loop touches outside React state, so callbacks never
+  // act on a stale closure and cleanup can reach all of it.
+  const r = useRef({ closed: false, muted: false, denied: false, rec: null, transcript: "", timers: [], raf: 0, stream: null, ctx: null, analyser: null, level: 0 });
+
+  function setLevel(v) {
+    r.current.level = v;
+    if (orbRef.current) orbRef.current.style.setProperty("--level", v.toFixed(3));
+  }
+
+  function later(fn, ms) {
+    const id = setTimeout(fn, ms);
+    r.current.timers.push(id);
+    return id;
+  }
+
+  function listen() {
+    const s = r.current;
+    if (s.closed || s.muted) return;
+    window.speechSynthesis.cancel();
+    s.transcript = "";
+    setHeard("");
+    setState("listening");
+    const rec = new SpeechRecognitionCtor();
+    rec.lang = "en-IN";
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.onresult = (e) => {
+      let t = "";
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      s.transcript = t;
+      setHeard(t);
+    };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") s.denied = true;
+    };
+    rec.onend = () => {
+      if (s.closed) return;
+      setLevel(0);
+      if (s.denied) {
+        s.muted = true;
+        setMuted(true);
+        setState("denied");
+        return;
+      }
+      if (s.muted) {
+        setState("muted");
+        return;
+      }
+      const text = s.transcript.trim();
+      s.transcript = "";
+      if (text) ask(text);
+      else later(listen, 400); // silence -- keep the conversation open
+    };
+    s.rec = rec;
+    try {
+      rec.start();
+    } catch {
+      later(listen, 600);
+    }
+  }
+
+  async function ask(text) {
+    const s = r.current;
+    setState("thinking");
+    let result = null;
+    try {
+      result = await onAskRef.current(text);
+    } catch {
+      result = null;
+    }
+    if (s.closed) return;
+    say((result && (result.reply || result.error)) || "Sorry, I could not get an answer. Please try again.");
+  }
+
+  function say(text) {
+    const s = r.current;
+    setState("speaking");
+    setHeard("");
+    const utter = new SpeechSynthesisUtterance(text.replace(/₹\s?/g, "rupees ").replace(/--/g, ", "));
+    const voices = window.speechSynthesis.getVoices();
+    const voice =
+      voices.find((v) => v.lang === "hi-IN") || voices.find((v) => v.lang === "en-IN") || voices.find((v) => v.lang.startsWith("en"));
+    if (voice) {
+      utter.voice = voice;
+      utter.lang = voice.lang;
+    }
+    let finished = false;
+    const done = () => {
+      if (finished || s.closed) return;
+      finished = true;
+      setLevel(0);
+      if (s.muted) setState("muted");
+      else listen();
+    };
+    utter.onend = done;
+    utter.onerror = done;
+    // The browser gives no audio stream for its own speech, so the orb is
+    // nudged on each spoken word instead -- close to, not exactly, in sync.
+    utter.onboundary = () => {
+      setLevel(0.55);
+      later(() => stateRef.current === "speaking" && setLevel(0.15), 140);
+    };
+    // Some browsers never fire onend for long text; don't get stuck.
+    later(done, Math.min(90000, 4000 + text.length * 95));
+    window.speechSynthesis.speak(utter);
+  }
+
+  function toggleMute() {
+    const s = r.current;
+    if (s.muted) {
+      s.muted = false;
+      s.denied = false;
+      setMuted(false);
+      if (stateRef.current === "muted" || stateRef.current === "denied" || stateRef.current === "idle") listen();
+    } else {
+      s.muted = true;
+      setMuted(true);
+      s.transcript = "";
+      if (stateRef.current === "listening") s.rec?.stop();
+      else if (stateRef.current === "idle") setState("muted");
+    }
+  }
+
+  useEffect(() => {
+    const s = r.current;
+    s.closed = false;
+    endRef.current?.focus();
+
+    // Real microphone level for the listening animation. Optional: if the
+    // browser refuses a second mic consumer, the orb just breathes instead.
+    const isPhone = /Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (!isPhone && navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+          if (s.closed) {
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          const ctx = new Ctx();
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 512;
+          ctx.createMediaStreamSource(stream).connect(analyser);
+          s.stream = stream;
+          s.ctx = ctx;
+          s.analyser = analyser;
+          const buf = new Uint8Array(analyser.fftSize);
+          const tick = () => {
+            if (s.closed) return;
+            if (stateRef.current === "listening") {
+              analyser.getByteTimeDomainData(buf);
+              let sum = 0;
+              for (let i = 0; i < buf.length; i++) {
+                const d = (buf[i] - 128) / 128;
+                sum += d * d;
+              }
+              const rms = Math.min(1, Math.sqrt(sum / buf.length) * 4);
+              setLevel(s.level * 0.75 + rms * 0.25);
+            }
+            s.raf = requestAnimationFrame(tick);
+          };
+          s.raf = requestAnimationFrame(tick);
+        })
+        .catch(() => {});
+    }
+
+    const onKey = (e) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    later(listen, 700);
+
+    return () => {
+      s.closed = true;
+      s.timers.forEach(clearTimeout);
+      s.timers = [];
+      cancelAnimationFrame(s.raf);
+      if (s.rec) {
+        s.rec.onend = null;
+        s.rec.onresult = null;
+        try {
+          s.rec.stop();
+        } catch {
+          // already stopped
+        }
+      }
+      window.speechSynthesis.cancel();
+      s.stream?.getTracks().forEach((t) => t.stop());
+      s.ctx?.close().catch(() => {});
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
+
+  return (
+    <div className="aaiji-voice" data-state={state} role="dialog" aria-modal="true" aria-label="AAIJI voice conversation">
+      <div className="aaiji-voice-stage">
+        <div className="aaiji-orb" ref={orbRef} aria-hidden="true">
+          <span className="aaiji-orb-ring r3" />
+          <span className="aaiji-orb-ring r2" />
+          <span className="aaiji-orb-ring r1" />
+          <span className="aaiji-orb-arc" />
+          <span className="aaiji-orb-core" />
+        </div>
+        <div className="aaiji-voice-name">AAIJI</div>
+        <div className="aaiji-voice-sub">Business Intelligence Assistant</div>
+        <div className="aaiji-voice-status" aria-live="polite">
+          {STATUS_TEXT[state]}
+        </div>
+        <div className="aaiji-voice-heard">{state === "listening" ? heard : ""}</div>
+      </div>
+
+      <div className="aaiji-voice-controls">
+        <button
+          type="button"
+          className={`aaiji-voice-mic${muted ? " muted" : ""}`}
+          onClick={toggleMute}
+          aria-pressed={muted}
+          aria-label={muted ? "Unmute microphone" : "Mute microphone"}
+          title={muted ? "Unmute microphone" : "Mute microphone"}
+        >
+          <MicIcon muted={muted} />
+        </button>
+        <button
+          type="button"
+          ref={endRef}
+          className="aaiji-voice-end"
+          onClick={onClose}
+          aria-label="End voice conversation"
+          title="End voice conversation"
+        >
+          <EndIcon />
+          <span>End</span>
+        </button>
+      </div>
+    </div>
+  );
+}

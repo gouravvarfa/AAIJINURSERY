@@ -1311,3 +1311,210 @@ table.admin-table .row-actions {
     bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* ---------- Ask AAIJI voice mode (full-screen overlay) ---------- */
+/* Covers the whole admin shell (sidebar is z-index 1000) while a voice
+   conversation is open. The orb is plain CSS; --level (0..1) is set from
+   JS: real mic volume while listening, word boundaries while speaking. */
+
+.aaiji-voice {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(116, 198, 157, 0.2), rgba(116, 198, 157, 0) 46%),
+    #fbfcfa;
+  animation: aaijiVoiceIn 260ms ease-out both;
+}
+
+.aaiji-voice-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px 0;
+  text-align: center;
+  min-height: 0;
+}
+
+.aaiji-orb {
+  --level: 0;
+  position: relative;
+  width: clamp(170px, 34vmin, 270px);
+  aspect-ratio: 1;
+  margin-bottom: 78px;
+}
+
+.aaiji-orb-core,
+.aaiji-orb-ring,
+.aaiji-orb-arc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.aaiji-orb-core {
+  inset: 14%;
+  background: radial-gradient(circle at 34% 28%, #95d5b2 0%, #40916c 42%, #1b4332 100%);
+  box-shadow:
+    0 0 calc(34px + var(--level) * 70px) rgba(64, 145, 108, calc(0.3 + var(--level) * 0.25)),
+    inset 0 -10px 26px rgba(16, 40, 31, 0.35);
+  transform: scale(calc(1 + var(--level) * 0.1));
+  transition: transform 140ms ease-out, box-shadow 220ms ease-out, border-radius 400ms ease;
+  animation: aaijiBreathe 5.5s ease-in-out infinite;
+}
+
+.aaiji-orb-ring {
+  border: 1px solid rgba(45, 106, 79, 0.2);
+  transition: transform 180ms ease-out, opacity 400ms ease, border-color 400ms ease;
+}
+
+.aaiji-orb-ring.r1 { transform: scale(calc(0.92 + var(--level) * 0.16)); }
+.aaiji-orb-ring.r2 { transform: scale(calc(1.1 + var(--level) * 0.26)); opacity: 0.7; }
+.aaiji-orb-ring.r3 { transform: scale(calc(1.3 + var(--level) * 0.38)); opacity: 0.4; }
+
+.aaiji-orb-arc {
+  inset: 4%;
+  border: 2px solid transparent;
+  border-top-color: rgba(64, 145, 108, 0.75);
+  border-right-color: rgba(64, 145, 108, 0.2);
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+
+/* idle / muted: barely-there breathing only */
+.aaiji-voice[data-state="muted"] .aaiji-orb-core,
+.aaiji-voice[data-state="denied"] .aaiji-orb-core {
+  filter: saturate(0.45);
+  animation-duration: 8s;
+}
+
+/* thinking: calm pulse, one arc slowly orbiting */
+.aaiji-voice[data-state="thinking"] .aaiji-orb-core {
+  animation: aaijiThink 2.4s ease-in-out infinite;
+}
+.aaiji-voice[data-state="thinking"] .aaiji-orb-arc {
+  opacity: 1;
+  animation: aaijiOrbit 2.8s linear infinite;
+}
+
+/* speaking: rings ripple outward, core gently changes shape */
+.aaiji-voice[data-state="speaking"] .aaiji-orb-core {
+  animation: aaijiSpeak 1.5s ease-in-out infinite;
+}
+.aaiji-voice[data-state="speaking"] .aaiji-orb-ring {
+  border-color: rgba(64, 145, 108, 0.42);
+  animation: aaijiRipple 2.1s ease-out infinite;
+}
+.aaiji-voice[data-state="speaking"] .aaiji-orb-ring.r2 { animation-delay: 0.7s; }
+.aaiji-voice[data-state="speaking"] .aaiji-orb-ring.r3 { animation-delay: 1.4s; }
+
+.aaiji-voice-name {
+  font-family: var(--font-heading);
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #1b4332;
+}
+
+.aaiji-voice-sub {
+  font-size: 0.82rem;
+  color: #6b7770;
+  margin-top: 2px;
+}
+
+.aaiji-voice-status {
+  margin-top: 18px;
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: #2d6a4f;
+  min-height: 1.6em;
+}
+
+.aaiji-voice-heard {
+  margin-top: 8px;
+  max-width: 520px;
+  min-height: 2.8em;
+  font-size: 0.92rem;
+  color: #55635b;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.aaiji-voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px calc(30px + env(safe-area-inset-bottom));
+}
+
+.aaiji-voice-mic {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 0;
+  background: #1b4332;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(27, 67, 50, 0.28);
+  transition: background 200ms ease, transform 160ms ease;
+}
+
+.aaiji-voice-mic:hover { transform: translateY(-1px); }
+.aaiji-voice-mic.muted { background: #8a968f; box-shadow: none; }
+
+.aaiji-voice-end {
+  height: 48px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1px solid #e3c9c5;
+  background: #fff;
+  color: #b3372b;
+  font: inherit;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 200ms ease;
+}
+
+.aaiji-voice-end:hover { background: #fdf1ef; }
+
+.aaiji-voice-mic:focus-visible,
+.aaiji-voice-end:focus-visible {
+  outline: 2px solid #40916c;
+  outline-offset: 3px;
+}
+
+@keyframes aaijiVoiceIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes aaijiBreathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.09); } }
+@keyframes aaijiThink { 0%, 100% { transform: scale(0.96); } 50% { transform: scale(1.03); } }
+@keyframes aaijiOrbit { to { transform: rotate(360deg); } }
+@keyframes aaijiSpeak {
+  0%, 100% { border-radius: 50%; transform: scale(calc(1 + var(--level) * 0.1)); }
+  33% { border-radius: 47% 53% 52% 48% / 52% 47% 53% 48%; transform: scale(calc(1.035 + var(--level) * 0.1)); }
+  66% { border-radius: 53% 47% 48% 52% / 48% 53% 47% 52%; transform: scale(calc(0.99 + var(--level) * 0.1)); }
+}
+@keyframes aaijiRipple {
+  0% { transform: scale(0.9); opacity: 0.55; }
+  100% { transform: scale(1.75); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aaiji-voice,
+  .aaiji-orb-core,
+  .aaiji-orb-ring,
+  .aaiji-orb-arc {
+    animation: none !important;
+  }
+}

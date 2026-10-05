@@ -6,6 +6,10 @@ const SpeechRecognitionCtor =
 export const voiceModeSupported =
   Boolean(SpeechRecognitionCtor) && typeof window !== "undefined" && "speechSynthesis" in window;
 
+const SILENCE_MS = 5000;
+const MIN_CONFIDENCE = 0.3;
+const IS_PHONE = typeof navigator !== "undefined" && /Android|iPhone|iPad/i.test(navigator.userAgent);
+
 const STATUS_TEXT = {
   idle: "Ready when you are",
   listening: "Listening...",
@@ -59,7 +63,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
   stateRef.current = state;
   // Everything the loop touches outside React state, so callbacks never
   // act on a stale closure and cleanup can reach all of it.
-  const r = useRef({ closed: false, muted: false, denied: false, rec: null, transcript: "", timers: [], raf: 0, stream: null, ctx: null, analyser: null, level: 0 });
+  const r = useRef({ closed: false, muted: false, denied: false, rec: null, transcript: "", buffer: "", silence: 0, timers: [], raf: 0, stream: null, ctx: null, analyser: null, level: 0 });
 
   function setLevel(v) {
     r.current.level = v;
@@ -72,21 +76,62 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     return id;
   }
 
-  function listen() {
+  // The question is sent only after SILENCE_MS with no new recognised words.
+  // "Speech" here means the recogniser actually produced words -- mic volume
+  // is never used for this, so a fan, AC or keyboard can't start or reset the
+  // timer, and nothing is sent until the admin has really said something.
+  function armSilenceTimer() {
+    const s = r.current;
+    clearTimeout(s.silence);
+    s.silence = later(() => {
+      const text = `${s.buffer} ${s.transcript}`.trim();
+      s.buffer = "";
+      s.transcript = "";
+      if (s.rec) {
+        s.rec.onend = null;
+        s.rec.onresult = null;
+        try {
+          s.rec.stop();
+        } catch {
+          // already stopped
+        }
+      }
+      setLevel(0);
+      if (s.closed || s.muted) return;
+      if (text) ask(text);
+      else listen();
+    }, SILENCE_MS);
+  }
+
+  // `keep` continues the same question after the recogniser ended on its own
+  // (it gives up after a short pause, well before our 5 seconds).
+  function listen(keep = false) {
     const s = r.current;
     if (s.closed || s.muted) return;
+    if (!keep) {
+      clearTimeout(s.silence);
+      s.buffer = "";
+      setHeard("");
+    }
     s.transcript = "";
-    setHeard("");
     setState("listening");
     const rec = new SpeechRecognitionCtor();
     rec.lang = "en-IN";
     rec.interimResults = true;
-    rec.continuous = false;
+    rec.continuous = !IS_PHONE; // phones repeat results in continuous mode
     rec.onresult = (e) => {
       let t = "";
-      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      for (let i = 0; i < e.results.length; i++) {
+        const alt = e.results[i][0];
+        // A final result the recogniser itself barely believes is noise it
+        // tried to read as words. (0 means "no score given" -- keep those.)
+        if (e.results[i].isFinal && alt.confidence > 0 && alt.confidence < MIN_CONFIDENCE) continue;
+        t += alt.transcript;
+      }
+      if (t.trim() === s.transcript.trim()) return;
       s.transcript = t;
-      setHeard(t);
+      setHeard(`${s.buffer} ${t}`.trim());
+      if (t.trim()) armSilenceTimer();
     };
     rec.onerror = (e) => {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") s.denied = true;
@@ -101,19 +146,20 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
         return;
       }
       if (s.muted) {
+        clearTimeout(s.silence);
+        s.buffer = "";
         setState("muted");
         return;
       }
-      const text = s.transcript.trim();
+      s.buffer = `${s.buffer} ${s.transcript}`.trim();
       s.transcript = "";
-      if (text) ask(text);
-      else later(listen, 400); // silence -- keep the conversation open
+      later(() => listen(true), 250); // keep listening; the silence timer decides when to send
     };
     s.rec = rec;
     try {
       rec.start();
     } catch {
-      later(listen, 600);
+      later(() => listen(true), 600);
     }
   }
 
@@ -216,8 +262,17 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
       s.muted = true;
       setMuted(true);
       s.transcript = "";
-      if (stateRef.current === "listening") s.rec?.stop();
-      else if (stateRef.current === "idle") setState("muted");
+      s.buffer = "";
+      clearTimeout(s.silence);
+      setHeard("");
+      if (stateRef.current === "listening") {
+        try {
+          s.rec?.stop();
+        } catch {
+          // already stopped
+        }
+        setState("muted");
+      } else if (stateRef.current === "idle") setState("muted");
     }
   }
 
@@ -238,8 +293,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
 
     // Real microphone level for the listening animation. Optional: if the
     // browser refuses a second mic consumer, the orb just breathes instead.
-    const isPhone = /Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (!isPhone && navigator.mediaDevices?.getUserMedia) {
+    if (!IS_PHONE &&navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices
         .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
         .then((stream) => {
@@ -257,6 +311,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
           s.analyser = analyser;
           const buf = new Uint8Array(analyser.fftSize);
           let loudFrames = 0;
+          let noiseFloor = 0.02;
           const tick = () => {
             if (s.closed) return;
             // Barge-in: sustained loud speech while AAIJI is talking stops it.
@@ -287,7 +342,11 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
                 const d = (buf[i] - 128) / 128;
                 sum += d * d;
               }
-              const rms = Math.min(1, Math.sqrt(sum / buf.length) * 4);
+              // Subtract the room's steady hum (tracked as a slow-rising,
+              // fast-falling floor) so the orb moves for a voice, not a fan.
+              const raw = Math.sqrt(sum / buf.length);
+              noiseFloor = raw < noiseFloor ? raw : noiseFloor * 0.995 + raw * 0.005;
+              const rms = Math.min(1, Math.max(0, raw - noiseFloor * 1.8 - 0.01) * 5);
               setLevel(s.level * 0.75 + rms * 0.25);
             }
             s.raf = requestAnimationFrame(tick);
@@ -308,7 +367,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     document.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    later(listen, 700);
+    later(() => listen(), 700);
 
     return () => {
       s.closed = true;

@@ -293,7 +293,7 @@ export default function AskAaiji() {
             disabled={sending}
             aria-label="Ask AAIJI"
           />
-          {SpeechRecognitionCtor && (
+          {(voiceModeSupported || SpeechRecognitionCtor) && (
             <button
               type="button"
               className={`ai-chat-mic-btn aaiji-composer-mic${listening ? " listening" : ""}`}

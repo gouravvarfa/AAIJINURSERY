@@ -18,9 +18,11 @@ Access control, in order:
 import asyncio
 import json
 import logging
+import os
 import time
 from datetime import datetime, timedelta
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -30,7 +32,7 @@ from app.ai.providers import ProviderError, RateLimitedError, build_provider_cha
 from app.audit import record_admin_audit
 from app.database import get_db
 from app.deps import get_current_admin
-from app.models import AdminUser
+from app.models import AdminUser, Plant
 from app.permissions import check_permission
 
 logger = logging.getLogger(__name__)
@@ -378,3 +380,117 @@ async def admin_chat(payload: AdminChatIn, request: Request, admin: str = Depend
         },
     )
     return AdminChatOut(reply=reply, provider=provider_name)
+
+
+# --- Voice Mode speech-to-text -------------------------------------------
+# The browser records the admin's question and posts the raw audio here; it
+# is transcribed by Groq's hosted Whisper (same GROQ_API_KEY as the chat
+# models, separate free quota) and the text goes back to the page, which then
+# asks it through /chat like a typed question. The audio and transcript are
+# never stored or logged here.
+STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+STT_MODELS = [m.strip() for m in os.getenv("GROQ_STT_MODELS", "whisper-large-v3,whisper-large-v3-turbo").split(",") if m.strip()]
+STT_TIMEOUT = httpx.Timeout(25.0, connect=5.0)
+MAX_AUDIO_BYTES = 4 * 1024 * 1024
+STT_AUDIO_EXT = {"audio/webm": "webm", "video/webm": "webm", "audio/mp4": "m4a", "audio/ogg": "ogg", "audio/wav": "wav", "audio/mpeg": "mp3"}
+# Whisper thresholds: above NO_SPEECH it heard no voice at all; below
+# MIN_LOGPROB it heard a voice but is guessing at the words.
+STT_NO_SPEECH = 0.6
+STT_MIN_LOGPROB = -1.0
+# What Whisper tends to "hear" in silence or room noise.
+STT_HALLUCINATIONS = {
+    "", "you", "thank you", "thanks", "thank you very much", "thanks for watching", "thank you for watching",
+    "bye", "okay", "ok", "hmm", "uh", "um", "so", "the", "subtitles by the amara org community",
+}
+STT_RATE_LIMIT_MAX = 40
+_stt_rate_log: dict[str, list[float]] = {}
+
+
+def _check_stt_rate_limit(key: str) -> bool:
+    now = time.time()
+    hits = [t for t in _stt_rate_log.get(key, []) if t > now - RATE_LIMIT_WINDOW_SECONDS]
+    allowed = len(hits) < STT_RATE_LIMIT_MAX
+    if allowed:
+        hits.append(now)
+    _stt_rate_log[key] = hits
+    return allowed
+
+
+def _stt_vocabulary(db: Session) -> str:
+    """Whisper spells names it has been shown, so prime it with the words an
+    admin is likely to say: the house style (Roman-script Hinglish), business
+    terms and the nursery's own plant names. Whisper reads ~220 tokens of this."""
+    names = [n for (n,) in db.query(Plant.name).order_by(Plant.id).limit(40).all() if n]
+    return (
+        "AAIJI Nursery admin se baat ho rahi hai, Hinglish aur Indian English mein. "
+        "Aaj ke orders kitne aaye? Kal ki total sales kitni hai? Pending deliveries, invoice, payment, "
+        "outstanding, rupees, stock, customer, driver, labour, attendance. Plants: " + ", ".join(names)
+    )[:900]
+
+
+class TranscribeOut(BaseModel):
+    text: str
+    # "ok" -- use text. "unclear" -- a voice was heard but not reliably
+    # understood, ask to repeat. "silence" -- no speech in the audio at all.
+    status: str
+
+
+@router.post("/transcribe", response_model=TranscribeOut)
+async def admin_transcribe(request: Request, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+    admin_user = db.query(AdminUser).filter(AdminUser.username == admin).first()
+    if not admin_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if not check_permission(db, admin_user, "ai_assistant", "VIEW"):
+        raise HTTPException(status_code=403, detail="You don't have access to Ask AAIJI.")
+    if not _check_stt_rate_limit(admin):
+        raise HTTPException(status_code=429, detail="Too many voice messages -- please wait a few minutes and try again.")
+
+    content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if content_type not in STT_AUDIO_EXT:
+        raise HTTPException(status_code=415, detail="Unsupported audio format.")
+    if int(request.headers.get("content-length") or 0) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Recording is too long.")
+    audio = await request.body()
+    if len(audio) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Recording is too long.")
+    if len(audio) < 1000:
+        return TranscribeOut(text="", status="silence")
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Voice recognition is not configured.")
+
+    prompt = _stt_vocabulary(db)
+    data = None
+    for model in STT_MODELS:
+        try:
+            async with httpx.AsyncClient(timeout=STT_TIMEOUT) as client:
+                resp = await client.post(
+                    STT_URL,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    files={"file": (f"speech.{STT_AUDIO_EXT[content_type]}", audio, content_type)},
+                    data={"model": model, "response_format": "verbose_json", "temperature": "0", "prompt": prompt},
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                break
+            logger.warning("Voice transcription via %s failed: HTTP %s", model, resp.status_code)
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("Voice transcription via %s failed: %s", model, type(exc).__name__)
+    if data is None:
+        raise HTTPException(status_code=503, detail="Voice recognition is temporarily unavailable.")
+
+    segments = data.get("segments") or []
+    if not segments:
+        text = (data.get("text") or "").strip()
+        doubtful = False
+    else:
+        spoken = [s for s in segments if (s.get("no_speech_prob") or 0) < STT_NO_SPEECH]
+        kept = [s for s in spoken if (s.get("avg_logprob") or 0) > STT_MIN_LOGPROB]
+        doubtful = len(kept) < len(spoken)
+        text = " ".join((s.get("text") or "").strip() for s in kept).strip()
+    if text.lower().strip(" .!?,") in STT_HALLUCINATIONS:
+        text = ""
+    if text:
+        return TranscribeOut(text=text[:MAX_MESSAGE_LEN], status="ok")
+    return TranscribeOut(text="", status="unclear" if doubtful else "silence")

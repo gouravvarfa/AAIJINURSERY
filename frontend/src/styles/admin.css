@@ -1582,3 +1582,12 @@ table.admin-table .row-actions {
   border-color: #2d6a4f;
   color: #fff;
 }
+
+/* Plain statement of what the microphone is doing right now. */
+.aaiji-voice-micstate {
+  margin-top: 14px;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.aaiji-voice[data-state="listening"] .aaiji-voice-micstate { color: var(--color-primary); font-weight: 600; }

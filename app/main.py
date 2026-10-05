@@ -24,6 +24,8 @@ from app.ai.gateway import router as ai_gateway_router
 from app.ai.admin_gateway import router as admin_ai_gateway_router
 from app.communications import models as communications_models  # noqa: F401 -- registers tables with Base.metadata
 from app.communications.router import router as communications_router
+from app.communications.inbox_router import router as communications_inbox_router
+from app.communications.webhook import router as whatsapp_webhook_router
 from app.communications.seed import seed_communications_defaults
 from app.communications.worker import start_worker as start_whatsapp_worker
 from app.delivery.router import router as delivery_router
@@ -484,6 +486,8 @@ app.include_router(accounting_router, dependencies=[Depends(require_permission("
 app.include_router(labour_router, dependencies=[Depends(require_permission("labour", "VIEW"))])
 app.include_router(delivery_router, dependencies=[Depends(require_permission("delivery", "VIEW"))])
 app.include_router(communications_router, dependencies=[Depends(require_permission("communications", "VIEW"))])
+app.include_router(communications_inbox_router, dependencies=[Depends(require_permission("communications", "VIEW"))])
+app.include_router(whatsapp_webhook_router)  # public on purpose -- Meta has no admin login; it self-authenticates via X-Hub-Signature-256
 app.include_router(api_customer.router)
 app.include_router(ai_gateway_router)
 # No blanket require_permission() here (unlike accounting/labour/delivery/

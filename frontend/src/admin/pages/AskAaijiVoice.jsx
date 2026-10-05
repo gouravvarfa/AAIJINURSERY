@@ -218,7 +218,8 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     const s = r.current;
     if (!SpeechRecognitionCtor || IS_PHONE || s.captionOff || s.caption) return;
     const rec = new SpeechRecognitionCtor();
-    rec.lang = "en-IN";
+    // Hindi-first, matching the server transcription: Hindi comes out in Devanagari.
+    rec.lang = "hi-IN";
     rec.interimResults = true;
     rec.continuous = true;
     let base = s.captionText;
@@ -226,7 +227,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
       let t = "";
       for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
       s.captionText = `${base} ${t}`.trim();
-      if (s.started && s.mode === "listen") setHeard(s.captionText);
+      if (s.mode === "listen") setHeard(s.captionText);
     };
     rec.onerror = (e) => {
       if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") s.captionOff = true;

@@ -47,6 +47,12 @@ class ProviderError(Exception):
     provider in the chain, never lets it become a 500 to the customer."""
 
 
+class RateLimitedError(ProviderError):
+    """Quota/overload failures (HTTP 429, 503) -- transient by nature
+    (Groq's per-minute token window resets within seconds), so the gateway
+    may wait briefly and retry instead of giving up."""
+
+
 class AIProvider(ABC):
     name: str = "base"
 
@@ -102,8 +108,8 @@ class _OpenAICompatibleProvider(AIProvider):
 
         if resp.status_code == 401:
             raise ProviderError(f"{self.name}: invalid API key")
-        if resp.status_code == 429:
-            raise ProviderError(f"{self.name}: rate limited")
+        if resp.status_code in (429, 503):
+            raise RateLimitedError(f"{self.name}: rate limited (HTTP {resp.status_code})")
         if resp.status_code >= 400:
             raise ProviderError(f"{self.name}: HTTP {resp.status_code} - {resp.text[:200]}")
 
@@ -137,6 +143,23 @@ class GroqProvider(_OpenAICompatibleProvider):
     # Oct 2026) -- override via GROQ_MODEL without a code change if this one
     # is ever retired too. Current model list: GET /openai/v1/models.
     default_model = "openai/gpt-oss-20b"
+
+    def __init__(self, model: str | None = None):
+        # Each Groq model has its OWN free-tier quota (8k tokens/min, 1k
+        # requests/day as of Oct 2026), so build_provider_chain() creates one
+        # instance per model -- when one model's minute-window is used up the
+        # next is tried instantly, tripling free capacity.
+        self._model_override = model
+        if model:
+            self.name = f"groq:{model}"
+
+    def _model(self) -> str:
+        return self._model_override or super()._model()
+
+
+# Groq chat models (all support tool calling) tried in this order. Override
+# with GROQ_MODELS="a,b,c" if Groq retires/adds models.
+DEFAULT_GROQ_MODELS = ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
 
 
 class OpenRouterProvider(_OpenAICompatibleProvider):
@@ -258,8 +281,8 @@ class GeminiProvider(AIProvider):
 
         if resp.status_code == 401 or resp.status_code == 403:
             raise ProviderError("gemini: invalid API key")
-        if resp.status_code == 429:
-            raise ProviderError("gemini: rate limited")
+        if resp.status_code in (429, 503):
+            raise RateLimitedError(f"gemini: rate limited (HTTP {resp.status_code})")
         if resp.status_code >= 400:
             raise ProviderError(f"gemini: HTTP {resp.status_code} - {resp.text[:200]}")
 
@@ -285,4 +308,7 @@ def build_provider_chain() -> list[AIProvider]:
     them. Each entry always exists (so the list length/order never changes
     based on config), is_configured() is what actually gates whether the
     gateway attempts it."""
-    return [GroqProvider(), GeminiProvider(), OpenRouterProvider(), OpenAIProvider()]
+    env_models = [m.strip() for m in os.environ.get("GROQ_MODELS", "").split(",") if m.strip()]
+    primary = os.environ.get("GROQ_MODEL")
+    groq_models = env_models or ([primary] if primary else []) + [m for m in DEFAULT_GROQ_MODELS if m != primary]
+    return [GroqProvider(m) for m in groq_models] + [GeminiProvider(), OpenRouterProvider(), OpenAIProvider()]

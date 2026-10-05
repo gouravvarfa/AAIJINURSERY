@@ -15,6 +15,7 @@ Access control, in order:
    never decides what an admin is allowed to see, the backend does, per
    tool call, every time.
 """
+import asyncio
 import json
 import logging
 import time
@@ -25,7 +26,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.ai.admin_tools import ADMIN_TOOL_SCHEMAS, execute_admin_tool
-from app.ai.providers import ProviderError, build_provider_chain
+from app.ai.providers import ProviderError, RateLimitedError, build_provider_chain
 from app.audit import record_admin_audit
 from app.database import get_db
 from app.deps import get_current_admin
@@ -33,6 +34,14 @@ from app.models import AdminUser
 from app.permissions import check_permission
 
 logger = logging.getLogger(__name__)
+# Make provider failures visible in the service journal (no app-wide logging
+# config exists, so without this the fallback warnings were invisible).
+if not logger.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(levelname)s ask_aaiji: %(message)s"))
+    logger.addHandler(_h)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
 router = APIRouter(prefix="/api/admin/ai")
 
 SYSTEM_PROMPT = (
@@ -90,7 +99,64 @@ SYSTEM_PROMPT = (
 
 MAX_TOOL_ROUNDS = 4
 MAX_MESSAGE_LEN = 1000
-MAX_HISTORY_MESSAGES = 16
+MAX_HISTORY_MESSAGES = 10
+MAX_HISTORY_CHARS = 1500
+# All providers rate-limited at once is usually a per-minute window that
+# resets within seconds -- wait this long and run the chain once more.
+RATE_LIMIT_RETRY_WAIT_SECONDS = 4
+
+# ---------- Tool routing ----------
+# Sending all ~40 tool schemas costs ~5k tokens per LLM call, and one
+# question takes 2-3 calls -- that alone blew through Groq's free 8k
+# tokens/minute on a single question. So each question only gets the tool
+# groups its words point to (plus a tiny core set). If nothing matches,
+# every tool is sent, i.e. the old behaviour -- routing can only narrow,
+# never leave the model without a tool it needs on an unrecognised question.
+TOOL_GROUPS = {
+    "sales": ["get_sales_summary", "get_business_summary", "get_customers_who_purchased", "get_top_selling_plants", "get_customer_counts"],
+    "orders": ["get_pending_orders", "get_order_details", "get_order_timeline", "get_customers_who_purchased"],
+    "customers": ["search_customer", "get_customer_purchase_history", "get_customer_outstanding", "get_customer_invoices",
+                  "get_customer_timeline", "get_customer_activity", "get_customer_counts", "get_inquiries"],
+    "accounting": ["get_payment_history", "get_audit_history", "get_voided_invoices", "get_price_overrides", "get_billing_audit",
+                   "get_expenses", "get_purchase_summary", "get_customer_outstanding", "get_customer_invoices"],
+    "inventory": ["get_low_stock_plants", "get_inventory_history", "get_stock_adjustments", "get_top_selling_plants"],
+    "delivery": ["get_pending_deliveries", "get_deliveries", "get_delivery_timeline", "get_driver_details"],
+    "labour": ["get_employee_details", "list_employees", "get_attendance_summary", "get_payroll_summary", "get_worker_advances",
+               "get_employee_activity_timeline"],
+    "comms": ["get_whatsapp_activity"],
+    "website": ["get_website_content_summary", "get_inquiries"],
+    "security": ["get_admin_risk_summary", "get_failed_logins", "get_admin_activity", "get_employee_activity_timeline",
+                 "get_voided_invoices", "get_price_overrides", "get_stock_adjustments", "get_billing_audit"],
+}
+TOOL_KEYWORDS = {
+    "sales": ["sale", "sell", "sold", "bik", "business", "revenue", "kamai", "income", "online", "offline", "top", "kharid",
+              "khareed", "bought", "buy"],
+    "orders": ["order", "pending"],
+    "customers": ["customer", "grahak", "client", "kharid", "khareed", "bought", "buy", "liya", "history", "timeline",
+                  "outstanding", "baaki", "baki", "udhar", "party", "parties", "enquir", "inquir"],
+    "accounting": ["payment", "paisa", "paise", "pay", "invoice", "bill", "void", "expense", "kharch", "purchase", "supplier",
+                   "vendor", "audit", "mismatch", "match", "price", "discount", "upi", "cash", "refund", "approv", "account", "gst"],
+    "inventory": ["stock", "inventory", "plant", "paudh", "adjust", "low", "maal"],
+    "delivery": ["deliver", "driver", "vehicle", "gaadi", "gadi", "trip", "assign", "dispatch", "fuel", "petrol"],
+    "labour": ["employee", "staff", "worker", "labour", "labor", "mazdoor", "attendance", "hazri", "haziri", "payroll",
+               "salary", "tankhwah", "advance", "karmchari", "karmachari"],
+    "comms": ["whatsapp", "message", "sms", "notification"],
+    "website": ["website", "blog", "faq", "gallery", "testimonial", "service", "content", "enquir", "inquir", "review"],
+    "security": ["gadbad", "gadbadi", "suspicious", "fraud", "risk", "login", "security", "unusual", "kisne", "who did",
+                 "kya kiya", "kya kya", "activity", "chori", "galat"],
+}
+CORE_TOOLS = ["get_business_summary", "search_customer"]
+
+
+def _select_tool_schemas(texts: list[str]) -> list[dict]:
+    blob = " ".join(texts).lower()
+    groups = [g for g, words in TOOL_KEYWORDS.items() if any(w in blob for w in words)]
+    if not groups:
+        return ADMIN_TOOL_SCHEMAS
+    wanted = set(CORE_TOOLS)
+    for g in groups:
+        wanted.update(TOOL_GROUPS[g])
+    return [t for t in ADMIN_TOOL_SCHEMAS if t["function"]["name"] in wanted]
 
 # Separate rate-limit bucket from the customer gateway's (keyed by admin
 # username, not IP) -- protects the same free-tier Groq/Gemini/OpenRouter
@@ -131,19 +197,28 @@ class AdminChatOut(BaseModel):
 FALLBACK_REPLY = "AI service is temporarily unavailable. Please try again."
 
 
-async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUser) -> tuple[str, str, list[str]]:
+async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUser, tool_schemas: list[dict] | None = None) -> tuple[str, str, list[str]]:
     """Same shape as the customer gateway's _run_tool_loop. Returns
     (reply, provider_name, tool_names_called) -- the tool list is for the
     usage-log entry, not shown to the admin."""
+    tool_schemas = tool_schemas or ADMIN_TOOL_SCHEMAS
     tools_called: list[str] = []
     last_error = None
-    for provider in build_provider_chain():
-        if not provider.is_configured():
+    providers = [p for p in build_provider_chain() if p.is_configured()]
+    # Second pass only if every provider failed purely on rate limits.
+    attempts = providers + [None] + providers
+    all_rate_limited = True
+    for provider in attempts:
+        if provider is None:
+            if not all_rate_limited or not providers:
+                break
+            logger.warning("All providers rate-limited; waiting %ss and retrying once", RATE_LIMIT_RETRY_WAIT_SECONDS)
+            await asyncio.sleep(RATE_LIMIT_RETRY_WAIT_SECONDS)
             continue
         local_messages = list(messages)
         try:
             for _ in range(MAX_TOOL_ROUNDS):
-                response = await provider.chat(local_messages, ADMIN_TOOL_SCHEMAS)
+                response = await provider.chat(local_messages, tool_schemas)
                 if not response.tool_calls:
                     if response.content:
                         return response.content, provider.name, tools_called
@@ -180,6 +255,8 @@ async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUs
         except ProviderError as exc:
             logger.warning("Admin AI provider %s failed, falling back: %s", provider.name, exc)
             last_error = exc
+            if not isinstance(exc, RateLimitedError):
+                all_rate_limited = False
             continue
     if last_error:
         logger.error("All configured AI providers failed for Ask AAIJI: %s", last_error)
@@ -200,11 +277,17 @@ async def admin_chat(payload: AdminChatIn, request: Request, admin: str = Depend
     trimmed_history = payload.history[-MAX_HISTORY_MESSAGES:]
     today_ist = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%A, %Y-%m-%d %H:%M")
     messages = [{"role": "system", "content": f"{SYSTEM_PROMPT} Current date/time (IST): {today_ist}."}]
-    messages += [{"role": m.role, "content": m.content} for m in trimmed_history if m.role in ("user", "assistant")]
+    messages += [
+        {"role": m.role, "content": m.content[:MAX_HISTORY_CHARS]}
+        for m in trimmed_history
+        if m.role in ("user", "assistant")
+    ]
     messages.append({"role": "user", "content": payload.message})
 
     started = time.time()
-    reply, provider_name, tools_called = await _run_admin_tool_loop(messages, db, admin_user)
+    recent_user_turns = [m.content for m in trimmed_history if m.role == "user"][-2:]
+    tool_schemas = _select_tool_schemas([payload.message, *recent_user_turns])
+    reply, provider_name, tools_called = await _run_admin_tool_loop(messages, db, admin_user, tool_schemas)
     duration_ms = int((time.time() - started) * 1000)
 
     record_admin_audit(

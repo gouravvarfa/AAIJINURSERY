@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
-import AskAaijiVoice, { voiceModeSupported } from "./AskAaijiVoice";
+import AskAaijiVoice, { buildUtterance, voiceModeSupported } from "./AskAaijiVoice";
 
 const SUGGESTED_QUESTIONS = [
   "Today's sales",
@@ -51,15 +51,7 @@ const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
 function speak(text) {
   if (!canSpeak || !text) return;
   window.speechSynthesis.cancel();
-  const utter = new SpeechSynthesisUtterance(text.replace(/₹\s?/g, "rupees ").replace(/--/g, ", "));
-  const voices = window.speechSynthesis.getVoices();
-  const voice =
-    voices.find((v) => v.lang === "hi-IN") || voices.find((v) => v.lang === "en-IN") || voices.find((v) => v.lang.startsWith("en"));
-  if (voice) {
-    utter.voice = voice;
-    utter.lang = voice.lang;
-  }
-  window.speechSynthesis.speak(utter);
+  window.speechSynthesis.speak(buildUtterance(text));
 }
 
 function readSpeakPref() {
@@ -164,7 +156,7 @@ export default function AskAaiji() {
     setSending(true);
     let errorResult = null;
     try {
-      const data = await api.post("/admin/ai/chat", { message: trimmed, history });
+      const data = await api.post("/admin/ai/chat", { message: trimmed, history, voice: viaVoice || !speakIt });
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply, provider: data.provider }]);
       if (speakIt && (viaVoice || speakRepliesRef.current)) speak(data.reply);
       setStatus(data.provider !== "none" ? "online" : "offline");

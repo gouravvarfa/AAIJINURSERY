@@ -232,6 +232,24 @@ def _check_rate_limit(key: str) -> bool:
     return True
 
 
+# Appended only for Voice Mode. Changes how the answer is worded, never what
+# data it may contain -- every rule in SYSTEM_PROMPT still applies.
+VOICE_STYLE_PROMPT = (
+    " VOICE MODE: this answer will be spoken aloud to an Indian business owner, so write it the way a "
+    "professional Indian office assistant would say it. Reply in the user's own style: Hindi or Hinglish "
+    "question -> natural Hinglish in Latin script (e.g. 'Aaj total 24 orders aaye hain.'); English question -> "
+    "simple, friendly Indian English. Use short conversational sentences, at most 3 or 4, leading with the "
+    "direct answer. No lists, tables, headings, symbols, IDs or long number dumps -- give the key figures and "
+    "offer more detail if they want it. Never sound formal, textbook-like or robotic. "
+    "The user's message is a speech-to-text transcript of Indian English / Hinglish and may contain mis-heard "
+    "words. Use the conversation so far and the names the tools return (customers, plants, drivers, staff) to "
+    "work out what was obviously meant -- e.g. a near-miss spelling of a real customer or plant name -- and "
+    "answer that, mentioning the name you understood. But if a name, number, date or amount that the answer "
+    "depends on is genuinely unclear or matches nothing, do NOT guess: ask the user in one short sentence to "
+    "say it again."
+)
+
+
 class AdminChatMessageIn(BaseModel):
     role: str
     content: str = Field(max_length=MAX_MESSAGE_LEN)
@@ -240,6 +258,8 @@ class AdminChatMessageIn(BaseModel):
 class AdminChatIn(BaseModel):
     message: str = Field(max_length=MAX_MESSAGE_LEN)
     history: list[AdminChatMessageIn] = []
+    # True when the answer will be read aloud (Voice Mode) -- style only.
+    voice: bool = False
 
 
 class AdminChatOut(BaseModel):
@@ -329,7 +349,10 @@ async def admin_chat(payload: AdminChatIn, request: Request, admin: str = Depend
 
     trimmed_history = payload.history[-MAX_HISTORY_MESSAGES:]
     today_ist = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%A, %Y-%m-%d %H:%M")
-    messages = [{"role": "system", "content": f"{SYSTEM_PROMPT} Current date/time (IST): {today_ist}."}]
+    system_prompt = f"{SYSTEM_PROMPT} Current date/time (IST): {today_ist}."
+    if payload.voice:
+        system_prompt += VOICE_STYLE_PROMPT
+    messages = [{"role": "system", "content": system_prompt}]
     messages += [
         {"role": m.role, "content": m.content[:MAX_HISTORY_CHARS]}
         for m in trimmed_history

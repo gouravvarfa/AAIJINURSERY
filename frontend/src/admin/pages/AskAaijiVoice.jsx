@@ -10,6 +10,50 @@ const SILENCE_MS = 5000;
 const MIN_CONFIDENCE = 0.3;
 const IS_PHONE = typeof navigator !== "undefined" && /Android|iPhone|iPad/i.test(navigator.userAgent);
 
+// Picks the most natural *Indian* voice this device has. Order matters:
+// neural/"Natural" Indian voices first, then any Indian voice, and a generic
+// (Western-accented) English voice only when the device has nothing Indian.
+// Hinglish is read by a Hindi voice -- an English voice mangles Hindi words.
+function pickIndianVoice(text) {
+  const voices = window.speechSynthesis.getVoices();
+  const hinglish = /[ऀ-ॿ]/.test(text) || HINGLISH_WORDS.test(text);
+  const order = hinglish ? ["hi-IN", "en-IN"] : ["en-IN", "hi-IN"];
+  const norm = (v) => v.lang.replace("_", "-");
+  for (const lang of order) {
+    const pool = voices.filter((v) => norm(v) === lang);
+    const best = pool.find((v) => /natural|neural|online/i.test(v.name)) || pool.find((v) => /google/i.test(v.name)) || pool[0];
+    if (best) return best;
+  }
+  return voices.find((v) => /india/i.test(v.name)) || voices.find((v) => v.lang.startsWith("en")) || null;
+}
+
+const HINGLISH_WORDS =
+  /\b(hai|hain|nahi|nhi|kya|aaj|kal|kitna|kitne|kitni|ka|ki|ke|ko|mein|se|aur|tha|thi|hua|hui|raha|rahi|rahe|kiya|abhi|sab|koi|yeh|woh|aapka|aapke|baare|liye)\b/i;
+
+// One place for how AAIJI sounds: Indian voice, unhurried pace, and text
+// reshaped so it is said the way a person would say it.
+export function buildUtterance(text) {
+  const spoken = text
+    .replace(/₹\s?([\d,]+(?:\.\d+)?)/g, "$1 rupees")
+    .replace(/₹/g, "rupees ")
+    .replace(/Rs\.?\s?([\d,]+(?:\.\d+)?)/g, "$1 rupees")
+    .replace(/--|\s[-–—]\s/g, ", ")
+    .replace(/[*_#`]/g, "")
+    .replace(/\s*\n+\s*/g, ". ")
+    .replace(/\.\s*\./g, ".");
+  const utter = new SpeechSynthesisUtterance(spoken);
+  const voice = pickIndianVoice(text);
+  if (voice) {
+    utter.voice = voice;
+    utter.lang = voice.lang.replace("_", "-");
+  } else {
+    utter.lang = "en-IN";
+  }
+  utter.rate = 0.94;
+  utter.pitch = 1;
+  return utter;
+}
+
 const STATUS_TEXT = {
   idle: "Ready when you are",
   listening: "Listening...",
@@ -118,6 +162,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     const rec = new SpeechRecognitionCtor();
     rec.lang = "en-IN";
     rec.interimResults = true;
+    rec.maxAlternatives = 1;
     rec.continuous = !IS_PHONE; // phones repeat results in continuous mode
     rec.onresult = (e) => {
       let t = "";
@@ -180,14 +225,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     const s = r.current;
     setState("speaking");
     setHeard("");
-    const utter = new SpeechSynthesisUtterance(text.replace(/₹\s?/g, "rupees ").replace(/--/g, ", "));
-    const voices = window.speechSynthesis.getVoices();
-    const voice =
-      voices.find((v) => v.lang === "hi-IN") || voices.find((v) => v.lang === "en-IN") || voices.find((v) => v.lang.startsWith("en"));
-    if (voice) {
-      utter.voice = voice;
-      utter.lang = voice.lang;
-    }
+    const utter = buildUtterance(text);
     let finished = false;
     const done = () => {
       if (finished || s.closed) return;

@@ -226,11 +226,6 @@ export default function AskAaiji() {
               {status === "online" ? "Online" : "Temporarily unavailable"}
             </span>
           )}
-          {voiceModeSupported && (
-            <button type="button" className="btn btn-sm btn-primary" onClick={() => setVoiceOpen(true)}>
-              Start Voice
-            </button>
-          )}
           {canSpeak && (
             <button
               type="button"
@@ -309,11 +304,11 @@ export default function AskAaiji() {
           {SpeechRecognitionCtor && (
             <button
               type="button"
-              className={`ai-chat-mic-btn${listening ? " listening" : ""}`}
-              onClick={toggleListening}
+              className={`ai-chat-mic-btn aaiji-composer-mic${listening ? " listening" : ""}`}
+              onClick={voiceModeSupported ? () => setVoiceOpen(true) : toggleListening}
               disabled={sending}
-              aria-label={listening ? "Stop voice input" : "Speak your question"}
-              title={listening ? "Listening... tap to stop" : "Speak"}
+              aria-label={voiceModeSupported ? "Start Voice" : listening ? "Stop voice input" : "Speak your question"}
+              title={voiceModeSupported ? "Start Voice" : listening ? "Listening... tap to stop" : "Speak"}
             >
               <MicIcon />
             </button>

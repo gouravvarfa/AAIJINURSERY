@@ -12,7 +12,16 @@ const STATUS_TEXT = {
   thinking: "Thinking...",
   speaking: "AAIJI is speaking...",
   muted: "Microphone muted",
-  denied: "Microphone permission is needed",
+  denied: "Microphone access is required",
+};
+
+const SUB_TEXT = {
+  idle: "",
+  listening: "Speak now",
+  thinking: "Processing your request",
+  speaking: "You can interrupt anytime",
+  muted: "Unmute to continue",
+  denied: "Allow microphone access to use AAIJI Voice.",
 };
 
 function MicIcon({ muted }) {
@@ -155,6 +164,37 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     window.speechSynthesis.speak(utter);
   }
 
+  // Cut AAIJI off mid-sentence and go straight back to listening.
+  function interrupt() {
+    const s = r.current;
+    if (stateRef.current !== "speaking") return;
+    s.timers.forEach(clearTimeout);
+    s.timers = [];
+    window.speechSynthesis.cancel();
+    setLevel(0);
+    if (s.muted) setState("muted");
+    else listen();
+  }
+
+  function tryAgain() {
+    const s = r.current;
+    s.denied = false;
+    s.muted = false;
+    setMuted(false);
+    navigator.mediaDevices
+      ?.getUserMedia({ audio: true })
+      .then((stream) => {
+        stream.getTracks().forEach((t) => t.stop());
+        listen();
+      })
+      .catch(() => {
+        s.denied = true;
+        s.muted = true;
+        setMuted(true);
+        setState("denied");
+      });
+  }
+
   function toggleMute() {
     const s = r.current;
     if (s.muted) {
@@ -181,7 +221,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     const isPhone = /Android|iPhone|iPad/i.test(navigator.userAgent);
     if (!isPhone && navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices
-        .getUserMedia({ audio: true })
+        .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
         .then((stream) => {
           if (s.closed) {
             stream.getTracks().forEach((t) => t.stop());
@@ -196,8 +236,25 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
           s.ctx = ctx;
           s.analyser = analyser;
           const buf = new Uint8Array(analyser.fftSize);
+          let loudFrames = 0;
           const tick = () => {
             if (s.closed) return;
+            // Barge-in: sustained loud speech while AAIJI is talking stops it.
+            // Needs a clear voice well above speaker bleed, so it can miss
+            // quiet interruptions -- tapping the orb always works.
+            if (stateRef.current === "speaking" && !s.muted) {
+              analyser.getByteTimeDomainData(buf);
+              let sum = 0;
+              for (let i = 0; i < buf.length; i++) {
+                const d = (buf[i] - 128) / 128;
+                sum += d * d;
+              }
+              loudFrames = Math.sqrt(sum / buf.length) > 0.12 ? loudFrames + 1 : 0;
+              if (loudFrames > 24) {
+                loudFrames = 0;
+                interrupt();
+              }
+            }
             if (stateRef.current === "listening") {
               analyser.getByteTimeDomainData(buf);
               let sum = 0;
@@ -212,7 +269,14 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
           };
           s.raf = requestAnimationFrame(tick);
         })
-        .catch(() => {});
+        .catch((e) => {
+          if (e && (e.name === "NotAllowedError" || e.name === "SecurityError")) {
+            s.denied = true;
+            s.muted = true;
+            setMuted(true);
+            setState("denied");
+          }
+        });
     }
 
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -245,8 +309,11 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
 
   return (
     <div className="aaiji-voice" data-state={state} role="dialog" aria-modal="true" aria-label="AAIJI voice conversation">
+      <button type="button" className="aaiji-voice-close" onClick={onClose} aria-label="Exit voice mode" title="Exit voice mode">
+        <EndIcon />
+      </button>
       <div className="aaiji-voice-stage">
-        <div className="aaiji-orb" ref={orbRef} aria-hidden="true">
+        <div className="aaiji-orb" ref={orbRef} onClick={interrupt} aria-hidden="true">
           <span className="aaiji-orb-ring r3" />
           <span className="aaiji-orb-ring r2" />
           <span className="aaiji-orb-ring r1" />
@@ -258,6 +325,12 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
         <div className="aaiji-voice-status" aria-live="polite">
           {STATUS_TEXT[state]}
         </div>
+        <div className="aaiji-voice-secondary">{SUB_TEXT[state]}</div>
+        {state === "denied" && (
+          <button type="button" className="aaiji-voice-retry" onClick={tryAgain}>
+            Try Again
+          </button>
+        )}
         <div className="aaiji-voice-heard">{state === "listening" ? heard : ""}</div>
       </div>
 

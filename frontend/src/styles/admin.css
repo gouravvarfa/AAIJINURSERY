@@ -1518,3 +1518,67 @@ table.admin-table .row-actions {
     animation: none !important;
   }
 }
+
+/* Voice Mode additions: close, secondary text, retry, composer mic */
+.aaiji-voice-close {
+  position: absolute;
+  top: calc(18px + env(safe-area-inset-top));
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid #dfe7e1;
+  background: #fff;
+  color: #55635b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.aaiji-voice-close:hover { background: #f2f6f3; }
+.aaiji-voice-close:focus-visible { outline: 2px solid #40916c; outline-offset: 2px; }
+
+.aaiji-voice-secondary {
+  min-height: 1.3em;
+  margin-top: 2px;
+  font-size: 0.84rem;
+  color: #7d8a83;
+}
+
+.aaiji-voice[data-state="speaking"] .aaiji-orb { cursor: pointer; }
+
+.aaiji-voice[data-state="denied"] .aaiji-orb-core {
+  background: radial-gradient(circle at 34% 28%, #f0a39b 0%, #c4493d 55%, #7e241c 100%);
+  box-shadow: 0 0 34px rgba(196, 73, 61, 0.28);
+  filter: none;
+}
+
+.aaiji-voice[data-state="denied"] .aaiji-voice-status { color: #b3372b; }
+
+.aaiji-voice-retry {
+  margin-top: 14px;
+  height: 42px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: #1b4332;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.aaiji-voice-retry:focus-visible { outline: 2px solid #40916c; outline-offset: 3px; }
+
+.aaiji-composer-mic {
+  background: #1b4332;
+  border-color: #1b4332;
+  color: #fff;
+}
+
+.aaiji-composer-mic:hover:not(:disabled) {
+  background: #2d6a4f;
+  border-color: #2d6a4f;
+  color: #fff;
+}

@@ -420,7 +420,11 @@ def _check_stt_rate_limit(key: str) -> bool:
 # as German or Turkish, and a vocabulary prompt made Whisper invent plant
 # names on number-only clips. Hindi/Hinglish still comes back in Latin
 # script under this setting, which the chat model reads well.
-STT_LANGUAGE = "en"
+STT_LANGUAGE = os.getenv("GROQ_STT_LANGUAGE", "hi")
+# Test-only: lets an admin try another language (?lang=hi) without changing
+# production. Ignored unless STT_ALLOW_LANG_OVERRIDE=1 is set on the server.
+STT_ALLOW_LANG_OVERRIDE = os.getenv("STT_ALLOW_LANG_OVERRIDE") == "1"
+STT_LANGS = {"en", "hi"}
 
 
 class TranscribeOut(BaseModel):
@@ -431,7 +435,7 @@ class TranscribeOut(BaseModel):
 
 
 @router.post("/transcribe", response_model=TranscribeOut)
-async def admin_transcribe(request: Request, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+async def admin_transcribe(request: Request, lang: str | None = None, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
     admin_user = db.query(AdminUser).filter(AdminUser.username == admin).first()
     if not admin_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -455,6 +459,7 @@ async def admin_transcribe(request: Request, admin: str = Depends(get_current_ad
     if not api_key:
         raise HTTPException(status_code=503, detail="Voice recognition is not configured.")
 
+    language = lang if (STT_ALLOW_LANG_OVERRIDE and lang in STT_LANGS) else STT_LANGUAGE
     data = None
     for model in STT_MODELS:
         try:
@@ -463,7 +468,7 @@ async def admin_transcribe(request: Request, admin: str = Depends(get_current_ad
                     STT_URL,
                     headers={"Authorization": f"Bearer {api_key}"},
                     files={"file": (f"speech.{STT_AUDIO_EXT[content_type]}", audio, content_type)},
-                    data={"model": model, "response_format": "verbose_json", "temperature": "0", "language": STT_LANGUAGE},
+                    data={"model": model, "response_format": "verbose_json", "temperature": "0", "language": language},
                 )
             if resp.status_code == 200:
                 data = resp.json()

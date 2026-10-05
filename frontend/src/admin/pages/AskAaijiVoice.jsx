@@ -51,6 +51,16 @@ function pickIndianVoice(text) {
 const HINGLISH_WORDS =
   /\b(hai|hain|nahi|nhi|kya|aaj|kal|kitna|kitne|kitni|ka|ki|ke|ko|mein|se|aur|tha|thi|hua|hui|raha|rahi|rahe|kiya|abhi|sab|koi|yeh|woh|aapka|aapke|baare|liye)\b/i;
 
+// Test-only switch: localStorage askAaijiSttLang = "hi" asks the server to
+// transcribe in Hindi. Production never sets it, so it stays English.
+function sttLangQuery() {
+  try {
+    return localStorage.getItem("askAaijiSttLang") === "hi" ? "?lang=hi" : "";
+  } catch {
+    return "";
+  }
+}
+
 // One place for how AAIJI sounds: Indian voice, unhurried pace, and text
 // reshaped so it is said the way a person would say it.
 export function buildUtterance(text) {
@@ -340,7 +350,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     let status = "failed";
     if (audio) {
       try {
-        const res = await fetch("/api/admin/ai/transcribe", {
+        const res = await fetch(`/api/admin/ai/transcribe${sttLangQuery()}`, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": (audio.type || "audio/webm").split(";")[0] },
@@ -587,7 +597,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
             Try Again
           </button>
         )}
-        <div className="aaiji-voice-heard">{heard && (state === "listening" || state === "thinking") ? `You: “${heard}”` : ""}</div>
+        <div className="aaiji-voice-heard">{heard && ["listening", "thinking", "speaking"].includes(state) ? `“${heard}”` : ""}</div>
         <div className="aaiji-voice-micstate">{MIC_TEXT[state]}</div>
       </div>
 

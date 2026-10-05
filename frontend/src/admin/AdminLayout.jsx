@@ -87,6 +87,7 @@ const DELIVERY_NAV = [
 
 const COMMUNICATIONS_NAV = [
   { to: "/admin/communications", label: "Dashboard", end: true, module: "communications" },
+  { to: "/admin/communications/inbox", label: "Inbox", module: "communications" },
   { to: "/admin/communications/send", label: "Send Message", module: "communications" },
   { to: "/admin/communications/templates", label: "Templates", module: "communications" },
   { to: "/admin/communications/event-map", label: "Event Mapping", module: "communications" },

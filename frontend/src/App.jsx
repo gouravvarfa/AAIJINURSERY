@@ -82,6 +82,7 @@ import CommunicationsSendMessage from "./admin/pages/communications/SendMessage"
 import CommunicationsTemplates from "./admin/pages/communications/Templates";
 import CommunicationsEventMap from "./admin/pages/communications/EventTemplateMap";
 import CommunicationsHistory from "./admin/pages/communications/MessageHistory";
+import CommunicationsInbox from "./admin/pages/communications/Inbox";
 import CommunicationsSettings from "./admin/pages/communications/Settings";
 import LabourDashboard from "./admin/pages/labour/Dashboard";
 import LabourEmployees from "./admin/pages/labour/Employees";
@@ -206,6 +207,7 @@ export default function App() {
           <Route path="communications/templates" element={<ErrorBoundary moduleName="Communications"><CommunicationsTemplates /></ErrorBoundary>} />
           <Route path="communications/event-map" element={<ErrorBoundary moduleName="Communications"><CommunicationsEventMap /></ErrorBoundary>} />
           <Route path="communications/history" element={<ErrorBoundary moduleName="Communications"><CommunicationsHistory /></ErrorBoundary>} />
+          <Route path="communications/inbox" element={<ErrorBoundary moduleName="Communications"><CommunicationsInbox /></ErrorBoundary>} />
           <Route path="communications/settings" element={<ErrorBoundary moduleName="Communications"><CommunicationsSettings /></ErrorBoundary>} />
           <Route path="labour" element={<ErrorBoundary moduleName="Labour"><LabourDashboard /></ErrorBoundary>} />
           <Route path="labour/employees" element={<ErrorBoundary moduleName="Labour"><LabourEmployees /></ErrorBoundary>} />

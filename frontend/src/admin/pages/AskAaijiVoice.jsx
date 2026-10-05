@@ -75,7 +75,6 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
   function listen() {
     const s = r.current;
     if (s.closed || s.muted) return;
-    window.speechSynthesis.cancel();
     s.transcript = "";
     setHeard("");
     setState("listening");
@@ -147,6 +146,7 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     const done = () => {
       if (finished || s.closed) return;
       finished = true;
+      window.speechSynthesis.cancel();
       setLevel(0);
       if (s.muted) setState("muted");
       else listen();
@@ -161,7 +161,17 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     };
     // Some browsers never fire onend for long text; don't get stuck.
     later(done, Math.min(90000, 4000 + text.length * 95));
-    window.speechSynthesis.speak(utter);
+    // Held on the ref so the browser can't garbage-collect it mid-speech, and
+    // spoken a beat after any cancel() -- Chrome drops a speak() that follows
+    // a cancel() too closely, and stays silent if the engine was left paused.
+    s.utter = utter;
+    s.spokeAt = Date.now();
+    window.speechSynthesis.cancel();
+    later(() => {
+      if (s.closed || finished) return;
+      window.speechSynthesis.resume();
+      window.speechSynthesis.speak(utter);
+    }, 120);
   }
 
   // Cut AAIJI off mid-sentence and go straight back to listening.
@@ -215,6 +225,16 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
     const s = r.current;
     s.closed = false;
     endRef.current?.focus();
+    // Unlock speech while the tap that opened this is still fresh: phones
+    // refuse a first speak() that arrives seconds later, after the answer.
+    try {
+      const prime = new SpeechSynthesisUtterance(" ");
+      prime.volume = 0;
+      window.speechSynthesis.speak(prime);
+      window.speechSynthesis.getVoices();
+    } catch {
+      // speech just stays locked; the text answer still shows in the chat
+    }
 
     // Real microphone level for the listening animation. Optional: if the
     // browser refuses a second mic consumer, the orb just breathes instead.
@@ -242,18 +262,23 @@ export default function AskAaijiVoice({ onAsk, onClose }) {
             // Barge-in: sustained loud speech while AAIJI is talking stops it.
             // Needs a clear voice well above speaker bleed, so it can miss
             // quiet interruptions -- tapping the orb always works.
-            if (stateRef.current === "speaking" && !s.muted) {
+            // Only once AAIJI has been audible for a moment, and only on a very
+            // loud voice: its own speaker output reaches the mic too, and a
+            // lower bar made it cut itself off before a word was heard.
+            if (stateRef.current === "speaking" && !s.muted && Date.now() - s.spokeAt > 1500) {
               analyser.getByteTimeDomainData(buf);
               let sum = 0;
               for (let i = 0; i < buf.length; i++) {
                 const d = (buf[i] - 128) / 128;
                 sum += d * d;
               }
-              loudFrames = Math.sqrt(sum / buf.length) > 0.12 ? loudFrames + 1 : 0;
-              if (loudFrames > 24) {
+              loudFrames = Math.sqrt(sum / buf.length) > 0.3 ? loudFrames + 1 : 0;
+              if (loudFrames > 40) {
                 loudFrames = 0;
                 interrupt();
               }
+            } else {
+              loudFrames = 0;
             }
             if (stateRef.current === "listening") {
               analyser.getByteTimeDomainData(buf);

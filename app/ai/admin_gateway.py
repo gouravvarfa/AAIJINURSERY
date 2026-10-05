@@ -32,7 +32,7 @@ from app.ai.providers import ProviderError, RateLimitedError, build_provider_cha
 from app.audit import record_admin_audit
 from app.database import get_db
 from app.deps import get_current_admin
-from app.models import AdminUser, Plant
+from app.models import AdminUser
 from app.permissions import check_permission
 
 logger = logging.getLogger(__name__)
@@ -416,16 +416,11 @@ def _check_stt_rate_limit(key: str) -> bool:
     return allowed
 
 
-def _stt_vocabulary(db: Session) -> str:
-    """Whisper spells names it has been shown, so prime it with the words an
-    admin is likely to say: the house style (Roman-script Hinglish), business
-    terms and the nursery's own plant names. Whisper reads ~220 tokens of this."""
-    names = [n for (n,) in db.query(Plant.name).order_by(Plant.id).limit(40).all() if n]
-    return (
-        "AAIJI Nursery admin se baat ho rahi hai, Hinglish aur Indian English mein. "
-        "Aaj ke orders kitne aaye? Kal ki total sales kitni hai? Pending deliveries, invoice, payment, "
-        "outstanding, rupees, stock, customer, driver, labour, attendance. Plants: " + ", ".join(names)
-    )[:900]
+# Forced to English on purpose. Auto-detect misreads short English phrases
+# as German or Turkish, and a vocabulary prompt made Whisper invent plant
+# names on number-only clips. Hindi/Hinglish still comes back in Latin
+# script under this setting, which the chat model reads well.
+STT_LANGUAGE = "en"
 
 
 class TranscribeOut(BaseModel):
@@ -460,7 +455,6 @@ async def admin_transcribe(request: Request, admin: str = Depends(get_current_ad
     if not api_key:
         raise HTTPException(status_code=503, detail="Voice recognition is not configured.")
 
-    prompt = _stt_vocabulary(db)
     data = None
     for model in STT_MODELS:
         try:
@@ -469,7 +463,7 @@ async def admin_transcribe(request: Request, admin: str = Depends(get_current_ad
                     STT_URL,
                     headers={"Authorization": f"Bearer {api_key}"},
                     files={"file": (f"speech.{STT_AUDIO_EXT[content_type]}", audio, content_type)},
-                    data={"model": model, "response_format": "verbose_json", "temperature": "0", "prompt": prompt},
+                    data={"model": model, "response_format": "verbose_json", "temperature": "0", "language": STT_LANGUAGE},
                 )
             if resp.status_code == 200:
                 data = resp.json()

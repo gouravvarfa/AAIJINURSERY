@@ -143,20 +143,67 @@ TOOL_KEYWORDS = {
     "comms": ["whatsapp", "message", "sms", "notification"],
     "website": ["website", "blog", "faq", "gallery", "testimonial", "service", "content", "enquir", "inquir", "review"],
     "security": ["gadbad", "gadbadi", "suspicious", "fraud", "risk", "login", "security", "unusual", "kisne", "who did",
-                 "kya kiya", "kya kya", "activity", "chori", "galat"],
+                 "kya kiya", "kya kya", "activity", "chori", "galat", "admin", "panel", "pannel", "kaam", "kam nhi",
+                 "kam nahi", "work", "kis kis", "kaun kaun"],
 }
 CORE_TOOLS = ["get_business_summary", "search_customer"]
 
 
-def _select_tool_schemas(texts: list[str]) -> list[dict]:
-    blob = " ".join(texts).lower()
-    groups = [g for g, words in TOOL_KEYWORDS.items() if any(w in blob for w in words)]
-    if not groups:
-        return ADMIN_TOOL_SCHEMAS
+# Used when neither keywords nor the classifier yield a category -- a broad
+# but bounded set. Never all ~40 tools: that alone (~4.6k tokens per call)
+# exceeds what fits in Groq's free 8k tokens/minute for a multi-call answer.
+GENERAL_GROUPS = ["sales", "customers", "security"]
+
+CLASSIFIER_PROMPT = (
+    "Classify an admin's question about a plant nursery business into one or more of these categories: "
+    "sales (sales/revenue/what sold), orders (website orders), customers (a customer's details/history/dues/enquiries), "
+    "accounting (payments, invoices, bills, expenses, purchases, audits, mismatches), inventory (stock), "
+    "delivery (deliveries, drivers, vehicles), labour (employees, staff, attendance, payroll, advances), "
+    "comms (WhatsApp messages), website (website content), security (admin activity, logins, who did what, "
+    "suspicious/unusual activity). Reply with ONLY the category names, comma-separated, nothing else."
+)
+
+
+def _schemas_for_groups(groups: list[str]) -> list[dict]:
     wanted = set(CORE_TOOLS)
     for g in groups:
-        wanted.update(TOOL_GROUPS[g])
+        wanted.update(TOOL_GROUPS.get(g, []))
     return [t for t in ADMIN_TOOL_SCHEMAS if t["function"]["name"] in wanted]
+
+
+def _keyword_groups(texts: list[str]) -> list[str]:
+    blob = " ".join(texts).lower()
+    return [g for g, words in TOOL_KEYWORDS.items() if any(w in blob for w in words)]
+
+
+def _select_tool_schemas(texts: list[str]) -> list[dict]:
+    """Keyword-only routing (sync); falls back to GENERAL_GROUPS."""
+    return _schemas_for_groups(_keyword_groups(texts) or GENERAL_GROUPS)
+
+
+async def _classify_groups(question: str) -> list[str]:
+    """One tiny no-tools LLM call (~250 tokens) to categorise a question the
+    keywords didn't recognise. Any failure just returns [] -> general set."""
+    for provider in build_provider_chain():
+        if not provider.is_configured():
+            continue
+        try:
+            resp = await provider.chat(
+                [{"role": "system", "content": CLASSIFIER_PROMPT}, {"role": "user", "content": question[:500]}], []
+            )
+        except ProviderError:
+            continue
+        text = (resp.content or "").lower()
+        return [g for g in TOOL_GROUPS if g in text]
+    return []
+
+
+async def _resolve_tool_schemas(texts: list[str]) -> list[dict]:
+    groups = _keyword_groups(texts)
+    if not groups:
+        groups = await _classify_groups(texts[0]) or GENERAL_GROUPS
+        logger.info("Classifier routed question to %s", groups)
+    return _schemas_for_groups(groups)
 
 # Separate rate-limit bucket from the customer gateway's (keyed by admin
 # username, not IP) -- protects the same free-tier Groq/Gemini/OpenRouter
@@ -286,7 +333,7 @@ async def admin_chat(payload: AdminChatIn, request: Request, admin: str = Depend
 
     started = time.time()
     recent_user_turns = [m.content for m in trimmed_history if m.role == "user"][-2:]
-    tool_schemas = _select_tool_schemas([payload.message, *recent_user_turns])
+    tool_schemas = await _resolve_tool_schemas([payload.message, *recent_user_turns])
     reply, provider_name, tools_called = await _run_admin_tool_loop(messages, db, admin_user, tool_schemas)
     duration_ms = int((time.time() - started) * 1000)
 

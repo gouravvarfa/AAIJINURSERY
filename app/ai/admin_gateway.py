@@ -77,7 +77,7 @@ SYSTEM_PROMPT = (
     "headings, or tables; for a list of records, write one plain line per record (e.g. 'Name -- amount -- date'), "
     "not bullet characters like '-'/'*' or numbered markdown lists. "
     "If a question needs a capability this assistant genuinely doesn't have -- no tool exists for it at all, not "
-    "just a record that happens to be unrecorded -- say so and add: 'Is baare mein Gourav Varfa (developer) se "
+    "just a record that happens to be unrecorded -- say so and add: 'Is baare mein developer se "
     "contact karein.' Don't say this for an ordinary 'not recorded' answer about a specific record; that's a normal, "
     "complete answer on its own. "
     "EXACT FIELD MEANINGS -- never substitute one for another: 'recorded_by' on a payment is NOT 'approved_by' -- "
@@ -123,7 +123,8 @@ TOOL_GROUPS = {
                   "get_customer_timeline", "get_customer_activity", "get_customer_counts", "get_inquiries"],
     "accounting": ["get_payment_history", "get_audit_history", "get_voided_invoices", "get_price_overrides", "get_billing_audit",
                    "get_expenses", "get_purchase_summary", "get_customer_outstanding", "get_customer_invoices"],
-    "inventory": ["get_low_stock_plants", "get_inventory_history", "get_stock_adjustments", "get_top_selling_plants"],
+    "inventory": ["get_low_stock_plants", "get_inventory_history", "get_stock_adjustments", "get_top_selling_plants",
+                  "get_website_content_summary"],
     "delivery": ["get_pending_deliveries", "get_deliveries", "get_delivery_timeline", "get_driver_details"],
     "labour": ["get_employee_details", "list_employees", "get_attendance_summary", "get_payroll_summary", "get_worker_advances",
                "get_employee_activity_timeline"],
@@ -145,7 +146,8 @@ TOOL_KEYWORDS = {
     "labour": ["employee", "staff", "worker", "labour", "labor", "mazdoor", "attendance", "hazri", "haziri", "payroll",
                "salary", "tankhwah", "advance", "karmchari", "karmachari"],
     "comms": ["whatsapp", "message", "sms", "notification"],
-    "website": ["website", "blog", "faq", "gallery", "testimonial", "service", "content", "enquir", "inquir", "review"],
+    "website": ["website", "blog", "faq", "gallery", "testimonial", "service", "content", "enquir", "inquir", "review",
+                "plan", "categor"],
     "security": ["gadbad", "gadbadi", "suspicious", "fraud", "risk", "login", "security", "unusual", "kisne", "who did",
                  "kya kiya", "kya kya", "activity", "chori", "galat", "admin", "panel", "pannel", "kaam", "kam nhi",
                  "kam nahi", "work", "kis kis", "kaun kaun"],
@@ -245,7 +247,7 @@ class AdminChatOut(BaseModel):
     provider: str
 
 
-FALLBACK_REPLY = "AI service is temporarily unavailable. Please try again, or contact Gourav Varfa (developer) if this keeps happening."
+FALLBACK_REPLY = "AI service is temporarily unavailable. Please try again, or contact the developer if this keeps happening."
 
 
 async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUser, tool_schemas: list[dict] | None = None) -> tuple[str, str, list[str]]:
@@ -302,7 +304,7 @@ async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUs
                 final = await provider.chat(local_messages, [])
                 if final.content:
                     return final.content, provider.name, tools_called
-                return "I couldn't work that out. Could you rephrase your question, or contact Gourav Varfa (developer) if this isn't something I can help with?", provider.name, tools_called
+                return "I couldn't work that out. Could you rephrase your question, or contact the developer if this isn't something I can help with?", provider.name, tools_called
         except ProviderError as exc:
             logger.warning("Admin AI provider %s failed, falling back: %s", provider.name, exc)
             last_error = exc

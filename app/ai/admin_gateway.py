@@ -416,13 +416,15 @@ def _check_stt_rate_limit(key: str) -> bool:
     return allowed
 
 
-# Forced to English on purpose. Auto-detect misreads short English phrases
-# as German or Turkish, and a vocabulary prompt made Whisper invent plant
-# names on number-only clips. Hindi/Hinglish still comes back in Latin
-# script under this setting, which the chat model reads well.
-STT_LANGUAGE = os.getenv("GROQ_STT_LANGUAGE", "hi")
-# Test-only: lets an admin try another language (?lang=hi) without changing
-# production. Ignored unless STT_ALLOW_LANG_OVERRIDE=1 is set on the server.
+# Auto-detect (no forced language). Forcing "en" silently translated Hindi
+# speech into English; forcing "hi" mangled plain English speech into
+# nonsense Devanagari. Auto-detect got both right on real sentences in
+# testing -- it only misread very short (1-2 word) phrases as the wrong
+# language, which full questions aren't.
+STT_LANGUAGE = os.getenv("GROQ_STT_LANGUAGE", "")
+# Test-only: lets an admin try a forced language (?lang=hi or ?lang=en)
+# without changing production. Ignored unless STT_ALLOW_LANG_OVERRIDE=1 is
+# set on the server.
 STT_ALLOW_LANG_OVERRIDE = os.getenv("STT_ALLOW_LANG_OVERRIDE") == "1"
 STT_LANGS = {"en", "hi"}
 
@@ -460,6 +462,9 @@ async def admin_transcribe(request: Request, lang: str | None = None, admin: str
         raise HTTPException(status_code=503, detail="Voice recognition is not configured.")
 
     language = lang if (STT_ALLOW_LANG_OVERRIDE and lang in STT_LANGS) else STT_LANGUAGE
+    form = {"response_format": "verbose_json", "temperature": "0"}
+    if language:
+        form["language"] = language
     data = None
     for model in STT_MODELS:
         try:
@@ -468,7 +473,7 @@ async def admin_transcribe(request: Request, lang: str | None = None, admin: str
                     STT_URL,
                     headers={"Authorization": f"Bearer {api_key}"},
                     files={"file": (f"speech.{STT_AUDIO_EXT[content_type]}", audio, content_type)},
-                    data={"model": model, "response_format": "verbose_json", "temperature": "0", "language": language},
+                    data={"model": model, **form},
                 )
             if resp.status_code == 200:
                 data = resp.json()
@@ -478,6 +483,24 @@ async def admin_transcribe(request: Request, lang: str | None = None, admin: str
             logger.warning("Voice transcription via %s failed: %s", model, type(exc).__name__)
     if data is None:
         raise HTTPException(status_code=503, detail="Voice recognition is temporarily unavailable.")
+
+    # Auto-detect occasionally mistakes a short English/Hindi phrase for an
+    # unrelated language (seen: German, Turkish, Urdu) -- never seen on a
+    # real sentence, only on 1-2 word phrases. Re-run forced to Hindi, which
+    # reads both Hindi and English correctly, instead of returning that text.
+    if not language and data.get("language") not in (None, "english", "hindi"):
+        try:
+            async with httpx.AsyncClient(timeout=STT_TIMEOUT) as client:
+                resp = await client.post(
+                    STT_URL,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    files={"file": (f"speech.{STT_AUDIO_EXT[content_type]}", audio, content_type)},
+                    data={"model": STT_MODELS[0], "response_format": "verbose_json", "temperature": "0", "language": "hi"},
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("Voice transcription retry failed: %s", type(exc).__name__)
 
     segments = data.get("segments") or []
     if not segments:

@@ -1682,3 +1682,38 @@ table.admin-table .row-actions {
   color: var(--color-text-muted);
 }
 .aaiji-voice[data-state="listening"] .aaiji-voice-micstate { color: var(--color-primary); font-weight: 600; }
+
+/* Ask AAIJI composer on tablet and desktop: the same single rounded pill as
+   on phones -- input, mic and send inside one control. */
+@media (min-width: 641px) {
+  .ask-aaiji-input-row {
+    margin: 12px 16px 16px;
+    padding: 6px 8px 6px 20px;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 30px;
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  }
+  .ask-aaiji-input-row textarea,
+  .ask-aaiji-input-row textarea:focus {
+    field-sizing: content;
+    height: auto;
+    min-height: 42px;
+    max-height: 140px;
+    padding: 10px 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    font-size: 16px;
+    line-height: 1.35;
+    overflow-y: auto;
+  }
+  .ask-aaiji-input-row .ai-chat-mic-btn,
+  .ask-aaiji-input-row .ai-chat-send-btn {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+  }
+}

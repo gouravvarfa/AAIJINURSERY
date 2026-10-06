@@ -1272,6 +1272,61 @@ table.admin-table .row-actions {
   }
 }
 
+/* Phone: the chat fills the screen, controls sit in one tidy row, and the
+   composer stays a single line with its placeholder fully visible. */
+@media (max-width: 640px) {
+  .ask-aaiji-page .admin-page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .ask-aaiji-page .admin-page-head h1 {
+    font-size: 1.35rem;
+    margin: 0;
+  }
+  .ask-aaiji-header-right {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .ask-aaiji-header-right .btn {
+    padding: 6px 12px;
+    font-size: 0.82rem;
+  }
+  .ask-aaiji-panel {
+    height: calc(100vh - 300px);
+    min-height: 420px;
+    border-radius: 14px;
+  }
+  .ask-aaiji-body {
+    padding: 14px;
+  }
+  .ask-aaiji-empty {
+    margin: 12px auto;
+  }
+  .ask-aaiji-empty-icon {
+    font-size: 1.8rem;
+  }
+  .ask-aaiji-suggestions {
+    gap: 6px;
+  }
+  .ask-aaiji-input-row {
+    padding: 10px;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .ask-aaiji-input-row textarea {
+    min-height: 42px;
+    height: 42px;
+    max-height: 120px;
+    padding: 10px 14px;
+    font-size: 0.92rem;
+    line-height: 1.3;
+    resize: none;
+    overflow-y: auto;
+  }
+}
+
 /* ---------- Ask AAIJI floating launcher (every admin page) ---------- */
 /* Same visual language as the customer site's .ai-chat-fab -- round, dark
    green, leaf icon -- so it reads as "the same assistant" across both

@@ -44,6 +44,9 @@ function SpeakerIcon({ muted }) {
   );
 }
 
+// The full placeholder doesn't fit on one line beside the mic and send buttons on a phone.
+const NARROW_SCREEN = typeof window !== "undefined" && window.innerWidth < 480;
+
 const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
 
 // Browser's built-in text-to-speech -- free, no API key. Prefers a Hindi
@@ -286,7 +289,7 @@ export default function AskAaiji() {
           <textarea
             ref={inputRef}
             rows={1}
-            placeholder="Ask anything about your business..."
+            placeholder={NARROW_SCREEN ? "Ask anything..." : "Ask anything about your business..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}

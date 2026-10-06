@@ -1311,8 +1311,13 @@ table.admin-table .row-actions {
     gap: 6px;
   }
   /* Standalone "Voice on" hidden on phones; voice starts from the composer mic. */
-  .aaiji-speak-toggle {
-    display: none;
+  .ask-aaiji-header-right .aaiji-speak-toggle {
+    display: none !important;
+  }
+  .ask-aaiji-input-row textarea::placeholder {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   /* One rounded composer: input, mic and send sit inside the same pill. */
   .ask-aaiji-input-row {

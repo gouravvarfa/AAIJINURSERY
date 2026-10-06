@@ -421,7 +421,7 @@ def _check_stt_rate_limit(key: str) -> bool:
 # nonsense Devanagari. Auto-detect got both right on real sentences in
 # testing -- it only misread very short (1-2 word) phrases as the wrong
 # language, which full questions aren't.
-STT_LANGUAGE = os.getenv("GROQ_STT_LANGUAGE", "")
+STT_LANGUAGE = os.getenv("GROQ_STT_LANGUAGE", "hi")
 # Test-only: lets an admin try a forced language (?lang=hi or ?lang=en)
 # without changing production. Ignored unless STT_ALLOW_LANG_OVERRIDE=1 is
 # set on the server.

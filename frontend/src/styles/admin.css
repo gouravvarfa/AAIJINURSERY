@@ -1310,18 +1310,49 @@ table.admin-table .row-actions {
   .ask-aaiji-suggestions {
     gap: 6px;
   }
+  /* Standalone "Voice on" hidden on phones; voice starts from the composer mic. */
+  .aaiji-speak-toggle {
+    display: none;
+  }
+  /* One rounded composer: input, mic and send sit inside the same pill. */
   .ask-aaiji-input-row {
-    padding: 10px;
-    align-items: flex-end;
-    gap: 8px;
+    margin: 10px;
+    padding: 6px 6px 6px 16px;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
+    border-radius: 28px;
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   }
   .ask-aaiji-input-row textarea {
-    min-height: 42px;
-    height: 42px;
+    border: none;
+    background: transparent;
+    border-radius: 0;
+    padding: 8px 0;
+    align-self: center;
+  }
+  .ask-aaiji-input-row textarea:focus {
+    border: none;
+    background: transparent;
+  }
+  .ask-aaiji-input-row .ai-chat-mic-btn,
+  .ask-aaiji-input-row .ai-chat-send-btn {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+  }
+  /* Grows with the text up to a few lines, then scrolls. 16px stops phones
+     zooming the page when the box is focused. */
+  .ask-aaiji-input-row textarea {
+    field-sizing: content;
+    height: auto;
+    min-height: 40px;
     max-height: 120px;
-    padding: 10px 14px;
-    font-size: 0.92rem;
-    line-height: 1.3;
+    padding: 9px 0;
+    font-size: 16px;
+    line-height: 1.35;
     resize: none;
     overflow-y: auto;
   }

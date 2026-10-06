@@ -221,7 +221,7 @@ export default function AskAaiji() {
           {canSpeak && (
             <button
               type="button"
-              className="btn btn-sm btn-outline dark"
+              className="btn btn-sm btn-outline dark aaiji-speak-toggle"
               onClick={toggleSpeakReplies}
               aria-pressed={speakReplies}
               title={speakReplies ? "Voice replies on -- click to mute" : "Read replies aloud"}

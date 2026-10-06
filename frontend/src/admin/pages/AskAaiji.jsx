@@ -73,7 +73,7 @@ export default function AskAaiji() {
   const [status, setStatus] = useState(null);
   const [lastFailedText, setLastFailedText] = useState(null);
   const [listening, setListening] = useState(false);
-  const [speakReplies, setSpeakReplies] = useState(readSpeakPref);
+  const [speakReplies, setSpeakReplies] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const sendTextRef = useRef(null);
   const scrollRef = useRef(null);
@@ -220,19 +220,6 @@ export default function AskAaiji() {
               <span className={`ai-chat-status-dot${status === "offline" ? " offline" : ""}`} style={{ background: status === "online" ? "var(--color-accent)" : undefined }} />
               {status === "online" ? "Online" : "Temporarily unavailable"}
             </span>
-          )}
-          {canSpeak && (
-            <button
-              type="button"
-              className="btn btn-sm btn-outline dark aaiji-speak-toggle"
-              onClick={toggleSpeakReplies}
-              aria-pressed={speakReplies}
-              title={speakReplies ? "Voice replies on -- click to mute" : "Read replies aloud"}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-            >
-              <SpeakerIcon muted={!speakReplies} />
-              {speakReplies ? "Voice on" : "Voice off"}
-            </button>
           )}
           {messages.length > 0 && (
             <button type="button" className="btn btn-sm btn-outline dark" onClick={clearConversation}>

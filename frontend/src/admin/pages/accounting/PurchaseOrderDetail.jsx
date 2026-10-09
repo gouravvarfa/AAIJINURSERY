@@ -68,7 +68,8 @@ export default function PurchaseOrderDetail() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>{item.description}</div>
                   <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                    Qty {item.quantity} &times; &#8377;{item.unit_price}
+                    {item.tray_size ? `${item.quantity} trays of ${item.tray_size}` : `Qty ${item.quantity}`} &times; &#8377;{item.unit_price}
+                    {item.tray_size ? "/tray" : ""}
                   </div>
                 </div>
                 <div style={{ fontWeight: 700 }}>&#8377;{item.line_total}</div>

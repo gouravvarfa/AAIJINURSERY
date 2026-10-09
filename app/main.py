@@ -315,6 +315,26 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE accounting_invoice_items ADD COLUMN plant_id INTEGER"))
         conn.commit()
 
+    # Sales Order tray-size support: lets an offline Sales Order line record
+    # which tray-size variant was sold, matching what the website's OrderItem
+    # already tracks (quantity = number of trays, unit_price = per-tray price).
+    sales_order_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_sales_order_items)"))}
+    if "variant_id" not in sales_order_item_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN variant_id INTEGER"))
+        conn.commit()
+    if "tray_size" not in sales_order_item_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN tray_size INTEGER"))
+        conn.commit()
+
+    # Same tray-size support, for Purchase Order lines.
+    purchase_order_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_purchase_order_items)"))}
+    if "variant_id" not in purchase_order_item_columns:
+        conn.execute(text("ALTER TABLE accounting_purchase_order_items ADD COLUMN variant_id INTEGER"))
+        conn.commit()
+    if "tray_size" not in purchase_order_item_columns:
+        conn.execute(text("ALTER TABLE accounting_purchase_order_items ADD COLUMN tray_size INTEGER"))
+        conn.commit()
+
     # Communications: WhatsApp template approval-status enum (section: WhatsApp
     # Business Cloud API template system) supersedes the old is_active boolean
     # -- a template can now be PENDING/REJECTED/DISABLED, not just on/off.

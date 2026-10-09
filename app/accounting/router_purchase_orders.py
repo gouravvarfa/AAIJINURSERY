@@ -18,7 +18,7 @@ from app.accounting.schemas import (
 from app.database import get_db
 from app.deps import get_current_admin
 from app.inventory import adjust_stock
-from app.models import Plant, Purchase, PurchaseItem
+from app.models import Plant, PlantVariant, Purchase, PurchaseItem
 
 router = APIRouter(tags=["accounting-purchase-orders"])
 
@@ -107,6 +107,12 @@ def create_purchase_order(
         if line.quantity <= 0:
             raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
         plant = plants[line.plant_id]
+        tray_size = None
+        if line.variant_id is not None:
+            variant = db.query(PlantVariant).filter(PlantVariant.id == line.variant_id, PlantVariant.plant_id == plant.id).first()
+            if not variant:
+                raise HTTPException(status_code=400, detail="Unknown tray-size option for this plant")
+            tray_size = variant.tray_size
         line_total = round(line.quantity * line.unit_price, 2)
         subtotal += line_total
         db.add(
@@ -118,6 +124,8 @@ def create_purchase_order(
                 unit_price=line.unit_price,
                 tax_rate_id=line.tax_rate_id,
                 line_total=line_total,
+                variant_id=line.variant_id,
+                tray_size=tray_size,
             )
         )
 
@@ -188,14 +196,18 @@ def convert_to_bill(
             )
         )
         if plant:
+            # A tray-size line credits that variant's own stock (quantity =
+            # number of trays received), exactly how a tray sale deducts it
+            # on the website -- never the plant's plain per-unit stock.
             adjust_stock(
                 db,
                 plant_id=plant.id,
+                variant_id=line.variant_id,
                 quantity_delta=line.quantity,
                 transaction_type="PURCHASE_RECEIVED",
                 source_type="PURCHASE_ORDER",
                 source_id=order.id,
-                reference=f"PURCHASE_ORDER:{order.id}:PURCHASE_RECEIVED:{plant.id}",
+                reference=f"PURCHASE_ORDER:{order.id}:PURCHASE_RECEIVED:{line.variant_id or plant.id}",
                 created_by=admin,
             )
         total += line.line_total

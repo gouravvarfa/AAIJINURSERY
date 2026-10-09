@@ -136,6 +136,14 @@ class SalesOrderItem(Base):
     tax_rate_id = Column(Integer, ForeignKey("accounting_tax_rates.id"), nullable=True)
     tax_amount = Column(Float, default=0)
     line_total = Column(Float, default=0)
+    # Tray-size option picked, same pattern as the website's OrderItem: a
+    # plain int, not a FK, because a variant can be deleted and its id
+    # reused (see PlantVariant's sqlite_autoincrement note) -- tray_size is
+    # snapshotted at order time so a later variant edit/delete never changes
+    # what this line says was actually sold. quantity then means "number of
+    # trays" and unit_price the per-tray price, exactly as OrderItem does.
+    variant_id = Column(Integer, nullable=True)
+    tray_size = Column(Integer, nullable=True)
 
     sales_order = relationship("SalesOrder", back_populates="items")
     plant = relationship("Plant")
@@ -259,6 +267,14 @@ class PurchaseOrderItem(Base):
     tax_rate_id = Column(Integer, ForeignKey("accounting_tax_rates.id"), nullable=True)
     tax_amount = Column(Float, default=0)
     line_total = Column(Float, default=0)
+    # Tray-size option, same convention as SalesOrderItem/OrderItem: a plain
+    # int (not a FK -- a variant's id can be reused after delete), snapshotted
+    # at order time. quantity then means "number of trays received" and
+    # unit_price the per-tray cost; on Bill conversion this is what tells
+    # adjust_stock to credit the tray variant's own stock, not the plant's
+    # loose per-unit stock.
+    variant_id = Column(Integer, nullable=True)
+    tray_size = Column(Integer, nullable=True)
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
     plant = relationship("Plant")

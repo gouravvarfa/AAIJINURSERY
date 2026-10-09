@@ -16,6 +16,7 @@ from app.accounting.models import (
     SalesOrderItem,
 )
 from app.accounting.permissions import SALES_WRITE_ROLES, require_accounting_action
+from app.models import PlantVariant
 from app.accounting.schemas import (
     InvoiceConvertIn,
     InvoiceOut,
@@ -103,6 +104,12 @@ def create_sales_order(
     order.order_number = f"SO-{order.id}"
 
     for line in payload.items:
+        tray_size = None
+        if line.variant_id is not None:
+            variant = db.query(PlantVariant).filter(PlantVariant.id == line.variant_id, PlantVariant.plant_id == line.plant_id).first()
+            if not variant:
+                raise HTTPException(status_code=400, detail="Unknown tray-size option for this plant")
+            tray_size = variant.tray_size
         line_total = round(line.quantity * line.unit_price, 2)
         subtotal += line_total
         db.add(
@@ -114,6 +121,8 @@ def create_sales_order(
                 unit_price=line.unit_price,
                 tax_rate_id=line.tax_rate_id,
                 line_total=line_total,
+                variant_id=line.variant_id,
+                tray_size=tray_size,
             )
         )
 

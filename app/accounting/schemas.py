@@ -101,6 +101,8 @@ class SalesOrderItemOut(BaseModel):
     unit_price: float
     tax_amount: float
     line_total: float
+    variant_id: Optional[int] = None
+    tray_size: Optional[int] = None
 
 
 class SalesOrderItemIn(BaseModel):
@@ -109,6 +111,9 @@ class SalesOrderItemIn(BaseModel):
     quantity: int = 1
     unit_price: float = 0
     tax_rate_id: Optional[int] = None
+    # When set, quantity means "number of trays" and unit_price the
+    # per-tray price -- same convention as the website's OrderItem.
+    variant_id: Optional[int] = None
 
 
 class SalesOrderIn(BaseModel):
@@ -225,6 +230,8 @@ class PurchaseOrderItemOut(BaseModel):
     unit_price: float
     tax_amount: float
     line_total: float
+    variant_id: Optional[int] = None
+    tray_size: Optional[int] = None
 
 
 class PurchaseOrderItemIn(BaseModel):
@@ -233,6 +240,9 @@ class PurchaseOrderItemIn(BaseModel):
     quantity: int = 1
     unit_price: float = 0
     tax_rate_id: Optional[int] = None
+    # When set, quantity means "number of trays received" and unit_price the
+    # per-tray cost -- same convention as Sales Order/website OrderItem.
+    variant_id: Optional[int] = None
 
 
 class PurchaseOrderIn(BaseModel):

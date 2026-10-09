@@ -1326,6 +1326,11 @@ def get_employee_activity_timeline(db: Session, admin: AdminUser, username: str,
     for r in db.query(Purchase).filter(Purchase.created_by.ilike(uname), Purchase.purchase_date >= start, Purchase.purchase_date < end):
         _event(events, r.purchase_date, "Purchase/bill recorded", uname, f"{r.supplier}: {money(r.total_cost)}")
 
+    from app.accounting.models import PurchaseOrder
+
+    for r in db.query(PurchaseOrder).filter(PurchaseOrder.created_by.ilike(uname), PurchaseOrder.order_date >= start, PurchaseOrder.order_date < end):
+        _event(events, r.order_date, f"Purchase order {r.order_number} created", uname, f"{r.contact.name if r.contact else '-'}, {money(r.total_amount)}")
+
     from app.labour.models import EmployeeAttendance, Labour, LabourAttendance, Payroll, WorkerAdvance, WorkerPayment, WorkRequirement
 
     emp_names = {e.id: e.name for e in db.query(Employee)}
@@ -1382,7 +1387,7 @@ def get_employee_activity_timeline(db: Session, admin: AdminUser, username: str,
         "truncated": truncated,
         "timeline": page,
         "note": "No recorded activity was found for this employee in the selected period." if not events else None,
-        "coverage_note": "Covers logins, customer/contact creation, sales orders, invoices/edits (via audit log), payments, stock movements, deliveries, expenses, purchases, order status changes, general accounting edits, and labour/employee actions (attendance marked, work requirements, payroll generated/finalized, advances given, worker payments). Plain page views are never recorded.",
+        "coverage_note": "Covers logins, customer/contact creation, sales orders, invoices/edits (via audit log), payments, stock movements, deliveries, expenses, purchase bills, purchase orders, order status changes, general accounting edits, and labour/employee actions (attendance marked, work requirements, payroll generated/finalized, advances given, worker payments). Plain page views are never recorded.",
     }
 
 

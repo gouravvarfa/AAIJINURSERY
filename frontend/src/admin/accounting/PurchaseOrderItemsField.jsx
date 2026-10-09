@@ -57,7 +57,7 @@ export default function PurchaseOrderItemsField({ value, onChange }) {
       {rows.map((row, i) => (
         <div className="variant-row" key={`row-${i}`}>
           <div className="variant-row-inputs">
-            <label>
+            <label style={{ flex: "2 1 260px", minWidth: 240 }}>
               Plant
               <PlantPickerField
                 plants={plants}

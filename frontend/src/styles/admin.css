@@ -283,6 +283,7 @@ table.admin-table .row-actions {
   display: flex;
   gap: 12px;
   flex: 1;
+  flex-wrap: wrap;
 }
 
 .variant-row-inputs label {

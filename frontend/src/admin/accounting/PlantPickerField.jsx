@@ -48,12 +48,12 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
 
   return (
     <>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <select
           className="form-control"
           value={row.plant_id || ""}
           onChange={(e) => onSelectPlant(e.target.value)}
-          style={{ flex: 1 }}
+          style={{ flex: "1 1 180px", minWidth: 160 }}
         >
           <option value="">No linked plant...</option>
           {plants.map((p) => (
@@ -62,7 +62,12 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
             </option>
           ))}
         </select>
-        <button type="button" className="btn btn-sm btn-outline dark" onClick={() => setShowModal(true)}>
+        <button
+          type="button"
+          className="btn btn-sm btn-outline dark"
+          style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+          onClick={() => setShowModal(true)}
+        >
           + New Plant
         </button>
       </div>

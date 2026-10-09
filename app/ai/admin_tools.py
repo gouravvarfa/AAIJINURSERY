@@ -26,10 +26,11 @@ from app.accounting.models import (
     AuditLog, Contact, Employee, Expense, Invoice, PaymentIn, PaymentOut, SalesOrder,
 )
 from app.analytics_utils import money, now_ist, resolve_date_range, to_utc
-from app.delivery.models import Delivery, DeliveryStatusHistory, DeliveryTrip, Driver, Vehicle
+from app.delivery.models import Delivery, DeliveryStatusHistory, DeliveryTrip, Driver, Vehicle, VehicleFuelLog
 from app.models import (
     AdminActivityLog, AdminUser, Category, Customer, CustomerActivityLog, Inquiry,
-    InventoryTransaction, LoginAttempt, Order, OrderItem, OrderStatusHistory, Plant, Purchase,
+    InquiryStatusHistory, InventoryTransaction, LoginAttempt, Order, OrderItem,
+    OrderStatusHistory, Plant, Purchase, Role,
 )
 from app.permissions import check_permission
 
@@ -1331,6 +1332,31 @@ def get_employee_activity_timeline(db: Session, admin: AdminUser, username: str,
     for r in db.query(PurchaseOrder).filter(PurchaseOrder.created_by.ilike(uname), PurchaseOrder.order_date >= start, PurchaseOrder.order_date < end):
         _event(events, r.order_date, f"Purchase order {r.order_number} created", uname, f"{r.contact.name if r.contact else '-'}, {money(r.total_amount)}")
 
+    for r in db.query(Invoice).filter(Invoice.voided_by.ilike(uname), Invoice.voided_at.isnot(None), Invoice.voided_at >= start, Invoice.voided_at < end):
+        _event(events, r.voided_at, f"Invoice {r.invoice_number} voided", uname, money(r.total_amount))
+
+    for r in db.query(DeliveryTrip).filter(DeliveryTrip.created_by.ilike(uname), DeliveryTrip.created_at >= start, DeliveryTrip.created_at < end):
+        _event(events, r.created_at, "Delivery trip created", uname, r.driver.name if r.driver else None)
+    for r in db.query(VehicleFuelLog).filter(VehicleFuelLog.created_by.ilike(uname), VehicleFuelLog.created_at >= start, VehicleFuelLog.created_at < end):
+        _event(events, r.created_at, "Fuel log recorded", uname, f"{r.vehicle.registration_number if r.vehicle else '-'}: {money(r.cost)}")
+
+    for r in db.query(InquiryStatusHistory).filter(InquiryStatusHistory.changed_by.ilike(uname), InquiryStatusHistory.created_at >= start, InquiryStatusHistory.created_at < end):
+        _event(events, r.created_at, f"Inquiry #{r.inquiry_id} status {r.old_status or '-'} -> {r.new_status}", uname, None)
+
+    for r in db.query(Role).filter(Role.created_by.ilike(uname), Role.created_at >= start, Role.created_at < end):
+        _event(events, r.created_at, "Role created", uname, r.name)
+
+    from app.communications.inbox_models import WhatsAppInboxMessage
+    from app.communications.models import WhatsAppMessage
+    from app.labour.models import AdvanceRecovery
+
+    for r in db.query(WhatsAppMessage).filter(WhatsAppMessage.created_by.ilike(uname), WhatsAppMessage.created_at >= start, WhatsAppMessage.created_at < end):
+        _event(events, r.created_at, "WhatsApp message sent", uname, f"{r.template_name} -> {r.customer_name or r.mobile}")
+    for r in db.query(WhatsAppInboxMessage).filter(WhatsAppInboxMessage.created_by.ilike(uname), WhatsAppInboxMessage.created_at >= start, WhatsAppInboxMessage.created_at < end):
+        _event(events, r.created_at, "WhatsApp reply sent", uname, (r.body or "")[:120] or None)
+    for r in db.query(AdvanceRecovery).filter(AdvanceRecovery.created_by.ilike(uname), AdvanceRecovery.created_at >= start, AdvanceRecovery.created_at < end):
+        _event(events, r.created_at, "Advance recovery recorded", uname, money(r.amount))
+
     from app.labour.models import EmployeeAttendance, Labour, LabourAttendance, Payroll, WorkerAdvance, WorkerPayment, WorkRequirement
 
     emp_names = {e.id: e.name for e in db.query(Employee)}
@@ -1387,7 +1413,7 @@ def get_employee_activity_timeline(db: Session, admin: AdminUser, username: str,
         "truncated": truncated,
         "timeline": page,
         "note": "No recorded activity was found for this employee in the selected period." if not events else None,
-        "coverage_note": "Covers logins, customer/contact creation, sales orders, invoices/edits (via audit log), payments, stock movements, deliveries, expenses, purchase bills, purchase orders, order status changes, general accounting edits, and labour/employee actions (attendance marked, work requirements, payroll generated/finalized, advances given, worker payments). Plain page views are never recorded.",
+        "coverage_note": "Covers logins, customer/contact creation, sales orders, invoices/edits and voids (via audit log), payments, stock movements, deliveries, delivery trips, fuel logs, expenses, purchase bills, purchase orders, order status changes, enquiry status changes, role creation, WhatsApp sends/replies, general accounting edits, and labour/employee actions (attendance marked, work requirements, payroll generated/finalized, advances given and recovered, worker payments). Plain page views are never recorded.",
     }
 
 

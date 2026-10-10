@@ -314,7 +314,17 @@ async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUs
                 )
                 for tc in response.tool_calls:
                     tools_called.append(tc.name)
-                    result = execute_admin_tool(db, admin, tc.name, tc.arguments)
+                    try:
+                        result = execute_admin_tool(db, admin, tc.name, tc.arguments)
+                    except Exception as exc:
+                        # A hallucinated tool call (e.g. a name outside the
+                        # classifier's restricted set, or arguments a tool
+                        # body doesn't expect) must never crash the whole
+                        # request -- feed the model an error result instead,
+                        # same as a validation failure, so it can recover or
+                        # say it can't help with this.
+                        logger.warning("Admin tool %s raised %s: %s", tc.name, type(exc).__name__, exc)
+                        result = {"error": f"Tool '{tc.name}' failed and could not be run."}
                     local_messages.append(
                         {"role": "tool", "tool_call_id": tc.call_id, "name": tc.name, "content": json.dumps(result)}
                     )
@@ -365,7 +375,14 @@ async def admin_chat(payload: AdminChatIn, request: Request, admin: str = Depend
     started = time.time()
     recent_user_turns = [m.content for m in trimmed_history if m.role == "user"][-2:]
     tool_schemas = await _resolve_tool_schemas([payload.message, *recent_user_turns])
-    reply, provider_name, tools_called = await _run_admin_tool_loop(messages, db, admin_user, tool_schemas)
+    try:
+        reply, provider_name, tools_called = await _run_admin_tool_loop(messages, db, admin_user, tool_schemas)
+    except Exception as exc:
+        # Last-resort safety net: an admin typing a question should never
+        # see a 500. Whatever broke, log it and answer with the same
+        # message a provider outage would show.
+        logger.exception("Ask AAIJI crashed unexpectedly: %s", exc)
+        reply, provider_name, tools_called = FALLBACK_REPLY, "none", []
     duration_ms = int((time.time() - started) * 1000)
 
     record_admin_audit(

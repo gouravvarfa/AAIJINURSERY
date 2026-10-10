@@ -122,7 +122,7 @@ TOOL_GROUPS = {
     "sales": ["get_sales_summary", "get_business_summary", "get_customers_who_purchased", "get_top_selling_plants", "get_customer_counts"],
     "orders": ["get_pending_orders", "get_order_details", "get_order_timeline", "get_customers_who_purchased"],
     "customers": ["search_customer", "get_customer_purchase_history", "get_customer_outstanding", "get_customer_invoices",
-                  "get_customer_timeline", "get_customer_activity", "get_customer_counts", "get_inquiries"],
+                  "get_customer_timeline", "get_customer_activity", "get_customer_counts", "get_recent_customers", "get_inquiries"],
     "accounting": ["get_payment_history", "get_audit_history", "get_voided_invoices", "get_price_overrides", "get_billing_audit",
                    "get_expenses", "get_purchase_summary", "get_purchase_order_details", "get_customer_outstanding",
                    "get_customer_invoices", "get_employee_activity_timeline"],

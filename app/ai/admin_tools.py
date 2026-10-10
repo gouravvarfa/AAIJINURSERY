@@ -756,6 +756,36 @@ def get_customer_counts(db: Session, admin: AdminUser) -> dict:
     }
 
 
+def get_recent_customers(db: Session, admin: AdminUser, limit: int = 10) -> dict:
+    """The most recently added customers, newest first -- website
+    registrations and offline-entered contacts together, each tagged with
+    its channel. Use for 'recent customers', 'naye customer kaun kaun hain'."""
+    if not check_permission(db, admin, "customers", "VIEW"):
+        return _denied("customers")
+    limit = max(1, min(limit or 10, 25))
+    online = (
+        db.query(Customer)
+        .order_by(Customer.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    offline = (
+        db.query(Contact)
+        .filter(Contact.customer_id.is_(None), Contact.contact_type.in_(["customer", "both"]))
+        .order_by(Contact.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    merged = [
+        {"name": c.name, "mobile": c.mobile, "channel": "online", "joined": _fmt(c.created_at)} for c in online
+    ] + [
+        {"name": c.name, "mobile": c.phone, "channel": "offline", "joined": _fmt(c.created_at), "added_by": c.created_by or NOT_RECORDED}
+        for c in offline
+    ]
+    merged.sort(key=lambda c: c["joined"] or "", reverse=True)
+    return {"count": len(merged), "customers": merged[:limit]}
+
+
 # ---------- Business overview ----------
 
 def get_business_summary(db: Session, admin: AdminUser, range: str = "today") -> dict:
@@ -1973,6 +2003,7 @@ ADMIN_TOOLS = {
     "list_employees": list_employees,
     "get_inquiries": get_inquiries,
     "get_customer_counts": get_customer_counts,
+    "get_recent_customers": get_recent_customers,
     "get_business_summary": get_business_summary,
     "get_order_timeline": get_order_timeline,
     "get_payment_history": get_payment_history,
@@ -2159,6 +2190,7 @@ ADMIN_TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "get_delivery_timeline", "description": "History of one delivery: creation, driver/vehicle assignment, status changes, completion, each with who. Identify it by delivery_number (e.g. DEL-12) OR by customer_name (most recent delivery for that customer) -- use customer_name for questions like 'Raju ki delivery kisne assign ki'.", "parameters": {"type": "object", "properties": {"delivery_number": {"type": "string"}, "customer_name": {"type": "string"}}}}},
     {"type": "function", "function": {"name": "get_admin_activity", "description": "What admins did (activity log) for a period, optionally one admin username -- per-admin counts, and which active admins have NO recorded activity (use for 'aaj kis kis ne kaam nahi kiya', 'kaun login nahi hua'). Needs Users & Roles permission.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_customer_counts", "description": "How many customers exist: online (website accounts) vs offline-only (walk-in/manual contacts), and the total. Use for 'kitne online customer hai', 'total customers kitne hain'.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "get_recent_customers", "description": "The most recently added customers (online and offline), newest first. Use for 'recent customers', 'naye customer kaun kaun hain'.", "parameters": {"type": "object", "properties": {"limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_inquiries", "description": "Website contact/product enquiries: who asked, about which plant, when, and reply status (new/replied). Use for 'kisi customer ki enquiry aayi', 'naye enquiries'.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "status": {"type": "string", "description": "'new' or 'replied'"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_admin_risk_summary", "description": "Per-admin activity worth reviewing: invoices voided, orders cancelled, manual stock adjustments, price overrides, failed logins. Use for 'koi employee gadbadi toh nahi kar raha', 'suspicious activity', 'kisne zyada cancel/void kiye'.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}}}}},
     {"type": "function", "function": {"name": "get_price_overrides", "description": "Offline sales lines sold notably below the plant's catalog price (possible under-billing) -- who sold it and by how much.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "threshold_percent": {"type": "number"}, "limit": {"type": "integer"}}}}},

@@ -1044,6 +1044,44 @@ def get_purchase_summary(db: Session, admin: AdminUser, range: str = "month", fr
     }
 
 
+def get_purchase_order_details(db: Session, admin: AdminUser, order_number: str) -> dict:
+    """One specific Purchase Order's full detail -- who created it, the
+    supplier, date, status, line items and whether/when it was converted to
+    a bill. Identify it by order_number (e.g. 'PO-2'; the plain number '2'
+    also works). Use for 'PO-2 kisne banaya', 'who created this purchase
+    order'."""
+    if not check_permission(db, admin, "products", "VIEW"):
+        return _denied("products")
+    from app.accounting.models import PurchaseOrder, PurchaseOrderItem
+
+    key = str(order_number).strip().upper()
+    q = db.query(PurchaseOrder).filter(PurchaseOrder.order_number == key)
+    po = q.first()
+    if not po and key.replace("PO-", "").isdigit():
+        po = db.query(PurchaseOrder).filter(PurchaseOrder.id == int(key.replace("PO-", ""))).first()
+    if not po:
+        return {"error": f"No purchase order '{order_number}' found."}
+    bill = db.query(Purchase).filter(Purchase.purchase_order_id == po.id).first()
+    items = db.query(PurchaseOrderItem).filter(PurchaseOrderItem.purchase_order_id == po.id).all()
+    return {
+        "order_number": po.order_number,
+        "created_by": po.created_by or NOT_RECORDED,
+        "created_at": _fmt(po.created_at),
+        "order_date": _fmt(po.order_date),
+        "supplier": po.contact.name if po.contact else None,
+        "status": po.status,
+        "subtotal": po.subtotal,
+        "total_amount": po.total_amount,
+        "items": [
+            {"plant": i.description, "quantity": i.quantity, "unit_price": i.unit_price,
+             "tray_size": i.tray_size, "line_total": i.line_total}
+            for i in items
+        ],
+        "billed": bool(bill),
+        "bill_invoice_number": bill.invoice_number if bill else None,
+    }
+
+
 def get_deliveries(db: Session, admin: AdminUser, range: str = "today", from_date: str = None, to_date: str = None, status: str = None, driver_name: str = None, vehicle: str = None, customer_name: str = None, limit: int = 15) -> dict:
     """List deliveries by date, optionally filtered by status, driver,
     vehicle (registration or model) or customer. Includes counts per
@@ -1282,12 +1320,14 @@ def get_customer_timeline(db: Session, admin: AdminUser, name: str) -> dict:
     }
 
 
-def get_employee_activity_timeline(db: Session, admin: AdminUser, username: str, range: str = "today", from_date: str = None, to_date: str = None, limit: int = 60) -> dict:
+def get_employee_activity_timeline(db: Session, admin: AdminUser, username: str = None, range: str = "today", from_date: str = None, to_date: str = None, limit: int = 60) -> dict:
     """Everything one admin/employee actually did in a period, chronological
     -- combined from every actor-tagged source in the system (orders,
     customers/contacts, sales orders, invoices, payments, stock, deliveries,
     expenses, purchases, logins, and generic accounting edits via AuditLog).
     Use for "Ishwar ne aaj kya kiya", "what did this employee do today".
+    Omit `username` for "did anyone do anything today/yesterday" -- then
+    this returns everyone's activity for the period, grouped by who did it.
     This does NOT cover every possible action (e.g. plain page views are
     never recorded) -- absence here means no recorded activity, not proof
     nothing happened."""
@@ -1296,123 +1336,134 @@ def get_employee_activity_timeline(db: Session, admin: AdminUser, username: str,
     start, end, err = _range(range, from_date, to_date)
     if err:
         return {"error": err}
-    uname = username.strip()
+    uname = username.strip() if username else None
     events: list = []
 
-    for r in db.query(LoginAttempt).filter(LoginAttempt.identifier.ilike(uname), LoginAttempt.success.is_(True), LoginAttempt.created_at >= start, LoginAttempt.created_at < end):
-        _event(events, r.created_at, "Login", uname, f"from {r.ip_address}")
+    def who(col):
+        """The actual admin username on this row (used when no specific
+        `username` was asked for), falling back to the asked-for one."""
+        return col or uname or NOT_RECORDED
 
-    for r in db.query(Contact).filter(Contact.created_by.ilike(uname), Contact.created_at >= start, Contact.created_at < end):
-        _event(events, r.created_at, "Customer/contact created", uname, r.name)
+    def match(col):
+        return col.ilike(uname) if uname else col.isnot(None)
 
-    for r in db.query(SalesOrder).filter(SalesOrder.created_by.ilike(uname), SalesOrder.created_at >= start, SalesOrder.created_at < end):
-        _event(events, r.created_at, f"Sales order {r.order_number} created", uname, f"{r.contact.name if r.contact else '-'}, {money(r.total_amount)}")
+    for r in db.query(LoginAttempt).filter(match(LoginAttempt.identifier), LoginAttempt.success.is_(True), LoginAttempt.created_at >= start, LoginAttempt.created_at < end):
+        _event(events, r.created_at, "Login", who(r.identifier), f"from {r.ip_address}")
 
-    for r in db.query(Delivery).filter(Delivery.created_by.ilike(uname), Delivery.created_at >= start, Delivery.created_at < end):
-        _event(events, r.created_at, f"Delivery {r.delivery_number} created", uname, r.contact.name if r.contact else None)
-    for r in db.query(DeliveryStatusHistory).filter(DeliveryStatusHistory.changed_by.ilike(uname), DeliveryStatusHistory.created_at >= start, DeliveryStatusHistory.created_at < end):
-        _event(events, r.created_at, f"Delivery #{r.delivery_id} {r.event}", uname, f"{r.old_value or '-'} -> {r.new_value or '-'}")
+    for r in db.query(Contact).filter(match(Contact.created_by), Contact.created_at >= start, Contact.created_at < end):
+        _event(events, r.created_at, "Customer/contact created", who(r.created_by), r.name)
 
-    for r in db.query(PaymentIn).filter(PaymentIn.recorded_by.ilike(uname), PaymentIn.payment_date >= start, PaymentIn.payment_date < end):
-        _event(events, r.payment_date, f"Payment received ({r.method})", uname, money(r.amount))
-    for r in db.query(PaymentOut).filter(PaymentOut.recorded_by.ilike(uname), PaymentOut.payment_date >= start, PaymentOut.payment_date < end):
-        _event(events, r.payment_date, f"Payment made ({r.method})", uname, money(r.amount))
+    for r in db.query(SalesOrder).filter(match(SalesOrder.created_by), SalesOrder.created_at >= start, SalesOrder.created_at < end):
+        _event(events, r.created_at, f"Sales order {r.order_number} created", who(r.created_by), f"{r.contact.name if r.contact else '-'}, {money(r.total_amount)}")
 
-    for r in db.query(InventoryTransaction).filter(InventoryTransaction.created_by.ilike(uname), InventoryTransaction.created_at >= start, InventoryTransaction.created_at < end):
-        _event(events, r.created_at, f"Stock {r.transaction_type}", uname, f"{r.plant.name if r.plant else r.plant_id}: {r.before_quantity} -> {r.after_quantity}")
+    for r in db.query(Delivery).filter(match(Delivery.created_by), Delivery.created_at >= start, Delivery.created_at < end):
+        _event(events, r.created_at, f"Delivery {r.delivery_number} created", who(r.created_by), r.contact.name if r.contact else None)
+    for r in db.query(DeliveryStatusHistory).filter(match(DeliveryStatusHistory.changed_by), DeliveryStatusHistory.created_at >= start, DeliveryStatusHistory.created_at < end):
+        _event(events, r.created_at, f"Delivery #{r.delivery_id} {r.event}", who(r.changed_by), f"{r.old_value or '-'} -> {r.new_value or '-'}")
 
-    for r in db.query(Expense).filter(Expense.created_by.ilike(uname), Expense.expense_date >= start, Expense.expense_date < end):
-        _event(events, r.expense_date, "Expense recorded", uname, f"{r.category}: {money(r.total_amount)}")
+    for r in db.query(PaymentIn).filter(match(PaymentIn.recorded_by), PaymentIn.payment_date >= start, PaymentIn.payment_date < end):
+        _event(events, r.payment_date, f"Payment received ({r.method})", who(r.recorded_by), money(r.amount))
+    for r in db.query(PaymentOut).filter(match(PaymentOut.recorded_by), PaymentOut.payment_date >= start, PaymentOut.payment_date < end):
+        _event(events, r.payment_date, f"Payment made ({r.method})", who(r.recorded_by), money(r.amount))
 
-    for r in db.query(Purchase).filter(Purchase.created_by.ilike(uname), Purchase.purchase_date >= start, Purchase.purchase_date < end):
-        _event(events, r.purchase_date, "Purchase/bill recorded", uname, f"{r.supplier}: {money(r.total_cost)}")
+    for r in db.query(InventoryTransaction).filter(match(InventoryTransaction.created_by), InventoryTransaction.created_at >= start, InventoryTransaction.created_at < end):
+        _event(events, r.created_at, f"Stock {r.transaction_type}", who(r.created_by), f"{r.plant.name if r.plant else r.plant_id}: {r.before_quantity} -> {r.after_quantity}")
+
+    for r in db.query(Expense).filter(match(Expense.created_by), Expense.expense_date >= start, Expense.expense_date < end):
+        _event(events, r.expense_date, "Expense recorded", who(r.created_by), f"{r.category}: {money(r.total_amount)}")
+
+    for r in db.query(Purchase).filter(match(Purchase.created_by), Purchase.purchase_date >= start, Purchase.purchase_date < end):
+        _event(events, r.purchase_date, "Purchase/bill recorded", who(r.created_by), f"{r.supplier}: {money(r.total_cost)}")
 
     from app.accounting.models import PurchaseOrder
 
-    for r in db.query(PurchaseOrder).filter(PurchaseOrder.created_by.ilike(uname), PurchaseOrder.order_date >= start, PurchaseOrder.order_date < end):
-        _event(events, r.order_date, f"Purchase order {r.order_number} created", uname, f"{r.contact.name if r.contact else '-'}, {money(r.total_amount)}")
+    for r in db.query(PurchaseOrder).filter(match(PurchaseOrder.created_by), PurchaseOrder.order_date >= start, PurchaseOrder.order_date < end):
+        _event(events, r.order_date, f"Purchase order {r.order_number} created", who(r.created_by), f"{r.contact.name if r.contact else '-'}, {money(r.total_amount)}")
 
-    for r in db.query(Invoice).filter(Invoice.voided_by.ilike(uname), Invoice.voided_at.isnot(None), Invoice.voided_at >= start, Invoice.voided_at < end):
-        _event(events, r.voided_at, f"Invoice {r.invoice_number} voided", uname, money(r.total_amount))
+    for r in db.query(Invoice).filter(match(Invoice.voided_by), Invoice.voided_at.isnot(None), Invoice.voided_at >= start, Invoice.voided_at < end):
+        _event(events, r.voided_at, f"Invoice {r.invoice_number} voided", who(r.voided_by), money(r.total_amount))
 
-    for r in db.query(DeliveryTrip).filter(DeliveryTrip.created_by.ilike(uname), DeliveryTrip.created_at >= start, DeliveryTrip.created_at < end):
-        _event(events, r.created_at, "Delivery trip created", uname, r.driver.name if r.driver else None)
-    for r in db.query(VehicleFuelLog).filter(VehicleFuelLog.created_by.ilike(uname), VehicleFuelLog.created_at >= start, VehicleFuelLog.created_at < end):
-        _event(events, r.created_at, "Fuel log recorded", uname, f"{r.vehicle.registration_number if r.vehicle else '-'}: {money(r.cost)}")
+    for r in db.query(DeliveryTrip).filter(match(DeliveryTrip.created_by), DeliveryTrip.created_at >= start, DeliveryTrip.created_at < end):
+        _event(events, r.created_at, "Delivery trip created", who(r.created_by), r.driver.name if r.driver else None)
+    for r in db.query(VehicleFuelLog).filter(match(VehicleFuelLog.created_by), VehicleFuelLog.created_at >= start, VehicleFuelLog.created_at < end):
+        _event(events, r.created_at, "Fuel log recorded", who(r.created_by), f"{r.vehicle.registration_number if r.vehicle else '-'}: {money(r.cost)}")
 
-    for r in db.query(InquiryStatusHistory).filter(InquiryStatusHistory.changed_by.ilike(uname), InquiryStatusHistory.created_at >= start, InquiryStatusHistory.created_at < end):
-        _event(events, r.created_at, f"Inquiry #{r.inquiry_id} status {r.old_status or '-'} -> {r.new_status}", uname, None)
+    for r in db.query(InquiryStatusHistory).filter(match(InquiryStatusHistory.changed_by), InquiryStatusHistory.created_at >= start, InquiryStatusHistory.created_at < end):
+        _event(events, r.created_at, f"Inquiry #{r.inquiry_id} status {r.old_status or '-'} -> {r.new_status}", who(r.changed_by), None)
 
-    for r in db.query(Role).filter(Role.created_by.ilike(uname), Role.created_at >= start, Role.created_at < end):
-        _event(events, r.created_at, "Role created", uname, r.name)
+    for r in db.query(Role).filter(match(Role.created_by), Role.created_at >= start, Role.created_at < end):
+        _event(events, r.created_at, "Role created", who(r.created_by), r.name)
 
     from app.communications.inbox_models import WhatsAppInboxMessage
     from app.communications.models import WhatsAppMessage
     from app.labour.models import AdvanceRecovery
 
-    for r in db.query(WhatsAppMessage).filter(WhatsAppMessage.created_by.ilike(uname), WhatsAppMessage.created_at >= start, WhatsAppMessage.created_at < end):
-        _event(events, r.created_at, "WhatsApp message sent", uname, f"{r.template_name} -> {r.customer_name or r.mobile}")
-    for r in db.query(WhatsAppInboxMessage).filter(WhatsAppInboxMessage.created_by.ilike(uname), WhatsAppInboxMessage.created_at >= start, WhatsAppInboxMessage.created_at < end):
-        _event(events, r.created_at, "WhatsApp reply sent", uname, (r.body or "")[:120] or None)
-    for r in db.query(AdvanceRecovery).filter(AdvanceRecovery.created_by.ilike(uname), AdvanceRecovery.created_at >= start, AdvanceRecovery.created_at < end):
-        _event(events, r.created_at, "Advance recovery recorded", uname, money(r.amount))
+    for r in db.query(WhatsAppMessage).filter(match(WhatsAppMessage.created_by), WhatsAppMessage.created_at >= start, WhatsAppMessage.created_at < end):
+        _event(events, r.created_at, "WhatsApp message sent", who(r.created_by), f"{r.template_name} -> {r.customer_name or r.mobile}")
+    for r in db.query(WhatsAppInboxMessage).filter(match(WhatsAppInboxMessage.created_by), WhatsAppInboxMessage.created_at >= start, WhatsAppInboxMessage.created_at < end):
+        _event(events, r.created_at, "WhatsApp reply sent", who(r.created_by), (r.body or "")[:120] or None)
+    for r in db.query(AdvanceRecovery).filter(match(AdvanceRecovery.created_by), AdvanceRecovery.recovered_at >= start, AdvanceRecovery.recovered_at < end):
+        _event(events, r.recovered_at, "Advance recovery recorded", who(r.created_by), money(r.amount))
 
     from app.labour.models import EmployeeAttendance, Labour, LabourAttendance, Payroll, WorkerAdvance, WorkerPayment, WorkRequirement
 
     emp_names = {e.id: e.name for e in db.query(Employee)}
     lab_names = {l.id: l.name for l in db.query(Labour)}
-    for r in db.query(EmployeeAttendance).filter(EmployeeAttendance.created_by.ilike(uname), EmployeeAttendance.created_at >= start, EmployeeAttendance.created_at < end):
-        _event(events, r.created_at, "Employee attendance marked", uname, f"{emp_names.get(r.employee_id, '?')}: {r.status}")
-    for r in db.query(LabourAttendance).filter(LabourAttendance.created_by.ilike(uname), LabourAttendance.created_at >= start, LabourAttendance.created_at < end):
-        _event(events, r.created_at, "Labour attendance marked", uname, f"{lab_names.get(r.labour_id, '?')}: {r.status}, earned {money(r.earned_amount)}")
-    for r in db.query(WorkRequirement).filter(WorkRequirement.created_by.ilike(uname), WorkRequirement.created_at >= start, WorkRequirement.created_at < end):
-        _event(events, r.created_at, "Work requirement created", uname, f"{r.work_type}, {r.required_count} workers")
-    for r in db.query(Payroll).filter(Payroll.generated_by.ilike(uname), Payroll.generated_at >= start, Payroll.generated_at < end):
-        _event(events, r.generated_at, "Payroll generated", uname, f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}, {r.period_year}-{r.period_month:02d}, net {money(r.net_payable)}")
-    for r in db.query(Payroll).filter(Payroll.finalized_by.ilike(uname), Payroll.finalized_at.isnot(None), Payroll.finalized_at >= start, Payroll.finalized_at < end):
-        _event(events, r.finalized_at, "Payroll finalized", uname, f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}, {r.period_year}-{r.period_month:02d}")
-    for r in db.query(WorkerAdvance).filter(WorkerAdvance.created_by.ilike(uname), WorkerAdvance.advance_date >= start, WorkerAdvance.advance_date < end):
-        _event(events, r.advance_date, "Advance given", uname, f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}: {money(r.amount)}")
-    for r in db.query(WorkerPayment).filter(WorkerPayment.created_by.ilike(uname), WorkerPayment.payment_date >= start, WorkerPayment.payment_date < end):
-        _event(events, r.payment_date, "Worker payment recorded", uname, f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}: {money(r.amount)} ({r.method})")
+    for r in db.query(EmployeeAttendance).filter(match(EmployeeAttendance.created_by), EmployeeAttendance.created_at >= start, EmployeeAttendance.created_at < end):
+        _event(events, r.created_at, "Employee attendance marked", who(r.created_by), f"{emp_names.get(r.employee_id, '?')}: {r.status}")
+    for r in db.query(LabourAttendance).filter(match(LabourAttendance.created_by), LabourAttendance.created_at >= start, LabourAttendance.created_at < end):
+        _event(events, r.created_at, "Labour attendance marked", who(r.created_by), f"{lab_names.get(r.labour_id, '?')}: {r.status}, earned {money(r.earned_amount)}")
+    for r in db.query(WorkRequirement).filter(match(WorkRequirement.created_by), WorkRequirement.created_at >= start, WorkRequirement.created_at < end):
+        _event(events, r.created_at, "Work requirement created", who(r.created_by), f"{r.work_type}, {r.required_count} workers")
+    for r in db.query(Payroll).filter(match(Payroll.generated_by), Payroll.generated_at >= start, Payroll.generated_at < end):
+        _event(events, r.generated_at, "Payroll generated", who(r.generated_by), f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}, {r.period_year}-{r.period_month:02d}, net {money(r.net_payable)}")
+    for r in db.query(Payroll).filter(match(Payroll.finalized_by), Payroll.finalized_at.isnot(None), Payroll.finalized_at >= start, Payroll.finalized_at < end):
+        _event(events, r.finalized_at, "Payroll finalized", who(r.finalized_by), f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}, {r.period_year}-{r.period_month:02d}")
+    for r in db.query(WorkerAdvance).filter(match(WorkerAdvance.created_by), WorkerAdvance.advance_date >= start, WorkerAdvance.advance_date < end):
+        _event(events, r.advance_date, "Advance given", who(r.created_by), f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}: {money(r.amount)}")
+    for r in db.query(WorkerPayment).filter(match(WorkerPayment.created_by), WorkerPayment.payment_date >= start, WorkerPayment.payment_date < end):
+        _event(events, r.payment_date, "Worker payment recorded", who(r.created_by), f"{emp_names.get(r.employee_id) or lab_names.get(r.labour_id) or '?'}: {money(r.amount)} ({r.method})")
 
-    for r in db.query(OrderStatusHistory).filter(OrderStatusHistory.updated_by.ilike(uname), OrderStatusHistory.created_at >= start, OrderStatusHistory.created_at < end):
-        _event(events, r.created_at, f"Order #{r.order_id} status {r.old_status or '-'} -> {r.new_status}", uname, r.remarks or None)
-    for r in db.query(Order).filter(Order.acknowledged_by.ilike(uname), Order.acknowledged_at.isnot(None), Order.acknowledged_at >= start, Order.acknowledged_at < end):
-        _event(events, r.acknowledged_at, f"Order #{r.id} acknowledged", uname, None)
-    for r in db.query(Order).filter(Order.team_confirmed_by.ilike(uname), Order.team_confirmed_at.isnot(None), Order.team_confirmed_at >= start, Order.team_confirmed_at < end):
-        _event(events, r.team_confirmed_at, f"Order #{r.id} team-confirmed", uname, r.delivery_feasibility)
+    for r in db.query(OrderStatusHistory).filter(match(OrderStatusHistory.updated_by), OrderStatusHistory.created_at >= start, OrderStatusHistory.created_at < end):
+        _event(events, r.created_at, f"Order #{r.order_id} status {r.old_status or '-'} -> {r.new_status}", who(r.updated_by), r.remarks or None)
+    for r in db.query(Order).filter(match(Order.acknowledged_by), Order.acknowledged_at.isnot(None), Order.acknowledged_at >= start, Order.acknowledged_at < end):
+        _event(events, r.acknowledged_at, f"Order #{r.id} acknowledged", who(r.acknowledged_by), None)
+    for r in db.query(Order).filter(match(Order.team_confirmed_by), Order.team_confirmed_at.isnot(None), Order.team_confirmed_at >= start, Order.team_confirmed_at < end):
+        _event(events, r.team_confirmed_at, f"Order #{r.id} team-confirmed", who(r.team_confirmed_by), r.delivery_feasibility)
 
     # action != "create" only -- creates are already covered by the specific
     # per-table loops above (Contact/SalesOrder/Expense/Purchase); this adds
     # edits/voids/deletes that have no dedicated event source.
-    for r in db.query(AuditLog).filter(AuditLog.changed_by.ilike(uname), AuditLog.changed_at >= start, AuditLog.changed_at < end, AuditLog.action != "create"):
-        _event(events, r.changed_at, f"{r.table_name} {r.action}" + (f" ({r.field_name})" if r.field_name else ""), uname, f"{r.old_value} -> {r.new_value}" if r.field_name else None)
+    for r in db.query(AuditLog).filter(match(AuditLog.changed_by), AuditLog.changed_at >= start, AuditLog.changed_at < end, AuditLog.action != "create"):
+        _event(events, r.changed_at, f"{r.table_name} {r.action}" + (f" ({r.field_name})" if r.field_name else ""), who(r.changed_by), f"{r.old_value} -> {r.new_value}" if r.field_name else None)
 
     # "login" excluded -- already covered by LoginAttempt above, same event.
-    for r in db.query(AdminActivityLog).filter(AdminActivityLog.admin_username.ilike(uname), AdminActivityLog.created_at >= start, AdminActivityLog.created_at < end, AdminActivityLog.action != "login"):
-        _event(events, r.created_at, r.action, uname, (r.detail or "")[:160] or None)
+    for r in db.query(AdminActivityLog).filter(match(AdminActivityLog.admin_username), AdminActivityLog.created_at >= start, AdminActivityLog.created_at < end, AdminActivityLog.action != "login"):
+        _event(events, r.created_at, r.action, who(r.admin_username), (r.detail or "")[:160] or None)
 
     events.sort(key=lambda e: e["_t"])
     truncated = len(events) > limit
     page = events[: max(1, min(limit or 60, 100))]
     by_category: dict = {}
+    by_employee: dict = {}
     for e in events:
         cat = e["event"].split(" ")[0]
         by_category[cat] = by_category.get(cat, 0) + 1
+        by_employee[e["by"]] = by_employee.get(e["by"], 0) + 1
     for e in page:
         e.pop("_t")
 
     return {
-        "employee": uname,
+        "employee": uname or "all admins/employees",
         "range": f"{from_date}..{to_date or from_date}" if from_date else range,
         "total_recorded_activities": len(events),
         "first_activity": page[0]["when"] if page else None,
         "last_activity": events[-1]["when"] if events else None,
         "activity_by_type": by_category,
+        "activity_by_employee": by_employee if not uname else None,
         "truncated": truncated,
         "timeline": page,
-        "note": "No recorded activity was found for this employee in the selected period." if not events else None,
+        "note": "No recorded activity was found for anyone in the selected period." if not events and not uname else "No recorded activity was found for this employee in the selected period." if not events else None,
         "coverage_note": "Covers logins, customer/contact creation, sales orders, invoices/edits and voids (via audit log), payments, stock movements, deliveries, delivery trips, fuel logs, expenses, purchase bills, purchase orders, order status changes, enquiry status changes, role creation, WhatsApp sends/replies, general accounting edits, and labour/employee actions (attendance marked, work requirements, payroll generated/finalized, advances given and recovered, worker payments). Plain page views are never recorded.",
     }
 
@@ -1929,6 +1980,7 @@ ADMIN_TOOLS = {
     "get_inventory_history": get_inventory_history,
     "get_expenses": get_expenses,
     "get_purchase_summary": get_purchase_summary,
+    "get_purchase_order_details": get_purchase_order_details,
     "get_deliveries": get_deliveries,
     "get_delivery_timeline": get_delivery_timeline,
     "get_customer_timeline": get_customer_timeline,
@@ -2102,6 +2154,7 @@ ADMIN_TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "get_inventory_history", "description": "Stock movement ledger (sold, restored, received, adjusted; before/after; who) for a plant or all plants.", "parameters": {"type": "object", "properties": {"plant_name": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_expenses", "description": "Expenses total/paid/unpaid, by category, list with who entered.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "category": {"type": "string"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_purchase_summary", "description": "Stock purchases / supplier bills for a period, optionally by supplier.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "supplier": {"type": "string"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_purchase_order_details", "description": "One specific Purchase Order's full detail: who created it, supplier, date, status, line items, and whether/when it was billed. Use for 'PO-2 kisne banaya', 'who created this purchase order'.", "parameters": {"type": "object", "properties": {"order_number": {"type": "string", "description": "e.g. 'PO-2' or just '2'"}}, "required": ["order_number"]}}},
     {"type": "function", "function": {"name": "get_deliveries", "description": "List deliveries for a date, filter by status/driver/vehicle/customer; counts per status and per driver.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "status": {"type": "string"}, "driver_name": {"type": "string"}, "vehicle": {"type": "string"}, "customer_name": {"type": "string"}, "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "get_delivery_timeline", "description": "History of one delivery: creation, driver/vehicle assignment, status changes, completion, each with who. Identify it by delivery_number (e.g. DEL-12) OR by customer_name (most recent delivery for that customer) -- use customer_name for questions like 'Raju ki delivery kisne assign ki'.", "parameters": {"type": "object", "properties": {"delivery_number": {"type": "string"}, "customer_name": {"type": "string"}}}}},
     {"type": "function", "function": {"name": "get_admin_activity", "description": "What admins did (activity log) for a period, optionally one admin username -- per-admin counts, and which active admins have NO recorded activity (use for 'aaj kis kis ne kaam nahi kiya', 'kaun login nahi hua'). Needs Users & Roles permission.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
@@ -2119,7 +2172,7 @@ ADMIN_TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "get_website_content_summary", "description": "Total counts: how many plants (active/total), categories, services, pricing plans, testimonials, blog posts, FAQs, gallery images, reviews. Use for 'total kitne plants hain', 'kitne plans/categories hain'.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "get_customer_activity", "description": "Website login/activity log for one customer by name (separate from purchase history).", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["name"]}}},
     {"type": "function", "function": {"name": "get_billing_audit", "description": "Audit all invoices in a period for numbers that don't match (items vs total, payments vs amount paid, balance, status). Use for 'bill proper match nahi ho raha', 'saare bills khud check karo', 'accounts mein gadbad'.", "parameters": {"type": "object", "properties": {"range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
-    {"type": "function", "function": {"name": "get_employee_activity_timeline", "description": "Everything one admin/employee actually did in a period, in chronological order, combined across every module (orders, customers, sales orders, invoices, payments, stock, deliveries, expenses, purchases, logins, accounting edits, labour/employee attendance, payroll, advances, worker payments). Use for 'Ishwar ne aaj kya kiya', 'what did this employee do today'.", "parameters": {"type": "object", "properties": {"username": {"type": "string"}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}, "required": ["username"]}}},
+    {"type": "function", "function": {"name": "get_employee_activity_timeline", "description": "Everything one admin/employee actually did in a period, in chronological order, combined across every module (orders, customers, sales orders, invoices, payments, stock, deliveries, expenses, purchases, logins, accounting edits, labour/employee attendance, payroll, advances, worker payments). Use for 'Ishwar ne aaj kya kiya', 'what did this employee do today'. Omit username for 'did anyone do anything today/yesterday' -- returns everyone's recorded activity for the period, grouped by who did it.", "parameters": {"type": "object", "properties": {"username": {"type": "string", "description": "Omit this to get activity for every admin/employee, not just one."}, "range": {"type": "string", "enum": ["today", "yesterday", "day_before_yesterday", "last_7_days", "last_30_days", "week", "month", "last_month", "year", "last_year"]}, "from_date": {"type": "string", "description": "YYYY-MM-DD; overrides range"}, "to_date": {"type": "string", "description": "YYYY-MM-DD, with from_date"}, "limit": {"type": "integer"}}}}},
 ]
 
 

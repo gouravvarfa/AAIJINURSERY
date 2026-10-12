@@ -22,8 +22,7 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
   const [categorySaving, setCategorySaving] = useState(false);
   const [categoryError, setCategoryError] = useState("");
 
-  async function handleCreateCategory(e) {
-    e.preventDefault();
+  async function handleCreateCategory() {
     if (!newCategoryName.trim()) {
       setCategoryError("Name is required.");
       return;
@@ -46,8 +45,7 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
   const plant = plants.find((p) => p.id === Number(row.plant_id));
   const variants = plant?.variants || [];
 
-  async function handleCreate(e) {
-    e.preventDefault();
+  async function handleCreate() {
     if (!draft.name.trim() || !draft.category_id) {
       setModalError("Name and category are required.");
       return;
@@ -120,7 +118,7 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
           <div className="modal-card">
             <h3>New Plant</h3>
             {modalError && <div className="alert alert-error">{modalError}</div>}
-            <form onSubmit={handleCreate}>
+            <div>
               <div className="form-group">
                 <label htmlFor="new_plant_name">Name</label>
                 <input
@@ -130,6 +128,7 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
                   autoFocus
                   value={draft.name}
                   onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 />
               </div>
               <div className="form-group">
@@ -166,7 +165,7 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
                   <div className="modal-card">
                     <h3>New Category</h3>
                     {categoryError && <div className="alert alert-error">{categoryError}</div>}
-                    <form onSubmit={handleCreateCategory}>
+                    <div>
                       <div className="form-group">
                         <label htmlFor="new_category_name">Name</label>
                         <input
@@ -176,10 +175,11 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
                           autoFocus
                           value={newCategoryName}
                           onChange={(e) => setNewCategoryName(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleCreateCategory()}
                         />
                       </div>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <button className="btn btn-primary" disabled={categorySaving}>
+                        <button type="button" className="btn btn-primary" disabled={categorySaving} onClick={handleCreateCategory}>
                           {categorySaving ? "Saving..." : "Create Category"}
                         </button>
                         <button
@@ -193,7 +193,7 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
                           Cancel
                         </button>
                       </div>
-                    </form>
+                    </div>
                   </div>
                 </div>
               )}
@@ -212,7 +212,7 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
                 Tray-size options, images and other details can be added later from the Plants page.
               </p>
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn btn-primary" disabled={saving}>
+                <button type="button" className="btn btn-primary" disabled={saving} onClick={handleCreate}>
                   {saving ? "Saving..." : "Create Plant"}
                 </button>
                 <button
@@ -226,7 +226,7 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
                   Cancel
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

@@ -27,8 +27,7 @@ export default function SalesOrders() {
   const [contactSaving, setContactSaving] = useState(false);
   const [contactError, setContactError] = useState("");
 
-  async function handleCreateContact(e) {
-    e.preventDefault();
+  async function handleCreateContact() {
     if (!newContact.name.trim()) {
       setContactError("Name is required.");
       return;
@@ -150,7 +149,7 @@ export default function SalesOrders() {
                 <div className="modal-card">
                   <h3>New Contact</h3>
                   {contactError && <div className="alert alert-error">{contactError}</div>}
-                  <form onSubmit={handleCreateContact}>
+                  <div>
                     <div className="form-group">
                       <label htmlFor="new_contact_name">Name</label>
                       <input
@@ -160,6 +159,7 @@ export default function SalesOrders() {
                         autoFocus
                         value={newContact.name}
                         onChange={(e) => setNewContact((c) => ({ ...c, name: e.target.value }))}
+                        onKeyDown={(e) => e.key === "Enter" && handleCreateContact()}
                       />
                     </div>
                     <div className="form-group">
@@ -191,7 +191,7 @@ export default function SalesOrders() {
                       />
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button className="btn btn-primary" disabled={contactSaving}>
+                      <button type="button" className="btn btn-primary" disabled={contactSaving} onClick={handleCreateContact}>
                         {contactSaving ? "Saving..." : "Create Contact"}
                       </button>
                       <button
@@ -205,7 +205,7 @@ export default function SalesOrders() {
                         Cancel
                       </button>
                     </div>
-                  </form>
+                  </div>
                 </div>
               </div>
             )}

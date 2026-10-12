@@ -58,9 +58,16 @@ export default function SalesOrderDetail() {
             </span>
           </span>
         </div>
-        <Link className="btn btn-sm btn-outline dark" to="/admin/accounting/sales-orders">
-          &larr; Back to Sales Orders
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {order.source === "offline" && order.status === "Draft" && !hasInvoice && (
+            <Link className="btn btn-sm btn-primary" to={`/admin/accounting/sales-orders?edit=${order.id}`}>
+              Edit
+            </Link>
+          )}
+          <Link className="btn btn-sm btn-outline dark" to="/admin/accounting/sales-orders">
+            &larr; Back to Sales Orders
+          </Link>
+        </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}

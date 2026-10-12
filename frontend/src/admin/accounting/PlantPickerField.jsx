@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../../api";
+import SearchSelect from "./SearchSelect";
 
 // One row's plant + tray-size picker, shared by Sales Order and Purchase
 // Order line-item fields. Keeps "+ New Plant" and the tray-size dropdown in
@@ -12,7 +13,7 @@ import { api } from "../../api";
 //   onSelectPlant(plantId): plant changed (or cleared)
 //   onSelectVariant(variantId | ""): tray-size option changed (or cleared -> per-unit)
 //   onPlantCreated(plant): a new plant was saved -- parent adds it to its list
-export default function PlantPickerField({ plants, categories, row, onSelectPlant, onSelectVariant, onPlantCreated, onCategoryCreated }) {
+export default function PlantPickerField({ plants, categories, row, onSelectPlant, onSelectVariant, onPlantCreated, onCategoryCreated, plantPlaceholder }) {
   const [showModal, setShowModal] = useState(false);
   const [draft, setDraft] = useState({ name: "", category_id: "", price: "" });
   const [saving, setSaving] = useState(false);
@@ -71,24 +72,19 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
 
   return (
     <>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <select
-          className="form-control"
+      <div className="plant-picker">
+        <SearchSelect
+          options={plants.map((p) => ({ value: p.id, label: p.name, hint: p.category?.name, search: p.sku }))}
           value={row.plant_id || ""}
-          onChange={(e) => onSelectPlant(e.target.value)}
-          style={{ flex: "1 1 180px", minWidth: 160 }}
-        >
-          <option value="">No linked plant...</option>
-          {plants.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+          onChange={onSelectPlant}
+          placeholder={plantPlaceholder || "No linked plant..."}
+          clearLabel={plantPlaceholder || "No linked plant..."}
+          searchPlaceholder="Search plant by name..."
+          emptyText="No plant matches. Use + New Plant to add it."
+        />
         <button
           type="button"
           className="btn btn-sm btn-outline dark"
-          style={{ flexShrink: 0, whiteSpace: "nowrap" }}
           onClick={() => setShowModal(true)}
         >
           + New Plant
@@ -96,8 +92,8 @@ export default function PlantPickerField({ plants, categories, row, onSelectPlan
       </div>
 
       {variants.length > 0 && (
-        <label>
-          Tray size
+        <label className="line-item-field plant-picker-tray">
+          <span className="line-item-label">Tray size</span>
           <select
             className="form-control"
             value={row.variant_id || ""}

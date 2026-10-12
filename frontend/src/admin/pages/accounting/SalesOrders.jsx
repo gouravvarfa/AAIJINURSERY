@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../../api";
+import SearchSelect from "../../accounting/SearchSelect";
 import { Loading, Empty } from "../../../components/Loading";
 import SourceFilter from "../../accounting/SourceFilter";
 import SalesOrderItemsField from "../../accounting/SalesOrderItemsField";
@@ -13,6 +14,10 @@ function todayDateInput() {
 }
 
 export default function SalesOrders() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get("edit");
+  const [editingOrder, setEditingOrder] = useState(null); // the saved order being edited, if any
   const [items, setItems] = useState(null);
   const [source, setSource] = useState("");
   const [q, setQ] = useState("");
@@ -67,7 +72,45 @@ export default function SalesOrders() {
 
   useEffect(load, [source, q]);
 
+  // "/admin/accounting/sales-orders?edit=ID" (the Edit button on the detail
+  // page) opens this same form, pre-filled, and saves with PUT.
+  useEffect(() => {
+    if (!editId) {
+      setEditingOrder(null);
+      return;
+    }
+    setError("");
+    Promise.all([api.get("/admin/accounting/sales-orders/" + editId), api.get("/admin/accounting/contacts")])
+      .then(([order, contactList]) => {
+        setContacts(contactList);
+        setEditingOrder(order);
+        setForm({
+          contact_id: order.contact_id,
+          order_date: String(order.order_date).slice(0, 10),
+          notes: order.notes || "",
+          items: order.items.map((i) => ({
+            plant_id: i.plant_id || "",
+            variant_id: i.variant_id || "",
+            description: i.description,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+          })),
+        });
+        setMode("form");
+      })
+      .catch((err) => {
+        setLoadError(err.message || "Could not open this order for editing.");
+        setMode("list");
+      });
+  }, [editId]);
+
+  function leaveForm() {
+    if (editingOrder) navigate("/admin/accounting/sales-orders/" + editingOrder.id);
+    else setMode("list");
+  }
+
   function startCreate() {
+    setEditingOrder(null);
     setForm({ contact_id: "", order_date: todayDateInput(), notes: "", items: [] });
     setError("");
     api.get("/admin/accounting/contacts").then(setContacts);
@@ -87,7 +130,7 @@ export default function SalesOrders() {
     setSaving(true);
     setError("");
     try {
-      await api.post("/admin/accounting/sales-orders", {
+      const body = {
         contact_id: Number(form.contact_id),
         order_date: form.order_date,
         notes: form.notes,
@@ -98,7 +141,13 @@ export default function SalesOrders() {
           quantity: i.quantity,
           unit_price: i.unit_price,
         })),
-      });
+      };
+      if (editingOrder) {
+        await api.put("/admin/accounting/sales-orders/" + editingOrder.id, body);
+        navigate("/admin/accounting/sales-orders/" + editingOrder.id);
+        return;
+      }
+      await api.post("/admin/accounting/sales-orders", body);
       setMode("list");
       load();
     } catch (err) {
@@ -112,9 +161,9 @@ export default function SalesOrders() {
     return (
       <div>
         <div className="admin-page-head">
-          <h1>New Sales Order</h1>
-          <button className="btn btn-sm btn-outline dark" onClick={() => setMode("list")}>
-            Back to List
+          <h1>{editingOrder ? `Edit Sales Order ${editingOrder.order_number}` : "New Sales Order"}</h1>
+          <button className="btn btn-sm btn-outline dark" onClick={leaveForm}>
+            {editingOrder ? "Cancel" : "Back to List"}
           </button>
         </div>
         <div className="admin-form-card">
@@ -123,21 +172,22 @@ export default function SalesOrders() {
             <div className="form-group">
               <label htmlFor="contact_id">Contact</label>
               <div style={{ display: "flex", gap: 8 }}>
-                <select
-                  id="contact_id"
-                  className="form-control"
-                  required
-                  value={form.contact_id}
-                  onChange={(e) => setForm((f) => ({ ...f, contact_id: e.target.value }))}
-                  style={{ flex: 1 }}
-                >
-                  <option value="">Select a contact...</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} {c.source === "online" ? "(website customer)" : ""}
-                    </option>
-                  ))}
-                </select>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <SearchSelect
+                    id="contact_id"
+                    options={contacts.map((c) => ({
+                      value: c.id,
+                      label: c.name,
+                      hint: [c.phone, c.source === "online" ? "website customer" : ""].filter(Boolean).join(" · "),
+                      search: `${c.phone} ${c.email}`,
+                    }))}
+                    value={form.contact_id}
+                    onChange={(v) => setForm((f) => ({ ...f, contact_id: v }))}
+                    placeholder="Select a contact..."
+                    searchPlaceholder="Search customer by name or mobile number"
+                    emptyText="No contact matches. Use + New Contact to add one."
+                  />
+                </div>
                 <button type="button" className="btn btn-sm btn-outline dark" onClick={() => setShowContactModal(true)}>
                   + New Contact
                 </button>
@@ -237,7 +287,7 @@ export default function SalesOrders() {
               />
             </div>
             <button className="btn btn-primary" disabled={saving}>
-              {saving ? "Saving..." : "Save Sales Order"}
+              {saving ? "Saving..." : editingOrder ? "Save Changes" : "Save Sales Order"}
             </button>
           </form>
         </div>

@@ -55,49 +55,48 @@ export default function PurchaseOrderItemsField({ value, onChange }) {
   return (
     <div className="variants-field">
       {rows.map((row, i) => (
-        <div className="variant-row" key={`row-${i}`}>
-          <div className="variant-row-inputs">
-            <label style={{ flex: "2 1 260px", minWidth: 240 }}>
-              Plant
-              <PlantPickerField
-                plants={plants}
-                categories={categories}
-                row={row}
-                onSelectPlant={(plantId) => selectPlant(i, plantId)}
-                onSelectVariant={(variantId) => selectVariant(i, variantId)}
-                onPlantCreated={(p) => setPlants((prev) => [...prev, p])}
-                onCategoryCreated={(c) => setCategories((prev) => [...prev, c])}
-              />
-            </label>
-            <label>
-              {row.variant_id ? "Number of trays received" : "Quantity"}
-              <input
-                type="number"
-                className="form-control"
-                value={row.quantity}
-                onChange={(e) => updateRow(i, "quantity", e.target.valueAsNumber || 0)}
-              />
-            </label>
-            <label>
-              {row.variant_id ? "Cost per tray (₹)" : "Unit Cost (₹)"}
-              <input
-                type="number"
-                step="any"
-                className="form-control"
-                value={row.unit_price}
-                onChange={(e) => updateRow(i, "unit_price", e.target.valueAsNumber || 0)}
-              />
-            </label>
+        <div className="line-item line-item-no-desc" key={`row-${i}`}>
+          <div className="line-item-field line-item-plant">
+            <span className="line-item-label">Plant</span>
+            <PlantPickerField
+              plants={plants}
+              categories={categories}
+              row={row}
+              onSelectPlant={(plantId) => selectPlant(i, plantId)}
+              onSelectVariant={(variantId) => selectVariant(i, variantId)}
+              onPlantCreated={(p) => setPlants((prev) => [...prev, p])}
+              onCategoryCreated={(c) => setCategories((prev) => [...prev, c])}
+              plantPlaceholder="Select a plant..."
+            />
           </div>
+          <label className="line-item-field line-item-qty">
+            <span className="line-item-label">{row.variant_id ? "Trays" : "Quantity"}</span>
+            <input
+              type="number"
+              className="form-control"
+              value={row.quantity}
+              onChange={(e) => updateRow(i, "quantity", e.target.valueAsNumber || 0)}
+            />
+          </label>
+          <label className="line-item-field line-item-price">
+            <span className="line-item-label">{row.variant_id ? "Cost / tray (₹)" : "Unit Cost (₹)"}</span>
+            <input
+              type="number"
+              step="any"
+              className="form-control"
+              value={row.unit_price}
+              onChange={(e) => updateRow(i, "unit_price", e.target.valueAsNumber || 0)}
+            />
+          </label>
+          <button type="button" className="btn btn-sm btn-danger line-item-remove" onClick={() => removeRow(i)}>
+            Remove
+          </button>
           {row.quantity > 0 && row.unit_price > 0 && (
-            <small style={{ color: "var(--color-text-muted)" }}>
+            <small className="line-item-total">
               Line total: ₹{(row.quantity * row.unit_price).toLocaleString()}
               {row.variant_id ? ` (${row.quantity} trays)` : ""}
             </small>
           )}
-          <button type="button" className="btn btn-sm btn-danger" onClick={() => removeRow(i)}>
-            Remove
-          </button>
         </div>
       ))}
       <button type="button" className="btn btn-sm btn-outline dark" onClick={addRow}>

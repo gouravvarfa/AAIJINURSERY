@@ -1724,3 +1724,184 @@ table.admin-table .row-actions {
 .ask-aaiji-panel {
   min-height: 520px;
 }
+
+/* ---------- Sales / Purchase Order line items ----------
+   The form card is only ~660px wide inside, so each line is two tidy rows:
+   the plant picker across the top, then description / quantity / price /
+   remove underneath. Labels sit directly above their inputs and never wrap. */
+.line-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 150px auto;
+  gap: 12px 14px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+.line-item-no-desc {
+  grid-template-columns: 150px 170px minmax(0, 1fr);
+}
+.line-item-plant {
+  grid-column: 1 / -1;
+}
+.line-item-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+.line-item-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+  white-space: nowrap;
+}
+.line-item .form-control {
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  padding: 8px 12px;
+  margin: 0;
+}
+.plant-picker {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.plant-picker .form-control {
+  flex: 1 1 auto;
+}
+.plant-picker .btn {
+  flex: 0 0 auto;
+  height: 46px;
+  white-space: nowrap;
+}
+.plant-picker-tray {
+  margin-top: 8px;
+}
+.line-item-remove {
+  height: 46px;
+  white-space: nowrap;
+  justify-self: end;
+}
+.line-item-total {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 560px) {
+  .line-item,
+  .line-item-no-desc {
+    grid-template-columns: 1fr 1fr;
+  }
+  .line-item-desc {
+    grid-column: 1 / -1;
+  }
+  .plant-picker {
+    flex-wrap: wrap;
+  }
+  .plant-picker .form-control {
+    flex-basis: 100%;
+  }
+  .plant-picker .btn {
+    flex: 1 1 auto;
+  }
+  .line-item-remove {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+}
+
+/* ---------- Searchable dropdown (contacts, plants) ---------- */
+.search-select {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.search-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  background: #fff;
+}
+.search-select-trigger > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-select-placeholder {
+  color: var(--color-text-muted);
+}
+.search-select-caret {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+.search-select.open .search-select-trigger {
+  border-color: var(--color-accent);
+}
+.search-select-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 240px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+  padding: 8px;
+}
+.search-select-panel .search-select-search {
+  width: 100%;
+  height: 40px;
+  padding: 6px 12px;
+  margin: 0 0 6px;
+}
+/* Only the list scrolls, so the search box stays put above it. */
+.search-select-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.search-select-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+.search-select-option.active {
+  background: #eef5f0;
+}
+.search-select-option.selected {
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+.search-select-option.clear {
+  color: var(--color-text-muted);
+}
+.search-select-hint {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+.search-select-empty {
+  padding: 12px 10px;
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+}

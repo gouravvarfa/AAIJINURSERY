@@ -16,7 +16,7 @@ from app.accounting.models import (
     SalesOrderItem,
 )
 from app.accounting.permissions import SALES_WRITE_ROLES, require_accounting_action
-from app.models import PlantVariant
+from app.models import Plant, PlantVariant
 from app.accounting.schemas import (
     InvoiceConvertIn,
     InvoiceOut,
@@ -75,6 +75,37 @@ def get_sales_order(
     return item
 
 
+def _add_lines(db: Session, order: SalesOrder, lines) -> float:
+    """Adds the given line items to `order` and returns their subtotal.
+    Shared by create and edit so both apply exactly the same checks."""
+    subtotal = 0.0
+    for line in lines:
+        if line.plant_id is not None and not db.query(Plant.id).filter(Plant.id == line.plant_id).first():
+            raise HTTPException(status_code=400, detail=f"Unknown plant id {line.plant_id}")
+        tray_size = None
+        if line.variant_id is not None:
+            variant = db.query(PlantVariant).filter(PlantVariant.id == line.variant_id, PlantVariant.plant_id == line.plant_id).first()
+            if not variant:
+                raise HTTPException(status_code=400, detail="Unknown tray-size option for this plant")
+            tray_size = variant.tray_size
+        line_total = round(line.quantity * line.unit_price, 2)
+        subtotal += line_total
+        db.add(
+            SalesOrderItem(
+                sales_order_id=order.id,
+                plant_id=line.plant_id,
+                description=line.description,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+                tax_rate_id=line.tax_rate_id,
+                line_total=line_total,
+                variant_id=line.variant_id,
+                tray_size=tray_size,
+            )
+        )
+    return subtotal
+
+
 @router.post("/sales-orders", response_model=SalesOrderOut, status_code=201)
 def create_sales_order(
     payload: SalesOrderIn,
@@ -103,29 +134,7 @@ def create_sales_order(
     db.flush()
     order.order_number = f"SO-{order.id}"
 
-    for line in payload.items:
-        tray_size = None
-        if line.variant_id is not None:
-            variant = db.query(PlantVariant).filter(PlantVariant.id == line.variant_id, PlantVariant.plant_id == line.plant_id).first()
-            if not variant:
-                raise HTTPException(status_code=400, detail="Unknown tray-size option for this plant")
-            tray_size = variant.tray_size
-        line_total = round(line.quantity * line.unit_price, 2)
-        subtotal += line_total
-        db.add(
-            SalesOrderItem(
-                sales_order_id=order.id,
-                plant_id=line.plant_id,
-                description=line.description,
-                quantity=line.quantity,
-                unit_price=line.unit_price,
-                tax_rate_id=line.tax_rate_id,
-                line_total=line_total,
-                variant_id=line.variant_id,
-                tray_size=tray_size,
-            )
-        )
-
+    subtotal = _add_lines(db, order, payload.items)
     order.subtotal = round(subtotal, 2)
     order.tax_total = round(tax_total, 2)
     order.total_amount = round(subtotal + tax_total, 2)
@@ -134,6 +143,50 @@ def create_sales_order(
     record_change(db, "accounting_sales_orders", order.id, "create", changed_by=admin)
     db.commit()
     queue_sales_order_created(order)
+    return get_sales_order(order.id, admin, db)
+
+
+@router.put("/sales-orders/{item_id}", response_model=SalesOrderOut)
+def update_sales_order(
+    item_id: int,
+    payload: SalesOrderIn,
+    admin: str = Depends(get_current_admin),
+    _role: str = Depends(require_accounting_action("EDIT", SALES_WRITE_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Edit an offline Sales Order that is still a Draft. Once it has been
+    converted to an invoice (or cancelled/voided) the invoice, payments and
+    stock already depend on its lines, so it is locked -- void the invoice
+    instead."""
+    order = db.query(SalesOrder).filter(SalesOrder.id == item_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Sales order not found")
+    if order.source != "offline":
+        raise HTTPException(status_code=400, detail="Website orders mirror the customer's order and can't be edited here")
+    if order.status != "Draft" or db.query(Invoice.id).filter(Invoice.sales_order_id == order.id).first():
+        raise HTTPException(status_code=400, detail="Only a Draft sales order that has no invoice yet can be edited")
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="At least one line item is required")
+    contact = db.query(Contact).filter(Contact.id == payload.contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=400, detail="Unknown contact")
+
+    before = {"contact_id": order.contact_id, "order_date": str(order.order_date), "notes": order.notes, "total_amount": order.total_amount}
+    order.items.clear()
+    db.flush()
+    subtotal = _add_lines(db, order, payload.items)
+    order.contact_id = contact.id
+    order.order_date = payload.order_date
+    order.notes = payload.notes
+    order.subtotal = round(subtotal, 2)
+    order.tax_total = 0.0
+    order.total_amount = round(subtotal, 2)
+    changes = {k: (v, {"contact_id": order.contact_id, "order_date": str(order.order_date), "notes": order.notes, "total_amount": order.total_amount}[k]) for k, v in before.items()}
+    changes = {k: v for k, v in changes.items() if v[0] != v[1]}
+    changes["line_items"] = ("replaced", f"{len(payload.items)} line(s)")
+    db.commit()
+    record_change(db, "accounting_sales_orders", order.id, "edit", changed_by=admin, changes=changes)
+    db.commit()
     return get_sales_order(order.id, admin, db)
 
 

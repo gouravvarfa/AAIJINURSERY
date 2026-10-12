@@ -52,9 +52,16 @@ export default function PurchaseOrderDetail() {
           <h1 style={{ marginBottom: 4 }}>Purchase Order {order.order_number}</h1>
           <span className={`badge ${purchaseOrderBadgeClass(order.status)}`}>{order.status}</span>
         </div>
-        <Link className="btn btn-sm btn-outline dark" to="/admin/accounting/purchase-orders">
-          &larr; Back to Purchase Orders
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {order.status === "Draft" && !order.bill && (
+            <Link className="btn btn-sm btn-primary" to={`/admin/accounting/purchase-orders?edit=${order.id}`}>
+              Edit
+            </Link>
+          )}
+          <Link className="btn btn-sm btn-outline dark" to="/admin/accounting/purchase-orders">
+            &larr; Back to Purchase Orders
+          </Link>
+        </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}

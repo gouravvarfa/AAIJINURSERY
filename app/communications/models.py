@@ -104,3 +104,17 @@ class WhatsAppNotificationSetting(Base):
     event_type = Column(String(60), nullable=False)
     label = Column(String(120), default="")
     enabled = Column(Boolean, default=True)
+
+
+class SystemFlag(Base):
+    """Small persisted on/off switches that must survive restarts and be read
+    by every worker/request -- currently the global messaging kill switch.
+    Kept out of SiteSetting on purpose: that table is served to the public
+    website, this one is developer-only."""
+
+    __tablename__ = "system_flags"
+
+    key = Column(String(60), primary_key=True)
+    value = Column(String(200), default="")
+    updated_by = Column(String(80), default="")
+    updated_at = Column(DateTime, default=datetime.utcnow)

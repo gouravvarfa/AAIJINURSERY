@@ -38,6 +38,7 @@ const NAV = [
 
 const DEVELOPER_NAV = [
   { to: "/admin/admins", label: "Admins" },
+  { to: "/admin/developer/messaging", label: "Messaging ON/OFF" },
   { to: "/admin/developer/activity-log", label: "Activity Log" },
   { to: "/admin/developer/roles-permissions", label: "Roles & Permissions" },
   { to: "/admin/developer/sessions", label: "Sessions" },

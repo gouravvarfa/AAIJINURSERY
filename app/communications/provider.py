@@ -15,6 +15,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 
+from app.communications.gate import MESSAGING_OFF_CODE, MESSAGING_OFF_MESSAGE, is_messaging_enabled, record_blocked
+
 
 @dataclass
 class ProviderResult:
@@ -73,6 +75,9 @@ class AiSensyProvider(MessageProvider):
         return urllib.request.urlopen(req, timeout=self.timeout)
 
     def send_template_message(self, mobile: str, campaign_name: str, template_params: list, variable_names: Optional[list] = None, language_code: Optional[str] = None) -> ProviderResult:
+        if not is_messaging_enabled():
+            record_blocked()
+            return ProviderResult(False, error_code=MESSAGING_OFF_CODE, error_message=MESSAGING_OFF_MESSAGE)
         if not self._configured():
             return ProviderResult(False, error_code="CONFIGURATION_ERROR", error_message="AISENSY_API_KEY/AISENSY_API_URL not configured")
 
@@ -200,6 +205,9 @@ class WhatsAppCloudAPIProvider(MessageProvider):
         return "", raw_body.decode(errors="ignore")[:400]
 
     def send_template_message(self, mobile: str, campaign_name: str, template_params: list, variable_names: Optional[list] = None, language_code: Optional[str] = None) -> ProviderResult:
+        if not is_messaging_enabled():
+            record_blocked()
+            return ProviderResult(False, error_code=MESSAGING_OFF_CODE, error_message=MESSAGING_OFF_MESSAGE)
         if not self._configured():
             return ProviderResult(False, error_code="CONFIGURATION_ERROR", error_message="WHATSAPP_CLOUD_API_TOKEN/WHATSAPP_CLOUD_API_PHONE_ID not configured")
 
@@ -313,6 +321,9 @@ class WhatsAppCloudAPIProvider(MessageProvider):
             return "", ProviderResult(False, error_code="PROVIDER_ERROR", error_message=str(exc), retryable=True)
 
     def send_document_message(self, mobile: str, file_bytes: bytes, filename: str, caption: str = "") -> ProviderResult:
+        if not is_messaging_enabled():
+            record_blocked()
+            return ProviderResult(False, error_code=MESSAGING_OFF_CODE, error_message=MESSAGING_OFF_MESSAGE)
         if not self._configured():
             return ProviderResult(False, error_code="CONFIGURATION_ERROR", error_message="WHATSAPP_CLOUD_API_TOKEN/WHATSAPP_CLOUD_API_PHONE_ID not configured")
 

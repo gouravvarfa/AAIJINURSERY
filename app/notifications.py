@@ -104,6 +104,12 @@ def send_email(to_email: str, subject: str, body: str) -> None:
 
 
 def send_whatsapp_admin_alert(message: str) -> None:
+    from app.communications.gate import is_messaging_enabled, record_blocked
+
+    if not is_messaging_enabled():
+        record_blocked()
+        print("[whatsapp] Messaging is switched off, skipping admin alert")
+        return
     phone = os.environ.get("CALLMEBOT_PHONE", "")
     apikey = os.environ.get("CALLMEBOT_APIKEY", "")
     if not phone or not apikey:

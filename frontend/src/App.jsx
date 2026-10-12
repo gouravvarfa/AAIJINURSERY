@@ -51,6 +51,7 @@ import AdminSettings from "./admin/pages/Settings";
 import AdminAdmins from "./admin/pages/Admins";
 import AdminActivityLog from "./admin/pages/ActivityLog";
 import AdminSystemInfo from "./admin/pages/SystemInfo";
+import AdminMessagingControl from "./admin/pages/developer/MessagingControl";
 import AdminSessions from "./admin/pages/Sessions";
 import AdminLoginAttempts from "./admin/pages/LoginAttempts";
 import AdminRolesPermissions from "./admin/pages/RolesPermissions";
@@ -176,6 +177,7 @@ export default function App() {
           <Route path="admins" element={<AdminAdmins />} />
           <Route path="developer/activity-log" element={<AdminActivityLog />} />
           <Route path="developer/system-info" element={<AdminSystemInfo />} />
+          <Route path="developer/messaging" element={<AdminMessagingControl />} />
           <Route path="developer/sessions" element={<AdminSessions />} />
           <Route path="developer/login-attempts" element={<AdminLoginAttempts />} />
           <Route path="developer/roles-permissions" element={<AdminRolesPermissions />} />

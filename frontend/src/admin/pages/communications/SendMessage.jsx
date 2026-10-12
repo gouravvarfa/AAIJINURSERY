@@ -186,7 +186,7 @@ export default function SendMessage() {
         )}
         {result && (
           <div className={`alert ${result.success ? "alert-success" : "alert-error"}`} style={{ marginTop: 16 }}>
-            {result.success ? `Queued (message #${result.message_id}). Check Message History for delivery status.` : `Not sent: ${result.reason}`}
+            {result.success ? `Queued (message #${result.message_id}). Check Message History for delivery status.` : (result.reason === "MESSAGING_OFF" ? "Not sent: messaging is switched off by the developer." : `Not sent: ${result.reason}`)}
           </div>
         )}
       </div>

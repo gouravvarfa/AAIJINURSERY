@@ -68,10 +68,12 @@ export default function OrderDetail() {
     setPayingNow(true);
     try {
       const withRazorpayOrder = await api.post(`/customer/orders/${id}/create-payment`);
+      const { razorpay_key_id: razorpayKeyId } = await api.get("/customer/payment-config");
+      if (!razorpayKeyId) throw new Error("Online payment is not available right now. Please contact us.");
       await loadRazorpayScript();
 
       const rzp = new window.Razorpay({
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        key: razorpayKeyId,
         amount: Math.round(withRazorpayOrder.total_amount * 100),
         currency: "INR",
         name: "Aaiji Nursery",

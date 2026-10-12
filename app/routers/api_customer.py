@@ -1,3 +1,4 @@
+import os
 import re
 import secrets
 from datetime import datetime, timedelta
@@ -629,6 +630,15 @@ def checkout(
     # returns early for a retried submit before this line is ever reached.
     order_alert_hub.emit_new_order(order)
     return order
+
+
+@router.get("/payment-config")
+def payment_config(customer_id: int = Depends(get_current_customer)):
+    """The PUBLIC Razorpay key id the browser needs to open Checkout. Served
+    by the backend at runtime (from the server's environment) instead of
+    being baked into the frontend build, so switching between test and live
+    keys is only a server setting. The key SECRET never leaves the server."""
+    return {"razorpay_key_id": os.environ.get("RAZORPAY_KEY_ID", "")}
 
 
 @router.post("/orders/{order_id}/create-payment", response_model=OrderOut)

@@ -66,6 +66,7 @@ export default function PurchaseOrderItemsField({ value, onChange }) {
                 onSelectPlant={(plantId) => selectPlant(i, plantId)}
                 onSelectVariant={(variantId) => selectVariant(i, variantId)}
                 onPlantCreated={(p) => setPlants((prev) => [...prev, p])}
+                onCategoryCreated={(c) => setCategories((prev) => [...prev, c])}
               />
             </label>
             <label>

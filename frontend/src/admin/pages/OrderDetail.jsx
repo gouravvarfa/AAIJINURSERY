@@ -6,6 +6,7 @@ import OrderTracker from "../../components/OrderTracker";
 import CancelOrderModal from "../../components/CancelOrderModal";
 import { useOrderAlerts } from "../OrderAlertContext";
 import WhatsAppActivity from "../communications/WhatsAppActivity";
+import { formatIst } from "../communications/time";
 import {
   CANCELLABLE_STATUSES,
   TEAM_CONFIRMATION_LABELS,
@@ -218,7 +219,7 @@ export default function AdminOrderDetail() {
             <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span className={`badge ${statusBadgeClass(order.status)}`}>{order.status}</span>
               <span style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                Placed {new Date(order.created_at).toLocaleString()}
+                Placed {formatIst(order.created_at)}
               </span>
             </span>
           )}
@@ -293,7 +294,7 @@ export default function AdminOrderDetail() {
                     <div key={h.id} className="admin-order-status-history-item">
                       <strong>{h.new_status}</strong>
                       <div className="meta">
-                        {new Date(h.created_at).toLocaleString()} &middot; Updated by {h.updated_by || "system"}
+                        {formatIst(h.created_at)} &middot; Updated by {h.updated_by || "system"}
                       </div>
                       {h.remarks && <div className="meta">{h.remarks}</div>}
                     </div>
@@ -301,6 +302,8 @@ export default function AdminOrderDetail() {
                 </div>
               )}
             </div>
+
+            <WhatsAppActivity sourceModule="orders" sourceId={order.id} />
           </div>
 
           {/* Right / sidebar column */}
@@ -327,7 +330,7 @@ export default function AdminOrderDetail() {
               {order.team_confirmation_status === "CONFIRMED" ? (
                 <p style={{ color: "var(--color-text-muted)", margin: 0 }}>
                   Confirmed by {order.team_confirmed_by || "-"} on{" "}
-                  {order.team_confirmed_at ? new Date(order.team_confirmed_at).toLocaleString() : "-"}. Delivery
+                  {order.team_confirmed_at ? formatIst(order.team_confirmed_at) : "-"}. Delivery
                   charge: &#8377;{order.shipping_fee}.
                 </p>
               ) : order.team_confirmation_status === "PENDING" ? (
@@ -659,8 +662,6 @@ export default function AdminOrderDetail() {
           onConfirm={handleCancel}
         />
       )}
-
-      {order && <WhatsAppActivity sourceModule="orders" sourceId={order.id} />}
 
       {showRejectModal && (
         <div className="modal-overlay" onClick={() => !rejectingDelivery && setShowRejectModal(false)}>

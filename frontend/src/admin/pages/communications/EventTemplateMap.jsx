@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../../api";
 import { Loading } from "../../../components/Loading";
+import { formatIst } from "../../communications/time";
 
 const STATUS_BADGE = { ACTIVE: "badge-accent", PENDING: "badge-gold", REJECTED: "badge-danger", DISABLED: "badge-muted", NOT_CONFIGURED: "badge-muted" };
 
@@ -77,7 +78,7 @@ export default function EventTemplateMap() {
                   </td>
                   <td><span className={`badge ${STATUS_BADGE[r.template_status] || "badge-muted"}`}>{r.template_status}</span></td>
                   <td style={{ maxWidth: 260, fontSize: "0.8rem", color: "var(--color-text-muted)" }}>{r.last_error || "-"}</td>
-                  <td style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>{r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}</td>
+                  <td style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>{formatIst(r.updated_at)}</td>
                   <td>
                     <button
                       className={`btn btn-sm ${r.enabled ? "btn-outline dark" : "btn-primary"}`}

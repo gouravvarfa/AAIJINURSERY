@@ -39,8 +39,11 @@ def _business_name() -> str:
 def _order_contact(order):
     """(mobile, customer_name) for whichever contact info the order has --
     same fallback the existing email/CallMeBot code already uses."""
-    mobile = (order.customer.mobile if order.customer else "") or order.delivery_mobile
-    name = (order.customer.name if order.customer else "") or order.delivery_name or "Customer"
+    # What the customer typed on THIS order's checkout wins over the account
+    # profile: that is the person and number the team is meant to reach for
+    # this order (a different name/number than the account is normal).
+    mobile = order.delivery_mobile or (order.customer.mobile if order.customer else "")
+    name = order.delivery_name or (order.customer.name if order.customer else "") or "Customer"
     return mobile, name
 
 

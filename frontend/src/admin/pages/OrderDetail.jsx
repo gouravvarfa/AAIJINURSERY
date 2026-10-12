@@ -506,7 +506,10 @@ export default function AdminOrderDetail() {
               <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Customer Information</h2>
               <div className="form-group">
                 <label>Name</label>
-                <div>{order.customer?.name || order.delivery_name || "-"}</div>
+                <div>{order.delivery_name || order.customer?.name || "-"}</div>
+                {order.delivery_name && order.customer?.name && order.delivery_name.trim().toLowerCase() !== order.customer.name.trim().toLowerCase() && (
+                  <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>Account name: {order.customer.name}</div>
+                )}
               </div>
               <div className="form-group">
                 <label>Email</label>
@@ -514,7 +517,10 @@ export default function AdminOrderDetail() {
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Phone</label>
-                <div>{order.customer?.mobile || order.delivery_mobile || "-"}</div>
+                <div>{order.delivery_mobile || order.customer?.mobile || "-"}</div>
+                {order.delivery_mobile && order.customer?.mobile && order.delivery_mobile !== order.customer.mobile && (
+                  <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>Account number: {order.customer.mobile}</div>
+                )}
               </div>
             </div>
 

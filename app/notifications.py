@@ -190,8 +190,10 @@ def notify_delivery_confirmed(order) -> None:
     # the "order confirmed" WhatsApp -- with the final total (delivery
     # included). Same idempotency key as before (ORDER_CREATED:{order_id}), so
     # an order that already received it earlier is never messaged twice.
-    _queue_order_event(order, "ORDER_CREATED", [_order_contact(order)[1], f"ORD-{order.id}", f"Rs.{order.total_amount}"])
-    _queue_order_event(order, "DELIVERY_FEASIBILITY_CONFIRMED", [_order_contact(order)[1], f"ORD-{order.id}"])
+    # The approved template prints "Rs." itself, so only the number is passed.
+    # (The separate "delivery confirmed" message is no longer sent here: it
+    # said the same thing as this one a second later.)
+    _queue_order_event(order, "ORDER_CREATED", [_order_contact(order)[1], f"ORD-{order.id}", f"{order.total_amount:.2f}"])
 
 
 def notify_delivery_unavailable(order) -> None:
@@ -215,7 +217,7 @@ def notify_payment_received(order) -> None:
     """Dedicated PAYMENT_RECEIVED WhatsApp event (section 10/11) -- distinct
     from the generic order-status-change message, since a payment can be
     verified without the status label itself saying anything about money."""
-    _queue_order_event(order, "PAYMENT_RECEIVED", [_order_contact(order)[1], f"Rs.{order.total_amount}", f"ORD-{order.id}"])
+    _queue_order_event(order, "PAYMENT_RECEIVED", [_order_contact(order)[1], f"Rs.{order.total_amount:.2f}", f"ORD-{order.id}"])
 
 
 def notify_order_cancelled(db, order, old_status: str | None, cancelled_by: str, reason: str) -> None:

@@ -28,8 +28,16 @@ from app.accounting.schemas import (
 from app.database import get_db
 from app.deps import get_current_admin
 from app.inventory import InsufficientStockError, deduct_stock, restore_stock
+from app.models import InventoryTransaction
 
 router = APIRouter(tags=["accounting-sales"])
+
+
+def _sale_reference(order_id: int, kind: str, line) -> str:
+    """Idempotency key for a sales-order line's stock movement. Tray lines
+    get their own key so they hit the tray's stock, not the plant's."""
+    base = f"SALES_ORDER:{order_id}:{kind}:{line.plant_id}"
+    return f"{base}:V{line.variant_id}" if line.variant_id else base
 
 
 # ---------- Sales Orders ----------
@@ -255,10 +263,11 @@ def convert_to_invoice(
                 deduct_stock(
                     db,
                     plant_id=line.plant_id,
+                    variant_id=line.variant_id,
                     quantity=line.quantity,
                     source_type="SALES_ORDER",
                     source_id=order.id,
-                    reference=f"SALES_ORDER:{order.id}:SALE:{line.plant_id}",
+                    reference=_sale_reference(order.id, "SALE", line),
                     created_by=admin,
                 )
             except InsufficientStockError:
@@ -361,13 +370,23 @@ def void_invoice(
     if not already_voided and item.sales_order:
         for line in item.sales_order.items:
             if line.plant_id:
+                # Invoices made before tray lines deducted tray stock took it
+                # from the plant itself -- give it back to wherever it came from.
+                from_tray = bool(line.variant_id) and db.query(InventoryTransaction.id).filter(
+                    InventoryTransaction.reference == _sale_reference(item.sales_order_id, "SALE", line)
+                ).first() is not None
                 restore_stock(
                     db,
                     plant_id=line.plant_id,
+                    variant_id=line.variant_id if from_tray else None,
                     quantity=line.quantity,
                     source_type="SALES_ORDER_VOID",
                     source_id=item.sales_order_id,
-                    reference=f"SALES_ORDER:{item.sales_order_id}:SALE_REVERSAL:{line.plant_id}",
+                    reference=(
+                        _sale_reference(item.sales_order_id, "SALE_REVERSAL", line)
+                        if from_tray
+                        else f"SALES_ORDER:{item.sales_order_id}:SALE_REVERSAL:{line.plant_id}"
+                    ),
                     created_by=admin,
                 )
 

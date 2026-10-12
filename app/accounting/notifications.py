@@ -25,7 +25,7 @@ def queue_sales_order_created(sales_order) -> None:
         return
     queue_whatsapp_event(
         event_type="SALES_ORDER_CREATED", mobile=mobile, customer_name=name,
-        template_params=[name, sales_order.order_number, f"Rs.{sales_order.total_amount}"],
+        template_params=[name, sales_order.order_number, f"{sales_order.total_amount:.2f}"],
         source_module="accounting", source_id=f"SO-{sales_order.id}",
         customer_id=sales_order.contact.customer_id if sales_order.contact else None,
     )
@@ -38,7 +38,7 @@ def queue_invoice_created(invoice) -> None:
     due = invoice.due_date.strftime("%d %b %Y") if invoice.due_date else "-"
     queue_whatsapp_event(
         event_type="INVOICE_CREATED", mobile=mobile, customer_name=name,
-        template_params=[name, invoice.invoice_number, f"Rs.{invoice.total_amount}", due],
+        template_params=[name, invoice.invoice_number, f"Rs.{invoice.total_amount:.2f}", due],
         source_module="accounting", source_id=f"INV-{invoice.id}",
         customer_id=invoice.contact.customer_id if invoice.contact else None,
     )
@@ -82,7 +82,7 @@ def queue_payment_received(payment, invoice) -> None:
         return
     queue_whatsapp_event(
         event_type="PAYMENT_RECEIVED", mobile=mobile, customer_name=name,
-        template_params=[name, f"Rs.{payment.amount}", invoice.invoice_number],
+        template_params=[name, f"Rs.{payment.amount:.2f}", invoice.invoice_number],
         source_module="accounting", source_id=f"PAY-{payment.id}",
         customer_id=invoice.contact.customer_id if invoice.contact else None,
     )

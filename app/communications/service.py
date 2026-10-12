@@ -54,6 +54,21 @@ def resolve_event_template(db, event_type: str) -> tuple[Optional[str], str]:
     return row.template_name, ""
 
 
+def _fit_params(template, params: list) -> list:
+    """Meta rejects a template send whose parameter count differs from the
+    approved body ("number of localizable_params (3) does not match the
+    expected number of params (2)"). Callers share one generic parameter list
+    per event family (name, order number, amount); templates that declare
+    fewer variables get only their leading ones, in order."""
+    try:
+        declared = json.loads(template.variables) if template and template.variables else None
+    except (ValueError, TypeError):
+        declared = None
+    if declared and len(params) > len(declared):
+        return list(params[: len(declared)])
+    return params
+
+
 def queue_message(
     *,
     event_type: str,
@@ -107,6 +122,7 @@ def queue_message(
 
         template = _template_for(db, template_name)
         template_status = template.status if template else "NOT_CONFIGURED"
+        template_params = _fit_params(template, template_params)
         if template is None or template_status != "ACTIVE":
             # Safety gate (never bypassed): a template must exist AND be
             # explicitly marked ACTIVE by an admin who has confirmed it's

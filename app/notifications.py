@@ -163,7 +163,10 @@ def notify_order_awaiting_confirmation(order) -> None:
     customer_email = order.customer.email if order.customer else None
     send_email(customer_email, f"Order #{order.id} Request Received", message)
     send_whatsapp_admin_alert(f"New order request #{order.id} awaiting delivery confirmation.")
-    _queue_order_event(order, "ORDER_CREATED", [_order_contact(order)[1], f"ORD-{order.id}", f"Rs.{order.subtotal}"])
+    # No customer WhatsApp here on purpose: at this point the order is only a
+    # request. The "order confirmed" message (ORDER_CREATED -> order_confirmed
+    # template) is sent when the team confirms it -- see
+    # notify_delivery_confirmed() below.
 
 
 def notify_delivery_confirmed(order) -> None:
@@ -174,6 +177,11 @@ def notify_delivery_confirmed(order) -> None:
     )
     customer_email = order.customer.email if order.customer else None
     send_email(customer_email, f"Order #{order.id} Confirmed", message)
+    # The team has now confirmed the order, so this is when the customer gets
+    # the "order confirmed" WhatsApp -- with the final total (delivery
+    # included). Same idempotency key as before (ORDER_CREATED:{order_id}), so
+    # an order that already received it earlier is never messaged twice.
+    _queue_order_event(order, "ORDER_CREATED", [_order_contact(order)[1], f"ORD-{order.id}", f"Rs.{order.total_amount}"])
     _queue_order_event(order, "DELIVERY_FEASIBILITY_CONFIRMED", [_order_contact(order)[1], f"ORD-{order.id}"])
 
 

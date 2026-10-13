@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIstDate } from "../communications/time";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
@@ -122,14 +123,19 @@ export default function AdminOrders() {
                 {result.items.map((o) => (
                   <tr key={o.id}>
                     <td>#{o.id}</td>
-                    <td>{o.customer?.name || "-"}</td>
+                    <td>
+                      <div>{o.delivery_name || o.customer?.name || "-"}</div>
+                      {o.delivery_name && o.customer?.name && o.delivery_name.trim().toLowerCase() !== o.customer.name.trim().toLowerCase() && (
+                        <div style={{ color: "var(--color-text-muted)", fontSize: "0.8rem" }}>Account: {o.customer.name}</div>
+                      )}
+                    </td>
                     <td>
                       <div>{o.customer?.email || "-"}</div>
                       <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                        {o.customer?.mobile || "-"}
+                        {o.delivery_mobile || o.customer?.mobile || "-"}
                       </div>
                     </td>
-                    <td>{new Date(o.created_at).toLocaleDateString()}</td>
+                    <td>{formatIstDate(o.created_at)}</td>
                     <td>&#8377;{o.total_amount}</td>
                     <td>
                       <span className={`badge ${statusBadgeClass(o.status)}`}>{o.status}</span>
@@ -176,18 +182,18 @@ export default function AdminOrders() {
                 </div>
                 <div className="admin-order-card-row">
                   <span className="label">Customer</span>
-                  <span className="value">{o.customer?.name || "-"}</span>
+                  <span className="value">{o.delivery_name || o.customer?.name || "-"}</span>
                 </div>
                 <div className="admin-order-card-row">
                   <span className="label">Contact</span>
                   <span className="value">
                     {o.customer?.email || "-"}
-                    {o.customer?.mobile ? <><br />{o.customer.mobile}</> : null}
+                    {o.delivery_mobile || o.customer?.mobile ? <><br />{o.delivery_mobile || o.customer?.mobile}</> : null}
                   </span>
                 </div>
                 <div className="admin-order-card-row">
                   <span className="label">Placed</span>
-                  <span className="value">{new Date(o.created_at).toLocaleDateString()}</span>
+                  <span className="value">{formatIstDate(o.created_at)}</span>
                 </div>
                 <div className="admin-order-card-row">
                   <span className="label">Total</span>

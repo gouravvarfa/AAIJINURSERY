@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.communications.gate import MESSAGING_OFF_MESSAGE, is_messaging_enabled, record_blocked
 from app.communications.inbox_models import WhatsAppInboxMessage
 from app.communications.models import WhatsAppMessage
 from app.database import get_db
@@ -80,6 +81,19 @@ def list_conversations(q: str = Query("", max_length=60), db: Session = Depends(
     return {"items": items, "total_unread": sum(unread.values())}
 
 
+@router.get("/unread-count", dependencies=[Depends(require_permission("communications", "VIEW"))])
+def unread_count(db: Session = Depends(get_db)):
+    q = db.query(WhatsAppInboxMessage).filter(WhatsAppInboxMessage.direction == "IN", WhatsAppInboxMessage.is_read.is_(False))
+    latest = q.order_by(WhatsAppInboxMessage.id.desc()).first()
+    return {
+        "count": q.count(),
+        "latest": (
+            {"mobile": latest.mobile, "body": (latest.body or "")[:80], "at": latest.created_at.isoformat() if latest.created_at else None}
+            if latest else None
+        ),
+    }
+
+
 @router.get("/messages", dependencies=[Depends(require_permission("communications", "VIEW"))])
 def thread(mobile: str = Query(..., min_length=6, max_length=20), db: Session = Depends(get_db)):
     rows = (
@@ -106,6 +120,9 @@ def mark_read(payload: ReadIn, db: Session = Depends(get_db)):
 
 @router.post("/reply", dependencies=[Depends(require_permission("communications", "CREATE"))])
 def reply(payload: ReplyIn, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+    if not is_messaging_enabled(db):
+        record_blocked()
+        raise HTTPException(503, MESSAGING_OFF_MESSAGE)
     open_, _ = _window_open(db, payload.mobile)
     if not open_:
         raise HTTPException(409, "The 24-hour reply window is closed. The customer must message first, or send an approved template instead.")

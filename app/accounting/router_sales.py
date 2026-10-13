@@ -16,6 +16,7 @@ from app.accounting.models import (
     SalesOrderItem,
 )
 from app.accounting.permissions import SALES_WRITE_ROLES, require_accounting_action
+from app.models import Plant, PlantVariant
 from app.accounting.schemas import (
     InvoiceConvertIn,
     InvoiceOut,
@@ -26,9 +27,38 @@ from app.accounting.schemas import (
 )
 from app.database import get_db
 from app.deps import get_current_admin
-from app.inventory import InsufficientStockError, deduct_stock, restore_stock
+from app.inventory import allocate_stock, restore_stock
+from app.models import InventoryTransaction
 
 router = APIRouter(tags=["accounting-sales"])
+
+
+def _attach_delivery_status(db: Session, sales_orders) -> None:
+    """Sets `delivery_status` on each sales order from its latest delivery,
+    in one query for the whole list (no per-row lookups)."""
+    from app.delivery.models import Delivery
+
+    orders = [o for o in sales_orders if o is not None]
+    if not orders:
+        return
+    latest: dict[int, str] = {}
+    rows = (
+        db.query(Delivery.sales_order_id, Delivery.status)
+        .filter(Delivery.sales_order_id.in_([o.id for o in orders]))
+        .order_by(Delivery.id)
+        .all()
+    )
+    for sales_order_id, status in rows:
+        latest[sales_order_id] = status
+    for o in orders:
+        o.delivery_status = latest.get(o.id)
+
+
+def _sale_reference(order_id: int, kind: str, line) -> str:
+    """Idempotency key for a sales-order line's stock movement. Tray lines
+    get their own key so they hit the tray's stock, not the plant's."""
+    base = f"SALES_ORDER:{order_id}:{kind}:{line.plant_id}"
+    return f"{base}:V{line.variant_id}" if line.variant_id else base
 
 
 # ---------- Sales Orders ----------
@@ -56,7 +86,9 @@ def list_sales_orders(
         query = query.join(Contact, Contact.id == SalesOrder.contact_id).filter(
             SalesOrder.order_number.ilike(like) | Contact.name.ilike(like)
         )
-    return query.order_by(SalesOrder.order_date.desc()).all()
+    orders = query.order_by(SalesOrder.order_date.desc()).all()
+    _attach_delivery_status(db, orders)
+    return orders
 
 
 @router.get("/sales-orders/{item_id}", response_model=SalesOrderOut)
@@ -71,7 +103,48 @@ def get_sales_order(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Sales order not found")
+    from app.inventory_router import stock_position
+
+    for line in item.items:
+        if line.plant_id:
+            pos = stock_position(db, line.plant_id, line.variant_id)
+            line.physical_stock = pos.get("physical_stock")
+            line.reserved_stock = pos.get("reserved_stock")
+            line.available_stock = pos.get("available_stock")
     return item
+
+
+def _add_lines(db: Session, order: SalesOrder, lines) -> float:
+    """Adds the given line items to `order` and returns their subtotal.
+    Shared by create and edit so both apply exactly the same checks."""
+    subtotal = 0.0
+    for line in lines:
+        if line.plant_id is not None and not db.query(Plant.id).filter(Plant.id == line.plant_id).first():
+            raise HTTPException(status_code=400, detail=f"Unknown plant id {line.plant_id}")
+        tray_size = None
+        if line.variant_id is not None:
+            variant = db.query(PlantVariant).filter(PlantVariant.id == line.variant_id, PlantVariant.plant_id == line.plant_id).first()
+            if not variant:
+                raise HTTPException(status_code=400, detail="Unknown tray-size option for this plant")
+            tray_size = variant.tray_size
+        line_total = round(line.quantity * line.unit_price, 2)
+        subtotal += line_total
+        db.add(
+            SalesOrderItem(
+                sales_order_id=order.id,
+                plant_id=line.plant_id,
+                description=line.description,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+                tax_rate_id=line.tax_rate_id,
+                line_total=line_total,
+                variant_id=line.variant_id,
+                tray_size=tray_size,
+                to_prepare=bool(line.to_prepare),
+                allocated_quantity=0,
+            )
+        )
+    return subtotal
 
 
 @router.post("/sales-orders", response_model=SalesOrderOut, status_code=201)
@@ -94,6 +167,7 @@ def create_sales_order(
         order_number="",  # set after flush once we have the id
         status="Draft",
         order_date=payload.order_date,
+        delivery_date=payload.delivery_date,
         notes=payload.notes,
         source="offline",
         created_by=admin,
@@ -102,21 +176,7 @@ def create_sales_order(
     db.flush()
     order.order_number = f"SO-{order.id}"
 
-    for line in payload.items:
-        line_total = round(line.quantity * line.unit_price, 2)
-        subtotal += line_total
-        db.add(
-            SalesOrderItem(
-                sales_order_id=order.id,
-                plant_id=line.plant_id,
-                description=line.description,
-                quantity=line.quantity,
-                unit_price=line.unit_price,
-                tax_rate_id=line.tax_rate_id,
-                line_total=line_total,
-            )
-        )
-
+    subtotal = _add_lines(db, order, payload.items)
     order.subtotal = round(subtotal, 2)
     order.tax_total = round(tax_total, 2)
     order.total_amount = round(subtotal + tax_total, 2)
@@ -125,6 +185,51 @@ def create_sales_order(
     record_change(db, "accounting_sales_orders", order.id, "create", changed_by=admin)
     db.commit()
     queue_sales_order_created(order)
+    return get_sales_order(order.id, admin, db)
+
+
+@router.put("/sales-orders/{item_id}", response_model=SalesOrderOut)
+def update_sales_order(
+    item_id: int,
+    payload: SalesOrderIn,
+    admin: str = Depends(get_current_admin),
+    _role: str = Depends(require_accounting_action("EDIT", SALES_WRITE_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Edit an offline Sales Order that is still a Draft. Once it has been
+    converted to an invoice (or cancelled/voided) the invoice, payments and
+    stock already depend on its lines, so it is locked -- void the invoice
+    instead."""
+    order = db.query(SalesOrder).filter(SalesOrder.id == item_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Sales order not found")
+    if order.source != "offline":
+        raise HTTPException(status_code=400, detail="Website orders mirror the customer's order and can't be edited here")
+    if order.status != "Draft" or db.query(Invoice.id).filter(Invoice.sales_order_id == order.id).first():
+        raise HTTPException(status_code=400, detail="Only a Draft sales order that has no invoice yet can be edited")
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="At least one line item is required")
+    contact = db.query(Contact).filter(Contact.id == payload.contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=400, detail="Unknown contact")
+
+    before = {"contact_id": order.contact_id, "order_date": str(order.order_date), "notes": order.notes, "total_amount": order.total_amount}
+    order.items.clear()
+    db.flush()
+    subtotal = _add_lines(db, order, payload.items)
+    order.contact_id = contact.id
+    order.order_date = payload.order_date
+    order.delivery_date = payload.delivery_date
+    order.notes = payload.notes
+    order.subtotal = round(subtotal, 2)
+    order.tax_total = 0.0
+    order.total_amount = round(subtotal, 2)
+    changes = {k: (v, {"contact_id": order.contact_id, "order_date": str(order.order_date), "notes": order.notes, "total_amount": order.total_amount}[k]) for k, v in before.items()}
+    changes = {k: v for k, v in changes.items() if v[0] != v[1]}
+    changes["line_items"] = ("replaced", f"{len(payload.items)} line(s)")
+    db.commit()
+    record_change(db, "accounting_sales_orders", order.id, "edit", changed_by=admin, changes=changes)
+    db.commit()
     return get_sales_order(order.id, admin, db)
 
 
@@ -189,19 +294,20 @@ def convert_to_invoice(
         # shared Plant.stock_quantity the website's own checkout uses, so
         # an offline sale reduces what the website shows as available too.
         if line.plant_id:
-            try:
-                deduct_stock(
+            # Take what is in stock for the part not already allocated; the
+            # rest stays pending (the invoice is never blocked by stock).
+            need = 0 if line.to_prepare else max(0, (line.quantity or 0) - line.allocated)
+            if need:
+                line.allocated_quantity = line.allocated + allocate_stock(
                     db,
                     plant_id=line.plant_id,
-                    quantity=line.quantity,
+                    variant_id=line.variant_id,
+                    quantity=need,
                     source_type="SALES_ORDER",
                     source_id=order.id,
-                    reference=f"SALES_ORDER:{order.id}:SALE:{line.plant_id}",
+                    reference=_sale_reference(order.id, "SALE", line),
                     created_by=admin,
                 )
-            except InsufficientStockError:
-                plant_label = line.plant.name if line.plant else line.description
-                raise HTTPException(status_code=400, detail=f"Insufficient stock for {plant_label}")
 
     old_status = order.status
     order.status = "Invoiced"
@@ -246,7 +352,9 @@ def list_invoices(
         query = query.join(Contact, Contact.id == Invoice.contact_id).filter(
             Invoice.invoice_number.ilike(like) | Contact.name.ilike(like)
         )
-    return query.order_by(Invoice.invoice_date.desc()).all()
+    invoices = query.order_by(Invoice.invoice_date.desc()).all()
+    _attach_delivery_status(db, [i.sales_order for i in invoices])
+    return invoices
 
 
 @router.get("/invoices/{item_id}", response_model=InvoiceOut)
@@ -261,6 +369,7 @@ def get_invoice(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    _attach_delivery_status(db, [item.sales_order])
     return item
 
 
@@ -298,16 +407,28 @@ def void_invoice(
     # or voiding an already-Voided invoice, a safe no-op).
     if not already_voided and item.sales_order:
         for line in item.sales_order.items:
-            if line.plant_id:
+            if line.plant_id and line.allocated > 0:
+                # Invoices made before tray lines deducted tray stock took it
+                # from the plant itself -- give it back to wherever it came from.
+                legacy_plant_level = bool(line.variant_id) and db.query(InventoryTransaction.id).filter(
+                    InventoryTransaction.reference == f"SALES_ORDER:{item.sales_order_id}:SALE:{line.plant_id}"
+                ).first() is not None
+                from_tray = bool(line.variant_id) and not legacy_plant_level
                 restore_stock(
                     db,
                     plant_id=line.plant_id,
-                    quantity=line.quantity,
+                    variant_id=line.variant_id if from_tray else None,
+                    quantity=line.allocated,
                     source_type="SALES_ORDER_VOID",
                     source_id=item.sales_order_id,
-                    reference=f"SALES_ORDER:{item.sales_order_id}:SALE_REVERSAL:{line.plant_id}",
+                    reference=(
+                        _sale_reference(item.sales_order_id, "SALE_REVERSAL", line)
+                        if from_tray
+                        else f"SALES_ORDER:{item.sales_order_id}:SALE_REVERSAL:{line.plant_id}"
+                    ),
                     created_by=admin,
                 )
+                line.allocated_quantity = 0
 
     db.commit()
     record_change(

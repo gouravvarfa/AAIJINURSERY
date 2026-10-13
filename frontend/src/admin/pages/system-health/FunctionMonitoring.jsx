@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIst } from "../../communications/time";
 import { api } from "../../../api";
 import { Loading, Empty } from "../../../components/Loading";
 
@@ -61,8 +62,8 @@ export default function SystemHealthFunctionMonitoring() {
                   <td>{f.failure_count}</td>
                   <td>{(f.failure_rate * 100).toFixed(1)}%</td>
                   <td>{f.avg_response_ms != null ? `${f.avg_response_ms} ms` : "-"}</td>
-                  <td>{f.last_failure_at ? new Date(f.last_failure_at).toLocaleString() : "-"}</td>
-                  <td>{f.last_success_at ? new Date(f.last_success_at).toLocaleString() : "-"}</td>
+                  <td>{f.last_failure_at ? formatIst(f.last_failure_at) : "-"}</td>
+                  <td>{f.last_success_at ? formatIst(f.last_success_at) : "-"}</td>
                 </tr>
               ))}
             </tbody>

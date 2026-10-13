@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useSettings } from "../context/SettingsContext";
+import GoogleReviewButton from "./GoogleReviewButton";
 
 export default function Footer() {
   const settings = useSettings();
@@ -56,6 +57,11 @@ export default function Footer() {
               <li>{settings.phone}</li>
               <li>{settings.email}</li>
               <li>{settings.address}</li>
+              {settings.google_review_url && (
+                <li style={{ marginTop: 10 }}>
+                  <GoogleReviewButton url={settings.google_review_url} label="Rate us on Google" />
+                </li>
+              )}
             </ul>
           </div>
         </div>

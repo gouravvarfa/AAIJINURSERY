@@ -5,7 +5,7 @@ shares. No module gets its own WhatsApp table.
 """
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text, UniqueConstraint
 
 from app.database import Base
 
@@ -104,3 +104,34 @@ class WhatsAppNotificationSetting(Base):
     event_type = Column(String(60), nullable=False)
     label = Column(String(120), default="")
     enabled = Column(Boolean, default=True)
+
+
+class SystemFlag(Base):
+    """Small persisted on/off switches that must survive restarts and be read
+    by every worker/request -- currently the global messaging kill switch.
+    Kept out of SiteSetting on purpose: that table is served to the public
+    website, this one is developer-only."""
+
+    __tablename__ = "system_flags"
+
+    key = Column(String(60), primary_key=True)
+    value = Column(String(200), default="")
+    updated_by = Column(String(80), default="")
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+
+class WhatsAppTopup(Base):
+    """Money added to the WhatsApp (Meta) prepaid balance, entered by the
+    developer. Meta does not expose the remaining balance through its API, so
+    the balance shown in the app is: these top-ups minus the real spend Meta
+    reports (pricing analytics)."""
+
+    __tablename__ = "whatsapp_topups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    amount = Column(Float, nullable=False)
+    topup_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    note = Column(String(200), default="")
+    added_by = Column(String(80), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)

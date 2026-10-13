@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIst } from "../communications/time";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 
@@ -33,7 +34,7 @@ export default function CustomerLogs() {
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
-                  <td>{new Date(item.created_at).toLocaleString()}</td>
+                  <td>{formatIst(item.created_at)}</td>
                   <td>{item.customer_name}</td>
                   <td>{item.customer_email}</td>
                   <td>

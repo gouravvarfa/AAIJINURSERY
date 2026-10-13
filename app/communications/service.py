@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+from app.communications.gate import MESSAGING_OFF_CODE, MESSAGING_OFF_MESSAGE, is_messaging_enabled, record_blocked
 from app.communications.models import WhatsAppEventTemplateMap, WhatsAppMessage, WhatsAppNotificationSetting, WhatsAppTemplate
 from app.communications.phone import normalize_mobile
 from app.communications.provider import get_provider, get_provider_name
@@ -53,6 +54,21 @@ def resolve_event_template(db, event_type: str) -> tuple[Optional[str], str]:
     return row.template_name, ""
 
 
+def _fit_params(template, params: list) -> list:
+    """Meta rejects a template send whose parameter count differs from the
+    approved body ("number of localizable_params (3) does not match the
+    expected number of params (2)"). Callers share one generic parameter list
+    per event family (name, order number, amount); templates that declare
+    fewer variables get only their leading ones, in order."""
+    try:
+        declared = json.loads(template.variables) if template and template.variables else None
+    except (ValueError, TypeError):
+        declared = None
+    if declared and len(params) > len(declared):
+        return list(params[: len(declared)])
+    return params
+
+
 def queue_message(
     *,
     event_type: str,
@@ -73,6 +89,13 @@ def queue_message(
     swallowed and reported back as a non-fatal QueueResult/log entry, so a
     caller can fire this from inside an already-successful business
     transaction with zero risk to that transaction (section 30/42)."""
+    if not is_messaging_enabled():
+        # Global kill switch: nothing is queued, so nothing can be sent
+        # later by surprise once messaging is switched back on.
+        logger.info("Messaging is OFF, not queueing event=%s source=%s/%s", event_type, source_module, source_id)
+        record_blocked()
+        return QueueResult(False, reason=MESSAGING_OFF_CODE)
+
     db = SessionLocal()
     try:
         if not is_event_enabled(db, event_type):
@@ -99,6 +122,7 @@ def queue_message(
 
         template = _template_for(db, template_name)
         template_status = template.status if template else "NOT_CONFIGURED"
+        template_params = _fit_params(template, template_params)
         if template is None or template_status != "ACTIVE":
             # Safety gate (never bypassed): a template must exist AND be
             # explicitly marked ACTIVE by an admin who has confirmed it's
@@ -283,6 +307,11 @@ def queue_document_event(
     and the PDF bytes are stashed (base64) for the worker to upload."""
     import base64
 
+    if not is_messaging_enabled():
+        logger.info("Messaging is OFF, not queueing document event=%s source=%s/%s", event_type, source_module, source_id)
+        record_blocked()
+        return QueueResult(False, reason=MESSAGING_OFF_CODE)
+
     db = SessionLocal()
     try:
         if not is_event_enabled(db, event_type):
@@ -379,6 +408,10 @@ def send_test_message(mobile: str, template_name: str, template_params: list) ->
     feedback send (not queued), still logged to the same central message
     table for auditability, but bypassing idempotency (a test is
     intentionally repeatable)."""
+    if not is_messaging_enabled():
+        record_blocked()
+        return TestResult(False, error_code=MESSAGING_OFF_CODE, error_message=MESSAGING_OFF_MESSAGE)
+
     normalized = normalize_mobile(mobile)
     if not normalized:
         return TestResult(False, error_code="INVALID_MOBILE", error_message="Enter a valid 10-digit Indian mobile number")

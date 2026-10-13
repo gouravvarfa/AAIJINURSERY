@@ -198,13 +198,6 @@ export default function Checkout() {
   const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
   const subtotal = lines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0);
 
-  const buyNowAvailableStock = buyNowVariant ? buyNowVariant.stock_quantity : buyNowPlant?.stock_quantity;
-  const buyNowUnavailable =
-    isBuyNow &&
-    buyNowPlant &&
-    !buyNowNeedsVariant &&
-    (buyNowAvailableStock <= 0 || buyNowAvailableStock < buyNowRequest.quantity);
-
   function update(field, value) {
     setSelectedAddressId(null);
     setForm((f) => ({ ...f, [field]: value }));
@@ -325,13 +318,6 @@ export default function Checkout() {
               )}
 
               {error && <div className="alert alert-error">{error}</div>}
-
-              {buyNowUnavailable && (
-                <div className="alert alert-error">
-                  Only {buyNowAvailableStock} of {buyNowPlant.name}
-                  {buyNowVariant ? ` (${buyNowVariant.tray_size} Plants Tray)` : ""} left in stock.
-                </div>
-              )}
 
               {buyNowNeedsVariant && (
                 <div className="alert alert-error">
@@ -454,7 +440,7 @@ export default function Checkout() {
 
                 <button
                   className="btn btn-primary btn-block"
-                  disabled={submitting || buyNowUnavailable || buyNowNeedsVariant || lines.length === 0}
+                  disabled={submitting || buyNowNeedsVariant || lines.length === 0}
                 >
                   {submitting ? "Submitting Order Request..." : "Submit Order Request"}
                 </button>

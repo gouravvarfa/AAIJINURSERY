@@ -1,3 +1,4 @@
+import os
 import re
 import secrets
 from datetime import datetime, timedelta
@@ -12,7 +13,7 @@ from app.order_alerts.hub import hub as order_alert_hub
 from app.auth import hash_password, verify_password
 from app.database import get_db
 from app.deps import get_current_customer
-from app.inventory import InsufficientStockError, deduct_stock, restore_stock
+from app.inventory import MAX_ORDER_QUANTITY, restore_stock
 from app.models import (
     CANCELLABLE_STATUSES,
     Address,
@@ -203,6 +204,8 @@ def add_to_cart(
         raise HTTPException(status_code=404, detail="Plant not found")
     if payload.quantity < 1:
         raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+    if payload.quantity > MAX_ORDER_QUANTITY:
+        raise HTTPException(status_code=400, detail=f"Quantity cannot be more than {MAX_ORDER_QUANTITY:,}")
     variant = _resolve_variant(db, plant, payload.variant_id)
     variant_id = variant.id if variant else None
 
@@ -216,6 +219,8 @@ def add_to_cart(
         .first()
     )
     if item:
+        if item.quantity + payload.quantity > MAX_ORDER_QUANTITY:
+            raise HTTPException(status_code=400, detail=f"Quantity cannot be more than {MAX_ORDER_QUANTITY:,}")
         item.quantity += payload.quantity
     else:
         item = CartItem(
@@ -250,6 +255,8 @@ def update_cart_item(
         db.commit()
         raise HTTPException(status_code=204, detail="Removed")
 
+    if payload.quantity > MAX_ORDER_QUANTITY:
+        raise HTTPException(status_code=400, detail=f"Quantity cannot be more than {MAX_ORDER_QUANTITY:,}")
     item.quantity = payload.quantity
     db.commit()
     db.refresh(item)
@@ -507,6 +514,8 @@ def checkout(
     if buy_now:
         if payload.buy_now_quantity < 1:
             raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+        if payload.buy_now_quantity > MAX_ORDER_QUANTITY:
+            raise HTTPException(status_code=400, detail=f"Quantity cannot be more than {MAX_ORDER_QUANTITY:,}")
         plant = (
             db.query(Plant)
             .filter(Plant.id == payload.buy_now_plant_id, Plant.is_active.is_(True))
@@ -515,9 +524,8 @@ def checkout(
         if not plant:
             raise HTTPException(status_code=404, detail="Plant not found")
         variant = _resolve_variant(db, plant, payload.buy_now_variant_id)
-        available = variant.stock_quantity if variant else plant.stock_quantity
-        if available < payload.buy_now_quantity:
-            raise HTTPException(status_code=400, detail=f"Insufficient stock for {plant.name}")
+        # No stock limit: whatever is in stock is allocated below, the rest is
+        # prepared by the nursery. Only genuinely invalid quantities are refused.
         order_lines = [(plant, variant, payload.buy_now_quantity)]
     else:
         cart_items = (
@@ -535,9 +543,8 @@ def checkout(
                 raise HTTPException(status_code=400, detail=f"{plant.name if plant else 'A plant'} is no longer available")
             if cart_item.variant_id and not cart_item.variant:
                 raise HTTPException(status_code=400, detail=f"A tray option for {plant.name} is no longer available")
-            available = cart_item.variant.stock_quantity if cart_item.variant else plant.stock_quantity
-            if available < cart_item.quantity:
-                raise HTTPException(status_code=400, detail=f"Insufficient stock for {plant.name}")
+            if cart_item.quantity < 1 or cart_item.quantity > MAX_ORDER_QUANTITY:
+                raise HTTPException(status_code=400, detail=f"Quantity for {plant.name} must be between 1 and {MAX_ORDER_QUANTITY:,}")
 
         order_lines = [(cart_item.plant, cart_item.variant, cart_item.quantity) for cart_item in cart_items]
 
@@ -568,37 +575,22 @@ def checkout(
 
     for plant, variant, quantity in order_lines:
         unit_price = variant.price if variant else plant.effective_price
-        db.add(
-            OrderItem(
-                order_id=order.id,
-                plant_id=plant.id,
-                plant_name=plant.name,
-                plant_image_url=plant.image_url,
-                variant_id=variant.id if variant else None,
-                tray_size=variant.tray_size if variant else None,
-                unit_price=unit_price,
-                quantity=quantity,
-                line_total=unit_price * quantity,
-            )
+        line = OrderItem(
+            order_id=order.id,
+            plant_id=plant.id,
+            plant_name=plant.name,
+            plant_image_url=plant.image_url,
+            variant_id=variant.id if variant else None,
+            tray_size=variant.tray_size if variant else None,
+            unit_price=unit_price,
+            quantity=quantity,
+            line_total=unit_price * quantity,
+            allocated_quantity=0,
         )
-        try:
-            deduct_stock(
-                db,
-                plant_id=plant.id,
-                variant_id=variant.id if variant else None,
-                quantity=quantity,
-                source_type="ONLINE_ORDER",
-                source_id=order.id,
-                reference=f"ORDER:{order.id}:SALE:{variant.id if variant else plant.id}",
-                created_by="customer",
-            )
-        except InsufficientStockError:
-            # Lost a genuine race against another checkout for the same
-            # item between the availability check above and this atomic
-            # deduction -- nothing has been committed yet, so raising here
-            # rolls the whole order (and any earlier lines' deductions in
-            # this same loop) back together when the session closes.
-            raise HTTPException(status_code=400, detail=f"Insufficient stock for {plant.name}")
+        db.add(line)
+        # Nothing is taken from stock here: the order keeps its full quantity as
+        # pending, and the admin decides per line whether to give it from stock
+        # or have the nursery prepare it (see app/inventory_router.py).
 
     # Feature 2 (delivery feasibility + team confirmation): the Razorpay
     # order is deliberately NOT created here anymore, for either payment
@@ -629,6 +621,15 @@ def checkout(
     # returns early for a retried submit before this line is ever reached.
     order_alert_hub.emit_new_order(order)
     return order
+
+
+@router.get("/payment-config")
+def payment_config(customer_id: int = Depends(get_current_customer)):
+    """The PUBLIC Razorpay key id the browser needs to open Checkout. Served
+    by the backend at runtime (from the server's environment) instead of
+    being baked into the frontend build, so switching between test and live
+    keys is only a server setting. The key SECRET never leaves the server."""
+    return {"razorpay_key_id": os.environ.get("RAZORPAY_KEY_ID", "")}
 
 
 @router.post("/orders/{order_id}/create-payment", response_model=OrderOut)
@@ -768,12 +769,12 @@ def cancel_order(
         )
 
     for item in order.items:
-        if item.plant_id:
+        if item.plant_id and item.allocated > 0:
             restore_stock(
                 db,
                 plant_id=item.plant_id,
                 variant_id=item.variant_id,
-                quantity=item.quantity,
+                quantity=item.allocated,
                 source_type="ORDER_CANCELLATION",
                 source_id=order.id,
                 reference=f"ORDER:{order.id}:SALE_REVERSAL:{item.variant_id or item.plant_id}",
@@ -796,6 +797,9 @@ def cancel_order(
 
     order = get_or_404_order(db, order_id, customer_id)
     notify_order_cancelled(db, order, old_status, cancelled_by="customer", reason=payload.remarks)
+    from app.delivery.order_sync import cancel_delivery_for_order
+
+    cancel_delivery_for_order(order.id, "customer")
     return order
 
 

@@ -18,7 +18,7 @@ from app.accounting.schemas import (
 from app.database import get_db
 from app.deps import get_current_admin
 from app.inventory import adjust_stock
-from app.models import Plant, Purchase, PurchaseItem
+from app.models import Plant, PlantVariant, Purchase, PurchaseItem
 
 router = APIRouter(tags=["accounting-purchase-orders"])
 
@@ -70,6 +70,43 @@ def get_purchase_order(
     return _with_bill_ref(db, item)
 
 
+def _add_lines(db: Session, order: PurchaseOrder, lines) -> float:
+    """Validates and adds the given line items to `order`, returning their
+    subtotal. Shared by create and edit so both apply the same checks."""
+    plant_ids = {i.plant_id for i in lines}
+    plants = {p.id: p for p in db.query(Plant).filter(Plant.id.in_(plant_ids)).all()}
+    missing = plant_ids - plants.keys()
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Unknown plant id(s): {sorted(missing)}")
+    subtotal = 0.0
+    for line in lines:
+        if line.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+        plant = plants[line.plant_id]
+        tray_size = None
+        if line.variant_id is not None:
+            variant = db.query(PlantVariant).filter(PlantVariant.id == line.variant_id, PlantVariant.plant_id == plant.id).first()
+            if not variant:
+                raise HTTPException(status_code=400, detail="Unknown tray-size option for this plant")
+            tray_size = variant.tray_size
+        line_total = round(line.quantity * line.unit_price, 2)
+        subtotal += line_total
+        db.add(
+            PurchaseOrderItem(
+                purchase_order_id=order.id,
+                plant_id=plant.id,
+                description=line.description or plant.name,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+                tax_rate_id=line.tax_rate_id,
+                line_total=line_total,
+                variant_id=line.variant_id,
+                tray_size=tray_size,
+            )
+        )
+    return subtotal
+
+
 @router.post("/purchase-orders", response_model=PurchaseOrderOut, status_code=201)
 def create_purchase_order(
     payload: PurchaseOrderIn,
@@ -82,12 +119,6 @@ def create_purchase_order(
     contact = db.query(Contact).filter(Contact.id == payload.contact_id).first()
     if not contact:
         raise HTTPException(status_code=400, detail="Unknown contact")
-
-    plant_ids = {i.plant_id for i in payload.items}
-    plants = {p.id: p for p in db.query(Plant).filter(Plant.id.in_(plant_ids)).all()}
-    missing = plant_ids - plants.keys()
-    if missing:
-        raise HTTPException(status_code=400, detail=f"Unknown plant id(s): {sorted(missing)}")
 
     order = PurchaseOrder(
         contact_id=contact.id,
@@ -102,30 +133,51 @@ def create_purchase_order(
     db.flush()
     order.order_number = f"PO-{order.id}"
 
-    subtotal = 0.0
-    for line in payload.items:
-        if line.quantity <= 0:
-            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
-        plant = plants[line.plant_id]
-        line_total = round(line.quantity * line.unit_price, 2)
-        subtotal += line_total
-        db.add(
-            PurchaseOrderItem(
-                purchase_order_id=order.id,
-                plant_id=plant.id,
-                description=line.description or plant.name,
-                quantity=line.quantity,
-                unit_price=line.unit_price,
-                tax_rate_id=line.tax_rate_id,
-                line_total=line_total,
-            )
-        )
-
+    subtotal = _add_lines(db, order, payload.items)
     order.subtotal = round(subtotal, 2)
     order.total_amount = round(subtotal, 2)
     db.commit()
     db.refresh(order)
     record_change(db, "accounting_purchase_orders", order.id, "create", changed_by=admin)
+    db.commit()
+    return get_purchase_order(order.id, admin, db)
+
+
+@router.put("/purchase-orders/{item_id}", response_model=PurchaseOrderOut)
+def update_purchase_order(
+    item_id: int,
+    payload: PurchaseOrderIn,
+    admin: str = Depends(get_current_admin),
+    _role: str = Depends(require_accounting_action("EDIT", PURCHASE_WRITE_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Edit a Purchase Order that is still a Draft. Once it has been billed
+    the bill and the stock it received depend on its lines, so it is locked."""
+    order = db.query(PurchaseOrder).filter(PurchaseOrder.id == item_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    if order.status != "Draft" or db.query(Purchase.id).filter(Purchase.purchase_order_id == order.id).first():
+        raise HTTPException(status_code=400, detail="Only a Draft purchase order that has no bill yet can be edited")
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="At least one line item is required")
+    contact = db.query(Contact).filter(Contact.id == payload.contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=400, detail="Unknown contact")
+
+    before = {"contact_id": order.contact_id, "order_date": str(order.order_date), "notes": order.notes, "total_amount": order.total_amount}
+    order.items.clear()
+    db.flush()
+    subtotal = _add_lines(db, order, payload.items)
+    order.contact_id = contact.id
+    order.order_date = payload.order_date
+    order.notes = payload.notes
+    order.subtotal = round(subtotal, 2)
+    order.total_amount = round(subtotal, 2)
+    after = {"contact_id": order.contact_id, "order_date": str(order.order_date), "notes": order.notes, "total_amount": order.total_amount}
+    changes = {k: (v, after[k]) for k, v in before.items() if v != after[k]}
+    changes["line_items"] = ("replaced", f"{len(payload.items)} line(s)")
+    db.commit()
+    record_change(db, "accounting_purchase_orders", order.id, "edit", changed_by=admin, changes=changes)
     db.commit()
     return get_purchase_order(order.id, admin, db)
 
@@ -188,14 +240,18 @@ def convert_to_bill(
             )
         )
         if plant:
+            # A tray-size line credits that variant's own stock (quantity =
+            # number of trays received), exactly how a tray sale deducts it
+            # on the website -- never the plant's plain per-unit stock.
             adjust_stock(
                 db,
                 plant_id=plant.id,
+                variant_id=line.variant_id,
                 quantity_delta=line.quantity,
                 transaction_type="PURCHASE_RECEIVED",
                 source_type="PURCHASE_ORDER",
                 source_id=order.id,
-                reference=f"PURCHASE_ORDER:{order.id}:PURCHASE_RECEIVED:{plant.id}",
+                reference=f"PURCHASE_ORDER:{order.id}:PURCHASE_RECEIVED:{line.variant_id or plant.id}",
                 created_by=admin,
             )
         total += line.line_total

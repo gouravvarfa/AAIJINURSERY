@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIstDate } from "../communications/time";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
@@ -56,7 +57,7 @@ export default function CustomerDetail() {
             <div className="form-group">
               <label>Registered</label>
               <div>
-                {customer.created_at ? new Date(customer.created_at).toLocaleDateString() : "-"}
+                {customer.created_at ? formatIstDate(customer.created_at) : "-"}
               </div>
             </div>
           </div>
@@ -110,7 +111,7 @@ export default function CustomerDetail() {
                   {customer.orders.map((o) => (
                     <tr key={o.id}>
                       <td>#{o.id}</td>
-                      <td>{new Date(o.created_at).toLocaleDateString()}</td>
+                      <td>{formatIstDate(o.created_at)}</td>
                       <td>
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {o.items.map((item) => (
@@ -151,7 +152,7 @@ export default function CustomerDetail() {
             <ul className="customer-timeline" style={{ marginBottom: 24 }}>
               {customer.orders.map((o) => (
                 <li key={o.id} className="customer-timeline-item">
-                  <div className="customer-timeline-date">{new Date(o.created_at).toLocaleDateString()}</div>
+                  <div className="customer-timeline-date">{formatIstDate(o.created_at)}</div>
                   <div className="customer-timeline-body">
                     <div>
                       Ordered {o.items.map((i) => `${i.quantity}× ${i.plant_name}`).join(", ")}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIst } from "../communications/time";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 
@@ -39,7 +40,7 @@ export default function AuditTrail({ tableName, recordId }) {
                 </div>
               )}
               <div className="meta">
-                {new Date(e.changed_at).toLocaleString()} &middot; by {e.changed_by || "system"}
+                {formatIst(e.changed_at)} &middot; by {e.changed_by || "system"}
               </div>
             </div>
           ))}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIst, formatIstDate } from "../../communications/time";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../../api";
 import { Loading, Empty } from "../../../components/Loading";
@@ -233,7 +234,7 @@ function OverviewTab({ party }) {
       <div className="form-group"><label>Type</label><div style={{ textTransform: "capitalize" }}>{party.contact_type}</div></div>
       <div className="form-group"><label>Source (record created via)</label><div>{party.source === "online" ? "Online (website)" : "Offline (manual)"}</div></div>
       <div className="form-group"><label>Channels used</label><div>{party.channels?.length ? party.channels.join(" + ") : "None yet"}</div></div>
-      <div className="form-group" style={{ marginBottom: 0 }}><label>Created</label><div>{new Date(party.created_at).toLocaleDateString()}</div></div>
+      <div className="form-group" style={{ marginBottom: 0 }}><label>Created</label><div>{formatIstDate(party.created_at)}</div></div>
     </div>
   );
 }
@@ -246,7 +247,7 @@ function TimelineTab({ rows }) {
         <div key={i} className="admin-order-status-history-item">
           <strong>{typeIcon(r.source)} {r.label}</strong>
           {r.amount != null && <span> -- ₹{r.amount.toLocaleString()}</span>}
-          <div className="meta">{new Date(r.date).toLocaleString()} &middot; {r.reference}</div>
+          <div className="meta">{formatIst(r.date)} &middot; {r.reference}</div>
         </div>
       ))}
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ORDERS_CHANGED_EVENT } from "../hooks/useOrderConfirmations";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
@@ -47,6 +48,14 @@ export default function OrderDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, id]);
 
+  // Quiet refresh when the background poll sees this customer's orders change.
+  useEffect(() => {
+    if (session?.type !== "customer") return undefined;
+    const refresh = () => api.get(`/customer/orders/${id}`).then(setOrder).catch(() => {});
+    window.addEventListener(ORDERS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(ORDERS_CHANGED_EVENT, refresh);
+  }, [session, id]);
+
   if (session === undefined) return <Loading />;
   if (session === null)
     return (
@@ -68,10 +77,12 @@ export default function OrderDetail() {
     setPayingNow(true);
     try {
       const withRazorpayOrder = await api.post(`/customer/orders/${id}/create-payment`);
+      const { razorpay_key_id: razorpayKeyId } = await api.get("/customer/payment-config");
+      if (!razorpayKeyId) throw new Error("Online payment is not available right now. Please contact us.");
       await loadRazorpayScript();
 
       const rzp = new window.Razorpay({
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        key: razorpayKeyId,
         amount: Math.round(withRazorpayOrder.total_amount * 100),
         currency: "INR",
         name: "Aaiji Nursery",

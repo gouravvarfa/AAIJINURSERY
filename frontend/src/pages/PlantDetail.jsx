@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import QuantityInput from "../components/QuantityInput";
+import { stockNote } from "../utils/quantity";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import PlantCard from "../components/PlantCard";
@@ -103,7 +105,7 @@ export default function PlantDetail() {
                     ? "Currently Out of Stock"
                     : plant.stock_quantity > 0
                     ? "In Stock"
-                    : "Out of Stock"}
+                    : "Made to Order"}
                 </span>
                 {plant.sku && <span className="badge badge-muted">SKU: {plant.sku}</span>}
               </div>
@@ -124,33 +126,12 @@ export default function PlantDetail() {
                 </div>
               ) : (
                 <div style={{ marginBottom: 16 }}>
-                  <div className="price" style={{ fontSize: "1.6rem", marginBottom: plant.stock_quantity > 0 ? 10 : 0 }}>
+                  <div className="price" style={{ fontSize: "1.6rem", marginBottom: 10 }}>
                     &#8377;{plant.effective_price}
                     {plant.discount_price ? <span className="strike">&#8377;{plant.price}</span> : null}
                   </div>
-                  {plant.stock_quantity > 0 && (
-                    <div className="cart-row-qty">
-                      <button
-                        type="button"
-                        className="qty-btn"
-                        onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                        disabled={quantity <= 1}
-                        aria-label="Decrease quantity"
-                      >
-                        &minus;
-                      </button>
-                      <span className="qty-value">{quantity}</span>
-                      <button
-                        type="button"
-                        className="qty-btn"
-                        onClick={() => setQuantity((q) => Math.min(plant.stock_quantity, q + 1))}
-                        disabled={quantity >= plant.stock_quantity}
-                        aria-label="Increase quantity"
-                      >
-                        +
-                      </button>
-                    </div>
-                  )}
+                  <QuantityInput value={quantity} onChange={setQuantity} label="Quantity" directEntry />
+                  <div className="stock-note">{stockNote(plant.stock_quantity, quantity)}</div>
                 </div>
               )}
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>

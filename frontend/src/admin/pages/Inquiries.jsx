@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIst, formatIstDate } from "../communications/time";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 
@@ -104,7 +105,7 @@ export default function Inquiries() {
                   </td>
                   <td>{item.quantity ?? "-"}</td>
                   <td style={{ maxWidth: 260 }}>{item.requirement || "-"}</td>
-                  <td>{new Date(item.created_at).toLocaleDateString()}</td>
+                  <td>{formatIstDate(item.created_at)}</td>
                   <td>
                     <select
                       className="form-control"
@@ -154,7 +155,7 @@ export default function Inquiries() {
                 {history.map((h) => (
                   <li key={h.id} style={{ marginBottom: 10 }}>
                     <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                      {new Date(h.created_at).toLocaleString()}
+                      {formatIst(h.created_at)}
                     </div>
                     <div>
                       {h.old_status ? `${h.old_status} → ` : ""}

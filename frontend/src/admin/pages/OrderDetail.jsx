@@ -6,6 +6,8 @@ import OrderTracker from "../../components/OrderTracker";
 import CancelOrderModal from "../../components/CancelOrderModal";
 import { useOrderAlerts } from "../OrderAlertContext";
 import WhatsAppActivity from "../communications/WhatsAppActivity";
+import FulfilmentPanel from "../inventory/FulfilmentPanel";
+import { formatIst } from "../communications/time";
 import {
   CANCELLABLE_STATUSES,
   TEAM_CONFIRMATION_LABELS,
@@ -57,6 +59,12 @@ export default function AdminOrderDetail() {
   const [updatingCallStatus, setUpdatingCallStatus] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [callError, setCallError] = useState("");
+  const [drivers, setDrivers] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [driverId, setDriverId] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
+  const [savingDriver, setSavingDriver] = useState(false);
+  const [driverMsg, setDriverMsg] = useState("");
 
   function load() {
     setOrder(null);
@@ -66,6 +74,8 @@ export default function AdminOrderDetail() {
       .then((data) => {
         setOrder(data);
         setSelectedStatus(data.status);
+        setDriverId(data.driver_id ? String(data.driver_id) : "");
+        setVehicleId(data.vehicle_id ? String(data.vehicle_id) : "");
         setFeasibility(data.delivery_feasibility === "PENDING" ? "" : data.delivery_feasibility);
         setDistanceKm(data.delivery_distance_km ?? "");
         setCostMode(data.delivery_cost_mode || "MANUAL");
@@ -85,7 +95,35 @@ export default function AdminOrderDetail() {
 
   useEffect(() => {
     api.get("/admin/admins").then(setAdmins).catch(() => {});
+    // Staff without Delivery access just don't get the driver picker.
+    api.get("/admin/delivery/drivers").then(setDrivers).catch(() => {});
+    api.get("/admin/delivery/vehicles").then(setVehicles).catch(() => {});
   }, []);
+
+  function pickDriver(value) {
+    setDriverId(value);
+    setDriverMsg("");
+    const d = drivers.find((x) => String(x.id) === value);
+    if (d && d.assigned_vehicle_id) setVehicleId(String(d.assigned_vehicle_id));
+    if (!value) setVehicleId("");
+  }
+
+  async function saveDriver() {
+    setSavingDriver(true);
+    setDriverMsg("");
+    try {
+      await api.put(`/admin/orders/${id}/driver`, {
+        driver_id: driverId ? Number(driverId) : null,
+        vehicle_id: vehicleId ? Number(vehicleId) : null,
+      });
+      setDriverMsg("Saved.");
+      load();
+    } catch (err) {
+      setDriverMsg(err.message || "Could not save the driver.");
+    } finally {
+      setSavingDriver(false);
+    }
+  }
 
   async function updateCallStatus(newStatus) {
     setUpdatingCallStatus(true);
@@ -218,7 +256,7 @@ export default function AdminOrderDetail() {
             <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span className={`badge ${statusBadgeClass(order.status)}`}>{order.status}</span>
               <span style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                Placed {new Date(order.created_at).toLocaleString()}
+                Placed {formatIst(order.created_at)}
               </span>
             </span>
           )}
@@ -293,7 +331,7 @@ export default function AdminOrderDetail() {
                     <div key={h.id} className="admin-order-status-history-item">
                       <strong>{h.new_status}</strong>
                       <div className="meta">
-                        {new Date(h.created_at).toLocaleString()} &middot; Updated by {h.updated_by || "system"}
+                        {formatIst(h.created_at)} &middot; Updated by {h.updated_by || "system"}
                       </div>
                       {h.remarks && <div className="meta">{h.remarks}</div>}
                     </div>
@@ -301,6 +339,8 @@ export default function AdminOrderDetail() {
                 </div>
               )}
             </div>
+
+            <WhatsAppActivity sourceModule="orders" sourceId={order.id} />
           </div>
 
           {/* Right / sidebar column */}
@@ -327,7 +367,7 @@ export default function AdminOrderDetail() {
               {order.team_confirmation_status === "CONFIRMED" ? (
                 <p style={{ color: "var(--color-text-muted)", margin: 0 }}>
                   Confirmed by {order.team_confirmed_by || "-"} on{" "}
-                  {order.team_confirmed_at ? new Date(order.team_confirmed_at).toLocaleString() : "-"}. Delivery
+                  {order.team_confirmed_at ? formatIst(order.team_confirmed_at) : "-"}. Delivery
                   charge: &#8377;{order.shipping_fee}.
                 </p>
               ) : order.team_confirmation_status === "PENDING" ? (
@@ -503,7 +543,10 @@ export default function AdminOrderDetail() {
               <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Customer Information</h2>
               <div className="form-group">
                 <label>Name</label>
-                <div>{order.customer?.name || order.delivery_name || "-"}</div>
+                <div>{order.delivery_name || order.customer?.name || "-"}</div>
+                {order.delivery_name && order.customer?.name && order.delivery_name.trim().toLowerCase() !== order.customer.name.trim().toLowerCase() && (
+                  <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>Account name: {order.customer.name}</div>
+                )}
               </div>
               <div className="form-group">
                 <label>Email</label>
@@ -511,7 +554,10 @@ export default function AdminOrderDetail() {
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Phone</label>
-                <div>{order.customer?.mobile || order.delivery_mobile || "-"}</div>
+                <div>{order.delivery_mobile || order.customer?.mobile || "-"}</div>
+                {order.delivery_mobile && order.customer?.mobile && order.delivery_mobile !== order.customer.mobile && (
+                  <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>Account number: {order.customer.mobile}</div>
+                )}
               </div>
             </div>
 
@@ -537,6 +583,49 @@ export default function AdminOrderDetail() {
                 {order.payment_status}
               </span>
             </div>
+
+            <FulfilmentPanel
+              kind="order"
+              items={order.items}
+              open={!["Cancelled", "Delivered"].includes(order.status)}
+              onChanged={load}
+            />
+
+            {drivers.length > 0 && (
+              <div className="admin-form-card" style={{ maxWidth: "none", marginBottom: 20 }}>
+                <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Driver &amp; Vehicle</h2>
+                <div className="form-group">
+                  <label htmlFor="order-driver">Driver</label>
+                  <select id="order-driver" className="form-control" value={driverId} onChange={(e) => pickDriver(e.target.value)}>
+                    <option value="">No driver</option>
+                    {drivers.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}{d.phone ? ` - ${d.phone}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="order-vehicle">Vehicle</label>
+                  <select id="order-vehicle" className="form-control" value={vehicleId} disabled={!driverId} onChange={(e) => setVehicleId(e.target.value)}>
+                    <option value="">No vehicle</option>
+                    {vehicles.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name_model ? `${v.name_model} (${v.registration_number})` : v.registration_number}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button type="button" className="btn btn-primary btn-block" disabled={savingDriver} onClick={saveDriver}>
+                  {savingDriver ? "Saving..." : "Save driver"}
+                </button>
+                {driverMsg && <p style={{ margin: "10px 0 0", fontSize: "0.9rem" }}>{driverMsg}</p>}
+                <p style={{ margin: "10px 0 0", fontSize: "0.82rem", color: "var(--color-text-muted)" }}>
+                  When this order is marked <strong>Packed</strong> or <strong>Out For Delivery</strong>, the customer's WhatsApp
+                  includes the driver&apos;s name, phone number and vehicle. Set this before changing the status.
+                </p>
+              </div>
+            )}
 
             <div className="admin-form-card" style={{ maxWidth: "none" }}>
               <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Order Status Management</h2>
@@ -659,8 +748,6 @@ export default function AdminOrderDetail() {
           onConfirm={handleCancel}
         />
       )}
-
-      {order && <WhatsAppActivity sourceModule="orders" sourceId={order.id} />}
 
       {showRejectModal && (
         <div className="modal-overlay" onClick={() => !rejectingDelivery && setShowRejectModal(false)}>

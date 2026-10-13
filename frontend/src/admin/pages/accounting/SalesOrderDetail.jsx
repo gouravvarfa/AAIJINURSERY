@@ -4,6 +4,8 @@ import { api } from "../../../api";
 import { Loading } from "../../../components/Loading";
 import { salesOrderBadgeClass, sourceBadgeClass } from "../../accounting/accountingStatus";
 import AuditTrail from "../../accounting/AuditTrail";
+import DeliveryPanel from "../../accounting/DeliveryPanel";
+import FulfilmentPanel from "../../inventory/FulfilmentPanel";
 
 export default function SalesOrderDetail() {
   const { id } = useParams();
@@ -58,9 +60,16 @@ export default function SalesOrderDetail() {
             </span>
           </span>
         </div>
-        <Link className="btn btn-sm btn-outline dark" to="/admin/accounting/sales-orders">
-          &larr; Back to Sales Orders
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {order.source === "offline" && order.status === "Draft" && !hasInvoice && (
+            <Link className="btn btn-sm btn-primary" to={`/admin/accounting/sales-orders?edit=${order.id}`}>
+              Edit
+            </Link>
+          )}
+          <Link className="btn btn-sm btn-outline dark" to="/admin/accounting/sales-orders">
+            &larr; Back to Sales Orders
+          </Link>
+        </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
@@ -74,7 +83,8 @@ export default function SalesOrderDetail() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>{item.description}</div>
                   <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                    Qty {item.quantity} &times; &#8377;{item.unit_price}
+                    {item.tray_size ? `${item.quantity} trays of ${item.tray_size}` : `Qty ${item.quantity}`} &times; &#8377;{item.unit_price}
+                    {item.tray_size ? "/tray" : ""}
                   </div>
                 </div>
                 <div style={{ fontWeight: 700 }}>&#8377;{item.line_total}</div>
@@ -110,6 +120,14 @@ export default function SalesOrderDetail() {
             <p style={{ margin: 0 }}>{order.contact?.name}</p>
             <p style={{ margin: 0, color: "var(--color-text-muted)" }}>{order.contact?.email}</p>
             <p style={{ margin: 0, color: "var(--color-text-muted)" }}>{order.contact?.phone}</p>
+            <p style={{ margin: "10px 0 0" }}>
+              Delivery date:{" "}
+              <strong>
+                {order.delivery_date
+                  ? new Date(order.delivery_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                  : "not set"}
+              </strong>
+            </p>
           </div>
 
           <div className="admin-form-card" style={{ maxWidth: "none", marginBottom: 20 }}>
@@ -134,6 +152,17 @@ export default function SalesOrderDetail() {
               <p style={{ color: "var(--color-text-muted)", margin: 0 }}>No invoice yet.</p>
             )}
           </div>
+
+          {order.source === "offline" && (
+            <FulfilmentPanel
+              kind="sales_order"
+              items={order.items}
+              open={["Draft", "Confirmed", "Invoiced"].includes(order.status)}
+              onChanged={load}
+            />
+          )}
+
+          {order.source === "offline" && <DeliveryPanel salesOrder={order} />}
 
           {canConvert && (
             <div className="admin-form-card" style={{ maxWidth: "none" }}>

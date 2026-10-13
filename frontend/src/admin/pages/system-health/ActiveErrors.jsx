@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { formatIst } from "../../communications/time";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../../../api";
 import { Loading, Empty } from "../../../components/Loading";
@@ -96,7 +97,7 @@ export default function SystemHealthActiveErrors() {
                       {item.message}
                     </td>
                     <td>{item.occurrence_count}</td>
-                    <td>{new Date(item.last_seen).toLocaleString()}</td>
+                    <td>{formatIst(item.last_seen)}</td>
                     <td><StatusBadge status={item.status} /></td>
                     <td>
                       <button

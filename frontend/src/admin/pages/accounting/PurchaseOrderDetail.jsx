@@ -52,9 +52,16 @@ export default function PurchaseOrderDetail() {
           <h1 style={{ marginBottom: 4 }}>Purchase Order {order.order_number}</h1>
           <span className={`badge ${purchaseOrderBadgeClass(order.status)}`}>{order.status}</span>
         </div>
-        <Link className="btn btn-sm btn-outline dark" to="/admin/accounting/purchase-orders">
-          &larr; Back to Purchase Orders
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {order.status === "Draft" && !order.bill && (
+            <Link className="btn btn-sm btn-primary" to={`/admin/accounting/purchase-orders?edit=${order.id}`}>
+              Edit
+            </Link>
+          )}
+          <Link className="btn btn-sm btn-outline dark" to="/admin/accounting/purchase-orders">
+            &larr; Back to Purchase Orders
+          </Link>
+        </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
@@ -68,7 +75,8 @@ export default function PurchaseOrderDetail() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>{item.description}</div>
                   <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                    Qty {item.quantity} &times; &#8377;{item.unit_price}
+                    {item.tray_size ? `${item.quantity} trays of ${item.tray_size}` : `Qty ${item.quantity}`} &times; &#8377;{item.unit_price}
+                    {item.tray_size ? "/tray" : ""}
                   </div>
                 </div>
                 <div style={{ fontWeight: 700 }}>&#8377;{item.line_total}</div>

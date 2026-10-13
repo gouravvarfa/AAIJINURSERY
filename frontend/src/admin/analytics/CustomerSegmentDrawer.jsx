@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIstDate } from "../communications/time";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
@@ -60,7 +61,7 @@ export default function CustomerSegmentDrawer({ segment, onClose }) {
                     </td>
                     <td>₹{c.total_spent.toLocaleString()}</td>
                     <td>{c.order_count}</td>
-                    <td>{c.last_order_at ? new Date(c.last_order_at).toLocaleDateString() : "-"}</td>
+                    <td>{c.last_order_at ? formatIstDate(c.last_order_at) : "-"}</td>
                   </tr>
                 ))}
               </tbody>

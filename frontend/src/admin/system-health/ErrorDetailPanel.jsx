@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIst } from "../communications/time";
 import { api } from "../../api";
 import { Loading } from "../../components/Loading";
 import { SeverityBadge, StatusBadge } from "./badges";
@@ -62,15 +63,15 @@ export default function ErrorDetailPanel({ errorId, onStatusChanged }) {
         <dt>Message</dt>
         <dd>{data.message}</dd>
         <dt>First Seen</dt>
-        <dd>{data.first_seen ? new Date(data.first_seen).toLocaleString() : "-"}</dd>
+        <dd>{data.first_seen ? formatIst(data.first_seen) : "-"}</dd>
         <dt>Last Seen</dt>
-        <dd>{data.last_seen ? new Date(data.last_seen).toLocaleString() : "-"}</dd>
+        <dd>{data.last_seen ? formatIst(data.last_seen) : "-"}</dd>
         <dt>Occurrences</dt>
         <dd>{data.occurrence_count}</dd>
         {data.status === "RESOLVED" && (
           <>
             <dt>Resolved By</dt>
-            <dd>{data.resolved_by} {data.resolved_at ? `on ${new Date(data.resolved_at).toLocaleString()}` : ""}</dd>
+            <dd>{data.resolved_by} {data.resolved_at ? `on ${formatIst(data.resolved_at)}` : ""}</dd>
           </>
         )}
       </dl>
@@ -115,7 +116,7 @@ export default function ErrorDetailPanel({ errorId, onStatusChanged }) {
               <ul>
                 {data.recent_occurrences.map((occ, idx) => (
                   <li key={idx}>
-                    {occ.request_id || "(no request id)"} &mdash; {new Date(occ.at).toLocaleString()}
+                    {occ.request_id || "(no request id)"} &mdash; {formatIst(occ.at)}
                   </li>
                 ))}
               </ul>

@@ -54,6 +54,7 @@ def list_deliveries(
     driver_id: Optional[int] = Query(None),
     vehicle_id: Optional[int] = Query(None),
     contact_id: Optional[int] = Query(None),
+    sales_order_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     source: Optional[str] = Query(None),
     q: Optional[str] = Query(None, description="Search by delivery #, customer name, or mobile"),
@@ -74,6 +75,8 @@ def list_deliveries(
         query = query.filter(Delivery.vehicle_id == vehicle_id)
     if contact_id:
         query = query.filter(Delivery.contact_id == contact_id)
+    if sales_order_id:
+        query = query.filter(Delivery.sales_order_id == sales_order_id)
     if status:
         query = query.filter(Delivery.status == status)
     if source in ("online", "offline"):

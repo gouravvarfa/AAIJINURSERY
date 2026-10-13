@@ -32,6 +32,12 @@ from sqlalchemy.orm import Session
 from app.models import InventoryTransaction, Plant, PlantVariant
 
 
+# Largest quantity a single order line may ask for (plants, or trays for tray
+# products). Orders are NOT limited by stock; this only guards against typos and
+# absurd values that could overflow or distort totals.
+MAX_ORDER_QUANTITY = 1_000_000
+
+
 class InsufficientStockError(Exception):
     def __init__(self, message: str, plant_id: int, variant_id: int | None = None):
         super().__init__(message)
@@ -224,3 +230,56 @@ def adjust_stock(
         created_by=created_by,
         notes=notes,
     )
+
+
+def allocate_stock(
+    db: Session,
+    *,
+    plant_id: int,
+    variant_id: int | None = None,
+    quantity: int,
+    source_type: str,
+    source_id=None,
+    reference: str | None = None,
+    transaction_type: str = "SALE",
+    created_by: str = "system",
+    notes: str = "",
+) -> int:
+    """Takes up to `quantity` from stock and returns how much was actually
+    taken (0..quantity). Never raises for "not enough stock" and never takes
+    stock below zero -- the shortfall simply stays pending on the order.
+
+    Same guarantees as deduct_stock: the take is one atomic conditional UPDATE
+    (so concurrent orders cannot both claim the same plants), and `reference`
+    makes a retry return the quantity already taken instead of taking again."""
+    if quantity <= 0:
+        return 0
+
+    existing = _existing_by_reference(db, reference)
+    if existing:
+        return existing.quantity
+
+    target = _target(plant_id, variant_id)
+    for _ in range(8):
+        current = db.query(target.model.stock_quantity).filter(target.model.id == target.id).scalar() or 0
+        take = min(quantity, max(current, 0))
+        if take <= 0:
+            return 0
+        result = db.execute(
+            sa_update(target.model.__table__)
+            .where(target.model.id == target.id, target.model.stock_quantity >= take)
+            .values(stock_quantity=target.model.stock_quantity - take)
+        )
+        if result.rowcount == 0:
+            continue  # someone else took stock between our read and write: look again
+        after = db.query(target.model.stock_quantity).filter(target.model.id == target.id).scalar()
+        try:
+            _record(db, target, transaction_type, take, after + take, after, source_type, source_id, reference, created_by, notes)
+        except IntegrityError:
+            db.rollback()
+            winner = _existing_by_reference(db, reference)
+            if winner:
+                return winner.quantity
+            raise
+        return take
+    return 0

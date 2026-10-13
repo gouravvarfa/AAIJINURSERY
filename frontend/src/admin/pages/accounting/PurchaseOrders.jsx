@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../../api";
+import SearchSelect from "../../accounting/SearchSelect";
 import { Loading, Empty } from "../../../components/Loading";
 import PurchaseOrderItemsField from "../../accounting/PurchaseOrderItemsField";
 import SearchBox from "../../accounting/SearchBox";
@@ -12,6 +13,10 @@ function todayDateInput() {
 }
 
 export default function PurchaseOrders() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get("edit");
+  const [editingOrder, setEditingOrder] = useState(null); // the saved order being edited, if any
   const [items, setItems] = useState(null);
   const [q, setQ] = useState("");
   const [mode, setMode] = useState("list");
@@ -20,6 +25,36 @@ export default function PurchaseOrders() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [newContact, setNewContact] = useState({ name: "", phone: "", email: "", address: "" });
+  const [contactSaving, setContactSaving] = useState(false);
+  const [contactError, setContactError] = useState("");
+
+  async function handleCreateContact() {
+    if (!newContact.name.trim()) {
+      setContactError("Name is required.");
+      return;
+    }
+    setContactSaving(true);
+    setContactError("");
+    try {
+      const created = await api.post("/admin/accounting/contacts", {
+        contact_type: "supplier",
+        name: newContact.name.trim(),
+        phone: newContact.phone.trim(),
+        email: newContact.email.trim(),
+        address: newContact.address.trim(),
+      });
+      setContacts((prev) => [...prev, created]);
+      setForm((f) => ({ ...f, contact_id: created.id }));
+      setShowContactModal(false);
+      setNewContact({ name: "", phone: "", email: "", address: "" });
+    } catch (err) {
+      setContactError(err.message || "Could not create contact.");
+    } finally {
+      setContactSaving(false);
+    }
+  }
 
   function load() {
     setItems(null);
@@ -30,7 +65,45 @@ export default function PurchaseOrders() {
 
   useEffect(load, [q]);
 
+  // "/admin/accounting/purchase-orders?edit=ID" (the Edit button on the detail
+  // page) opens this same form, pre-filled, and saves with PUT.
+  useEffect(() => {
+    if (!editId) {
+      setEditingOrder(null);
+      return;
+    }
+    setError("");
+    Promise.all([api.get("/admin/accounting/purchase-orders/" + editId), api.get("/admin/accounting/contacts")])
+      .then(([order, contactList]) => {
+        setContacts(contactList);
+        setEditingOrder(order);
+        setForm({
+          contact_id: order.contact_id,
+          order_date: String(order.order_date).slice(0, 10),
+          notes: order.notes || "",
+          items: order.items.map((i) => ({
+            plant_id: i.plant_id || "",
+            variant_id: i.variant_id || "",
+            description: i.description,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+          })),
+        });
+        setMode("form");
+      })
+      .catch((err) => {
+        setLoadError(err.message || "Could not open this order for editing.");
+        setMode("list");
+      });
+  }, [editId]);
+
+  function leaveForm() {
+    if (editingOrder) navigate("/admin/accounting/purchase-orders/" + editingOrder.id);
+    else setMode("list");
+  }
+
   function startCreate() {
+    setEditingOrder(null);
     setForm({ contact_id: "", order_date: todayDateInput(), notes: "", items: [] });
     setError("");
     api.get("/admin/accounting/contacts").then(setContacts);
@@ -50,17 +123,24 @@ export default function PurchaseOrders() {
     setSaving(true);
     setError("");
     try {
-      await api.post("/admin/accounting/purchase-orders", {
+      const body = {
         contact_id: Number(form.contact_id),
         order_date: form.order_date,
         notes: form.notes,
         items: form.items.map((i) => ({
           plant_id: Number(i.plant_id),
+          variant_id: i.variant_id || null,
           description: i.description,
           quantity: i.quantity,
           unit_price: i.unit_price,
         })),
-      });
+      };
+      if (editingOrder) {
+        await api.put("/admin/accounting/purchase-orders/" + editingOrder.id, body);
+        navigate("/admin/accounting/purchase-orders/" + editingOrder.id);
+        return;
+      }
+      await api.post("/admin/accounting/purchase-orders", body);
       setMode("list");
       load();
     } catch (err) {
@@ -74,9 +154,9 @@ export default function PurchaseOrders() {
     return (
       <div>
         <div className="admin-page-head">
-          <h1>New Purchase Order</h1>
-          <button className="btn btn-sm btn-outline dark" onClick={() => setMode("list")}>
-            Back to List
+          <h1>{editingOrder ? `Edit Purchase Order ${editingOrder.order_number}` : "New Purchase Order"}</h1>
+          <button className="btn btn-sm btn-outline dark" onClick={leaveForm}>
+            {editingOrder ? "Cancel" : "Back to List"}
           </button>
         </div>
         <div className="admin-form-card">
@@ -84,21 +164,94 @@ export default function PurchaseOrders() {
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label htmlFor="contact_id">Supplier</label>
-              <select
-                id="contact_id"
-                className="form-control"
-                required
-                value={form.contact_id}
-                onChange={(e) => setForm((f) => ({ ...f, contact_id: e.target.value }))}
-              >
-                <option value="">Select a supplier...</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <SearchSelect
+                    id="contact_id"
+                    options={contacts.map((c) => ({
+                      value: c.id,
+                      label: c.name,
+                      hint: [c.phone, c.source === "online" ? "website customer" : ""].filter(Boolean).join(" · "),
+                      search: `${c.phone} ${c.email}`,
+                    }))}
+                    value={form.contact_id}
+                    onChange={(v) => setForm((f) => ({ ...f, contact_id: v }))}
+                    placeholder="Select a supplier..."
+                    searchPlaceholder="Search supplier by name or mobile number"
+                    emptyText="No contact matches. Use + New Contact to add one."
+                  />
+                </div>
+                <button type="button" className="btn btn-sm btn-outline dark" onClick={() => setShowContactModal(true)}>
+                  + New Contact
+                </button>
+              </div>
             </div>
+
+            {showContactModal && (
+              <div className="modal-overlay" role="dialog" aria-modal="true">
+                <div className="modal-card">
+                  <h3>New Supplier Contact</h3>
+                  {contactError && <div className="alert alert-error">{contactError}</div>}
+                  <div>
+                    <div className="form-group">
+                      <label htmlFor="new_contact_name">Name</label>
+                      <input
+                        id="new_contact_name"
+                        className="form-control"
+                        required
+                        autoFocus
+                        value={newContact.name}
+                        onChange={(e) => setNewContact((c) => ({ ...c, name: e.target.value }))}
+                        onKeyDown={(e) => e.key === "Enter" && handleCreateContact()}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="new_contact_phone">Mobile</label>
+                      <input
+                        id="new_contact_phone"
+                        className="form-control"
+                        value={newContact.phone}
+                        onChange={(e) => setNewContact((c) => ({ ...c, phone: e.target.value }))}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="new_contact_email">Email</label>
+                      <input
+                        id="new_contact_email"
+                        type="email"
+                        className="form-control"
+                        value={newContact.email}
+                        onChange={(e) => setNewContact((c) => ({ ...c, email: e.target.value }))}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="new_contact_address">Address</label>
+                      <textarea
+                        id="new_contact_address"
+                        className="form-control"
+                        value={newContact.address}
+                        onChange={(e) => setNewContact((c) => ({ ...c, address: e.target.value }))}
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button type="button" className="btn btn-primary" disabled={contactSaving} onClick={handleCreateContact}>
+                        {contactSaving ? "Saving..." : "Create Contact"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline dark"
+                        onClick={() => {
+                          setShowContactModal(false);
+                          setContactError("");
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="form-group">
               <label htmlFor="order_date">Order Date</label>
               <input
@@ -127,7 +280,7 @@ export default function PurchaseOrders() {
               />
             </div>
             <button className="btn btn-primary" disabled={saving}>
-              {saving ? "Saving..." : "Save Purchase Order"}
+              {saving ? "Saving..." : editingOrder ? "Save Changes" : "Save Purchase Order"}
             </button>
           </form>
         </div>

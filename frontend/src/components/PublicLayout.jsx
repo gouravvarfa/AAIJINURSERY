@@ -7,6 +7,7 @@ import WhatsAppButton from "./WhatsAppButton";
 import AIChatWidget from "./AIChatWidget";
 import BottomNav from "./BottomNav";
 import Toast from "./Toast";
+import OrderConfirmedPopup from "./OrderConfirmedPopup";
 
 // The backend dedups by session cookie regardless (one row per browser
 // session, see POST /api/track-visit), but this sessionStorage flag avoids
@@ -33,6 +34,7 @@ export default function PublicLayout() {
       <AIChatWidget />
       <BottomNav />
       <Toast />
+      <OrderConfirmedPopup />
     </>
   );
 }

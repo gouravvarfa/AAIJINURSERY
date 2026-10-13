@@ -24,6 +24,13 @@ function annotateError(error, data, res) {
   error.status = res.status;
   error.code = data?.error?.code;
   error.requestId = data?.request_id || res.headers.get("X-Request-ID") || undefined;
+  // A 401 while already inside /admin (e.g. the automatic midnight logout,
+  // or a session revoked from another tab) means the SPA's in-memory auth
+  // state is now stale -- send straight to the login screen instead of
+  // leaving the admin stuck on a page that silently stops working.
+  if (res.status === 401 && window.location.pathname.startsWith("/admin") && window.location.pathname !== "/admin/login") {
+    window.location.href = "/admin/login";
+  }
   return error;
 }
 

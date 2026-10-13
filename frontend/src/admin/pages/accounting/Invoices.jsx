@@ -6,12 +6,15 @@ import SourceFilter from "../../accounting/SourceFilter";
 import SearchBox from "../../accounting/SearchBox";
 import ExportButton from "../../accounting/ExportButton";
 import { invoiceBadgeClass, sourceBadgeClass } from "../../accounting/accountingStatus";
+import DeliveryDateCell, { DeliveryFilter } from "../../accounting/DeliveryDateCell";
+import { deliveryAlert, matchesDeliveryFilter } from "../../accounting/deliveryAlert";
 
 export default function Invoices() {
   const [items, setItems] = useState(null);
   const [source, setSource] = useState("");
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
+  const [deliveryFilter, setDeliveryFilter] = useState("");
   const [error, setError] = useState("");
 
   function load() {
@@ -27,6 +30,17 @@ export default function Invoices() {
 
   useEffect(load, [source, status, q]);
 
+  const rows = (items || [])
+    .map((item) => ({
+      item,
+      info: deliveryAlert({
+        deliveryDate: item.sales_order?.delivery_date,
+        deliveryStatus: item.sales_order?.delivery_status,
+        status: ["Cancelled", "Voided"].includes(item.status) ? item.status : item.sales_order?.status,
+      }),
+    }))
+    .filter((r) => matchesDeliveryFilter(r.info, deliveryFilter));
+
   return (
     <div>
       <div className="admin-page-head">
@@ -41,6 +55,7 @@ export default function Invoices() {
             <option value="Overdue">Overdue</option>
             <option value="Voided">Voided</option>
           </select>
+          <DeliveryFilter value={deliveryFilter} onChange={setDeliveryFilter} />
           <SearchBox value={q} onChange={setQ} placeholder="Search by invoice # or contact name..." />
           <ExportButton baseUrl="/api/admin/accounting/export/invoices.xlsx" />
         </div>
@@ -52,8 +67,8 @@ export default function Invoices() {
         </div>
       ) : !items ? (
         <Loading />
-      ) : items.length === 0 ? (
-        <Empty>No invoices yet.</Empty>
+      ) : rows.length === 0 ? (
+        <Empty>{items.length === 0 ? "No invoices yet." : "No invoices match this delivery filter."}</Empty>
       ) : (
         <div className="admin-table-wrap">
           <table className="admin-table">
@@ -62,6 +77,7 @@ export default function Invoices() {
                 <th>Invoice #</th>
                 <th>Contact</th>
                 <th>Date</th>
+                <th>Delivery</th>
                 <th>Total</th>
                 <th>Balance Due</th>
                 <th>Status</th>
@@ -70,11 +86,14 @@ export default function Invoices() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {rows.map(({ item, info }) => (
                 <tr key={item.id}>
                   <td>{item.invoice_number}</td>
                   <td>{item.contact?.name || "-"}</td>
                   <td>{new Date(item.invoice_date).toLocaleDateString()}</td>
+                  <td>
+                    <DeliveryDateCell info={info} deliveryDate={item.sales_order?.delivery_date} />
+                  </td>
                   <td>₹{item.total_amount.toLocaleString()}</td>
                   <td>₹{item.balance_due.toLocaleString()}</td>
                   <td>

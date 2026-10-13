@@ -124,6 +124,21 @@ DEFAULT_TEMPLATES = [
         "variables": ["customer_name", "invoice_number", "amount", "due_date"],
     },
     {
+        "name": "order_packed_driver", "category": "orders",
+        "preview": "Hello {{customer_name}}, your order {{order_number}} has been packed and will be delivered by {{driver_name}} (phone: {{driver_mobile}}) in vehicle {{vehicle}}.\nThank you.",
+        "variables": ["customer_name", "order_number", "driver_name", "driver_mobile", "vehicle"],
+    },
+    {
+        "name": "out_for_delivery_driver", "category": "orders",
+        "preview": "Hello {{customer_name}}, your order {{order_number}} is out for delivery.\nDriver: {{driver_name}}\nPhone: {{driver_mobile}}\nVehicle: {{vehicle}}\nPlease keep your phone available.",
+        "variables": ["customer_name", "order_number", "driver_name", "driver_mobile", "vehicle"],
+    },
+    {
+        "name": "invoice_link", "category": "accounting",
+        "preview": "Hello {{customer_name}}, your invoice {{invoice_number}} has been generated. Amount: {{amount}}. Due Date: {{due_date}}.\nView your invoice (PDF): {{invoice_link}}\nThank you.",
+        "variables": ["customer_name", "invoice_number", "amount", "due_date", "invoice_link"],
+    },
+    {
         "name": "welcome_customer", "category": "website",
         "preview": "Hello {{customer_name}}, welcome to {{business_name}}! We're glad to have you with us.",
         "variables": ["customer_name", "business_name"],

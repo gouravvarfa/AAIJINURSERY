@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { ORDERS_CHANGED_EVENT } from "../hooks/useOrderConfirmations";
 import { Link, Navigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
@@ -34,6 +35,14 @@ export default function Orders() {
         .then(setOrders)
         .catch(() => setOrders([]));
     }
+  }, [session]);
+
+  // The site polls in the background; when an order changes, refresh quietly (no spinner, no reload).
+  useEffect(() => {
+    if (session?.type !== "customer") return undefined;
+    const refresh = () => api.get("/customer/orders").then(setOrders).catch(() => {});
+    window.addEventListener(ORDERS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(ORDERS_CHANGED_EVENT, refresh);
   }, [session]);
 
   const counts = useMemo(() => {

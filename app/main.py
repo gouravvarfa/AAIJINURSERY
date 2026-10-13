@@ -19,10 +19,14 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.accounting.public_pdf import router as public_invoice_pdf_router
 from app.accounting.router import router as accounting_router
 from app.ai.gateway import router as ai_gateway_router
 from app.ai.admin_gateway import router as admin_ai_gateway_router
 from app.communications import models as communications_models  # noqa: F401 -- registers tables with Base.metadata
+from app.communications.control_router import router as messaging_control_router
+from app.communications.billing_router import router as messaging_billing_router
+from app.inventory_router import router as inventory_demand_router
 from app.communications.router import router as communications_router
 from app.communications.inbox_router import router as communications_inbox_router
 from app.communications.webhook import router as whatsapp_webhook_router
@@ -143,6 +147,12 @@ with engine.connect() as conn:
         conn.commit()
     if "razorpay_payment_id" not in order_columns:
         conn.execute(text("ALTER TABLE orders ADD COLUMN razorpay_payment_id VARCHAR(100)"))
+        conn.commit()
+    if "driver_id" not in order_columns:
+        conn.execute(text("ALTER TABLE orders ADD COLUMN driver_id INTEGER REFERENCES delivery_drivers(id)"))
+        conn.commit()
+    if "vehicle_id" not in order_columns:
+        conn.execute(text("ALTER TABLE orders ADD COLUMN vehicle_id INTEGER REFERENCES delivery_vehicles(id)"))
         conn.commit()
     if "razorpay_signature" not in order_columns:
         conn.execute(text("ALTER TABLE orders ADD COLUMN razorpay_signature VARCHAR(255)"))
@@ -315,6 +325,56 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE accounting_invoice_items ADD COLUMN plant_id INTEGER"))
         conn.commit()
 
+    # Sales Order tray-size support: lets an offline Sales Order line record
+    # which tray-size variant was sold, matching what the website's OrderItem
+    # already tracks (quantity = number of trays, unit_price = per-tray price).
+    sales_order_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_sales_order_items)"))}
+    if "variant_id" not in sales_order_item_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN variant_id INTEGER"))
+        conn.commit()
+    if "tray_size" not in sales_order_item_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN tray_size INTEGER"))
+        conn.commit()
+
+    sales_order_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_sales_orders)"))}
+    if "delivery_date" not in sales_order_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_orders ADD COLUMN delivery_date DATETIME"))
+        conn.commit()
+
+    # Stock allocation: how much of each order line came out of nursery stock.
+    # Everything created before this existed was taken from stock in full.
+    order_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(order_items)"))}
+    if "allocated_quantity" not in order_item_columns:
+        conn.execute(text("ALTER TABLE order_items ADD COLUMN allocated_quantity INTEGER"))
+        conn.execute(text("UPDATE order_items SET allocated_quantity = quantity WHERE allocated_quantity IS NULL"))
+        conn.commit()
+    if "to_prepare" not in order_item_columns:
+        conn.execute(text("ALTER TABLE order_items ADD COLUMN to_prepare BOOLEAN NOT NULL DEFAULT 0"))
+        conn.commit()
+    so_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_sales_order_items)"))}
+    if "to_prepare" not in so_item_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN to_prepare BOOLEAN NOT NULL DEFAULT 0"))
+        conn.commit()
+    if "allocated_quantity" not in so_item_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN allocated_quantity INTEGER"))
+        # Online sales-order lines mirror website orders, and invoiced offline
+        # orders already took their stock at invoicing; drafts took none.
+        conn.execute(text(
+            "UPDATE accounting_sales_order_items SET allocated_quantity = quantity WHERE sales_order_id IN "
+            "(SELECT id FROM accounting_sales_orders WHERE source = 'online' OR status = 'Invoiced')"
+        ))
+        conn.execute(text("UPDATE accounting_sales_order_items SET allocated_quantity = 0 WHERE allocated_quantity IS NULL"))
+        conn.commit()
+
+    # Same tray-size support, for Purchase Order lines.
+    purchase_order_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_purchase_order_items)"))}
+    if "variant_id" not in purchase_order_item_columns:
+        conn.execute(text("ALTER TABLE accounting_purchase_order_items ADD COLUMN variant_id INTEGER"))
+        conn.commit()
+    if "tray_size" not in purchase_order_item_columns:
+        conn.execute(text("ALTER TABLE accounting_purchase_order_items ADD COLUMN tray_size INTEGER"))
+        conn.commit()
+
     # Communications: WhatsApp template approval-status enum (section: WhatsApp
     # Business Cloud API template system) supersedes the old is_active boolean
     # -- a template can now be PENDING/REJECTED/DISABLED, not just on/off.
@@ -482,6 +542,9 @@ app.include_router(api_admin.router)
 app.include_router(api_admin_analytics.router, dependencies=[Depends(require_permission("analytics", "VIEW"))])
 app.include_router(api_admin_rbac.router)
 app.include_router(api_system_health.router)
+app.include_router(messaging_control_router)  # developer-only (checks inside)
+app.include_router(messaging_billing_router)  # developer-only (checks inside)
+app.include_router(inventory_demand_router)  # stock vs demand + per-line stock/prepare decision (permissions checked inside)
 app.include_router(accounting_router, dependencies=[Depends(require_permission("accounting", "VIEW"))])
 app.include_router(labour_router, dependencies=[Depends(require_permission("labour", "VIEW"))])
 app.include_router(delivery_router, dependencies=[Depends(require_permission("delivery", "VIEW"))])
@@ -489,6 +552,7 @@ app.include_router(communications_router, dependencies=[Depends(require_permissi
 app.include_router(communications_inbox_router, dependencies=[Depends(require_permission("communications", "VIEW"))])
 app.include_router(whatsapp_webhook_router)  # public on purpose -- Meta has no admin login; it self-authenticates via X-Hub-Signature-256
 app.include_router(api_customer.router)
+app.include_router(public_invoice_pdf_router)  # login-free, HMAC-signed link sent on WhatsApp
 app.include_router(ai_gateway_router)
 # No blanket require_permission() here (unlike accounting/labour/delivery/
 # communications above) -- Ask AAIJI is gated by Depends(get_current_admin)

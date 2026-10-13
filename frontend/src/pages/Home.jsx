@@ -7,6 +7,7 @@ import PlantCarousel from "../components/PlantCarousel";
 import PlantExplorer from "../components/PlantExplorer";
 import HeroImageSlider, { parseHeroImages } from "../components/HeroImageSlider";
 import Stars from "../components/Stars";
+import GoogleReviewButton from "../components/GoogleReviewButton";
 import Avatar from "../components/Avatar";
 import { Loading } from "../components/Loading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -47,6 +48,14 @@ export default function Home() {
   return (
     <>
       <section className="hero">
+        {/* The nursery photo slider, kept as a wide soft-edged backdrop behind the portrait. */}
+        <div className="hero-bg-slider" aria-hidden="true">
+          <HeroImageSlider
+            alt=""
+            images={parseHeroImages(settings.hero_images)}
+            intervalSeconds={settings.hero_slide_seconds}
+          />
+        </div>
         <div className="container">
           <div>
             <span className="tagline">{settings.tagline}</span>
@@ -62,12 +71,24 @@ export default function Home() {
               </Link>
             </div>
           </div>
-          <div className="hero-image">
-            <HeroImageSlider
-              alt="Lush green plants"
-              images={parseHeroImages(settings.hero_images)}
-              intervalSeconds={settings.hero_slide_seconds}
-            />
+          <div className="hero-owner">
+            <figure className="hero-owner-card">
+              <img
+                src="/images/owner.webp"
+                alt="Founder and owner of Shree Aaiji High Tech Nursery"
+                width="880"
+                height="1320"
+                fetchPriority="high"
+              />
+              <figcaption className="hero-owner-badge">
+                <span className="hero-owner-dot" aria-hidden="true" />
+                <span>
+                  <span className="hero-owner-role">Founder &amp; Owner</span>
+                  <span className="hero-owner-person">Yogesh Septa</span>
+                  <span className="hero-owner-name">Shree Aaiji High Tech Nursery</span>
+                </span>
+              </figcaption>
+            </figure>
           </div>
         </div>
       </section>
@@ -183,6 +204,11 @@ export default function Home() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {settings.google_review_url && (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 28 }}>
+              <GoogleReviewButton url={settings.google_review_url} label="Write a Review on Google" />
             </div>
           )}
         </div>

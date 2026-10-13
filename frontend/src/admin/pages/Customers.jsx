@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIstDate } from "../communications/time";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
@@ -41,7 +42,7 @@ export default function Customers() {
                   <td>{c.name}</td>
                   <td>{c.email}</td>
                   <td>{c.mobile || "-"}</td>
-                  <td>{c.created_at ? new Date(c.created_at).toLocaleDateString() : "-"}</td>
+                  <td>{c.created_at ? formatIstDate(c.created_at) : "-"}</td>
                   <td>
                     <span className="badge badge-muted">{c.order_count}</span>
                   </td>

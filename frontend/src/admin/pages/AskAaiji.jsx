@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
+import AskAaijiVoice, { buildUtterance, voiceModeSupported } from "./AskAaijiVoice";
 
 const SUGGESTED_QUESTIONS = [
   "Today's sales",
@@ -34,6 +35,36 @@ const SpeechRecognitionCtor =
 // scoped by the logged-in admin's real RBAC permissions on the backend,
 // never decided here. Conversation lives only in this page's state for the
 // current session -- gone on refresh/navigation, never persisted server-side.
+function SpeakerIcon({ muted }) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 5 6 9H2v6h4l5 4V5z" />
+      {muted ? <path d="m23 9-6 6M17 9l6 6" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" />}
+    </svg>
+  );
+}
+
+// The full placeholder doesn't fit on one line beside the mic and send buttons on a phone.
+const NARROW_SCREEN = typeof window !== "undefined" && window.innerWidth < 480;
+
+const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
+
+// Browser's built-in text-to-speech -- free, no API key. Prefers a Hindi
+// voice (reads Hinglish naturally), then Indian English, then the default.
+function speak(text) {
+  if (!canSpeak || !text) return;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(buildUtterance(text));
+}
+
+function readSpeakPref() {
+  try {
+    return localStorage.getItem("askAaijiSpeak") === "1";
+  } catch {
+    return false;
+  }
+}
+
 export default function AskAaiji() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -42,9 +73,28 @@ export default function AskAaiji() {
   const [status, setStatus] = useState(null);
   const [lastFailedText, setLastFailedText] = useState(null);
   const [listening, setListening] = useState(false);
+  const [speakReplies, setSpeakReplies] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const sendTextRef = useRef(null);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
+  const transcriptRef = useRef("");
+  const speakRepliesRef = useRef(speakReplies);
+  speakRepliesRef.current = speakReplies;
+
+  useEffect(() => () => canSpeak && window.speechSynthesis.cancel(), []);
+
+  function toggleSpeakReplies() {
+    const next = !speakReplies;
+    setSpeakReplies(next);
+    if (!next && canSpeak) window.speechSynthesis.cancel();
+    try {
+      localStorage.setItem("askAaijiSpeak", next ? "1" : "0");
+    } catch {
+      // preference just won't persist
+    }
+  }
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -55,7 +105,11 @@ export default function AskAaiji() {
   }, []);
 
   useEffect(() => {
-    return () => recognitionRef.current?.stop();
+    return () => {
+      transcriptRef.current = "";
+      if (recognitionRef.current) recognitionRef.current.onend = null;
+      recognitionRef.current?.stop();
+    };
   }, []);
 
   function toggleListening() {
@@ -64,6 +118,9 @@ export default function AskAaiji() {
       recognitionRef.current?.stop();
       return;
     }
+    // Don't let the bot's own voice get picked up as the next question.
+    if (canSpeak) window.speechSynthesis.cancel();
+    transcriptRef.current = "";
     const recognition = new SpeechRecognitionCtor();
     recognition.lang = "en-IN";
     recognition.interimResults = true;
@@ -71,16 +128,27 @@ export default function AskAaiji() {
     recognition.onresult = (e) => {
       let transcript = "";
       for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+      transcriptRef.current = transcript;
       setInput(transcript);
     };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    // Voice-to-voice: when the admin stops talking, send what was heard
+    // straight away and read the answer back -- no typing or tapping Send.
+    recognition.onend = () => {
+      setListening(false);
+      const heard = transcriptRef.current.trim();
+      transcriptRef.current = "";
+      if (heard) sendText(heard, true);
+    };
+    recognition.onerror = () => {
+      transcriptRef.current = "";
+      setListening(false);
+    };
     recognitionRef.current = recognition;
     setListening(true);
     recognition.start();
   }
 
-  async function sendText(text) {
+  async function sendText(text, viaVoice = false, speakIt = true) {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     setInput("");
@@ -89,29 +157,31 @@ export default function AskAaiji() {
     const history = messages.filter((m) => m.provider !== "none").map((m) => ({ role: m.role, content: m.content }));
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setSending(true);
+    let errorResult = null;
     try {
-      const data = await api.post("/admin/ai/chat", { message: trimmed, history });
+      const data = await api.post("/admin/ai/chat", { message: trimmed, history, voice: viaVoice || !speakIt });
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply, provider: data.provider }]);
+      if (speakIt && (viaVoice || speakRepliesRef.current)) speak(data.reply);
       setStatus(data.provider !== "none" ? "online" : "offline");
+      return { reply: data.reply };
     } catch (err) {
       setLastFailedText(trimmed);
-      if (err.status === 429) {
-        setError("Too many messages -- please wait a few minutes and try again.");
-      } else if (err.status === 403) {
-        setError(err.message || "You don't have access to Ask AAIJI.");
-      } else if (err.status === 401) {
-        setError("Your session has expired. Please log in again.");
-      } else {
-        setError("AI service is temporarily unavailable. Please try again.");
-        setStatus("offline");
-      }
+      let msg = "AI service is temporarily unavailable. Please try again.";
+      if (err.status === 429) msg = "Too many messages -- please wait a few minutes and try again.";
+      else if (err.status === 403) msg = err.message || "You don't have access to Ask AAIJI.";
+      else if (err.status === 401) msg = "Your session has expired. Please log in again.";
+      else setStatus("offline");
+      setError(msg);
+      errorResult = { error: msg };
       // Remove the optimistically-added user message so Retry can re-send
       // it cleanly instead of duplicating it.
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setSending(false);
     }
+    return errorResult;
   }
+  sendTextRef.current = sendText;
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -134,6 +204,9 @@ export default function AskAaiji() {
 
   return (
     <div className="ask-aaiji-page">
+      {voiceOpen && (
+        <AskAaijiVoice onAsk={(t) => sendTextRef.current(t, false, false)} onClose={() => setVoiceOpen(false)} />
+      )}
       <div className="admin-page-head">
         <div>
           <h1>🤖 Ask AAIJI</h1>
@@ -203,21 +276,21 @@ export default function AskAaiji() {
           <textarea
             ref={inputRef}
             rows={1}
-            placeholder="Ask anything about your business..."
+            placeholder={NARROW_SCREEN ? "Ask anything..." : "Ask anything about your business..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={sending}
             aria-label="Ask AAIJI"
           />
-          {SpeechRecognitionCtor && (
+          {(voiceModeSupported || SpeechRecognitionCtor) && (
             <button
               type="button"
-              className={`ai-chat-mic-btn${listening ? " listening" : ""}`}
-              onClick={toggleListening}
+              className={`ai-chat-mic-btn aaiji-composer-mic${listening ? " listening" : ""}`}
+              onClick={voiceModeSupported ? () => setVoiceOpen(true) : toggleListening}
               disabled={sending}
-              aria-label={listening ? "Stop voice input" : "Speak your question"}
-              title={listening ? "Listening... tap to stop" : "Speak"}
+              aria-label={voiceModeSupported ? "Start Voice" : listening ? "Stop voice input" : "Speak your question"}
+              title={voiceModeSupported ? "Start Voice" : listening ? "Listening... tap to stop" : "Speak"}
             >
               <MicIcon />
             </button>

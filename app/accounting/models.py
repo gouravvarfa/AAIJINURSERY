@@ -108,6 +108,8 @@ class SalesOrder(Base):
     order_number = Column(String(40), default="")
     status = Column(String(20), nullable=False, default="Draft", index=True)
     order_date = Column(DateTime, default=datetime.utcnow, index=True)
+    # When this order is planned to be delivered (optional).
+    delivery_date = Column(DateTime, nullable=True)
     subtotal = Column(Float, default=0)
     tax_total = Column(Float, default=0)
     total_amount = Column(Float, default=0)
@@ -136,6 +138,28 @@ class SalesOrderItem(Base):
     tax_rate_id = Column(Integer, ForeignKey("accounting_tax_rates.id"), nullable=True)
     tax_amount = Column(Float, default=0)
     line_total = Column(Float, default=0)
+    # Tray-size option picked, same pattern as the website's OrderItem: a
+    # plain int, not a FK, because a variant can be deleted and its id
+    # reused (see PlantVariant's sqlite_autoincrement note) -- tray_size is
+    # snapshotted at order time so a later variant edit/delete never changes
+    # what this line says was actually sold. quantity then means "number of
+    # trays" and unit_price the per-tray price, exactly as OrderItem does.
+    variant_id = Column(Integer, nullable=True)
+    tray_size = Column(Integer, nullable=True)
+    # How much of `quantity` is taken from nursery stock (set when the order is
+    # invoiced or when the team allocates stock); the rest is still pending.
+    allocated_quantity = Column(Integer, nullable=True)
+    # Admin decision for the pending part: True = the nursery will prepare it.
+    to_prepare = Column(Boolean, nullable=False, default=False)
+
+    @property
+    def allocated(self) -> int:
+        value = 0 if self.allocated_quantity is None else self.allocated_quantity
+        return max(0, min(value, self.quantity or 0))
+
+    @property
+    def pending(self) -> int:
+        return max(0, (self.quantity or 0) - self.allocated)
 
     sales_order = relationship("SalesOrder", back_populates="items")
     plant = relationship("Plant")
@@ -259,6 +283,14 @@ class PurchaseOrderItem(Base):
     tax_rate_id = Column(Integer, ForeignKey("accounting_tax_rates.id"), nullable=True)
     tax_amount = Column(Float, default=0)
     line_total = Column(Float, default=0)
+    # Tray-size option, same convention as SalesOrderItem/OrderItem: a plain
+    # int (not a FK -- a variant's id can be reused after delete), snapshotted
+    # at order time. quantity then means "number of trays received" and
+    # unit_price the per-tray cost; on Bill conversion this is what tells
+    # adjust_stock to credit the tray variant's own stock, not the plant's
+    # loose per-unit stock.
+    variant_id = Column(Integer, nullable=True)
+    tray_size = Column(Integer, nullable=True)
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
     plant = relationship("Plant")

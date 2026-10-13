@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIstDate } from "../communications/time";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { Loading } from "../../components/Loading";
@@ -176,7 +177,7 @@ export default function Dashboard() {
                     )}
                   </td>
                   <td>{i.requirement || "-"}</td>
-                  <td>{new Date(i.created_at).toLocaleDateString()}</td>
+                  <td>{formatIstDate(i.created_at)}</td>
                   <td>
                     <span className="badge badge-muted">{i.status}</span>
                   </td>

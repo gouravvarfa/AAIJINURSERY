@@ -1,11 +1,20 @@
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import AdminSession, AdminUser
+
+IST_OFFSET = timedelta(hours=5, minutes=30)
+
+
+def _last_ist_midnight_utc() -> datetime:
+    """Most recent 12:00 AM IST, as a naive UTC datetime (DB timestamps are
+    naive UTC)."""
+    now_ist = datetime.utcnow() + IST_OFFSET
+    return now_ist.replace(hour=0, minute=0, second=0, microsecond=0) - IST_OFFSET
 
 
 def get_current_admin(request: Request, db: Session = Depends(get_db)) -> str:
@@ -29,6 +38,16 @@ def get_current_admin(request: Request, db: Session = Depends(get_db)) -> str:
         if not admin_session or admin_session.revoked_at is not None:
             request.session.clear()
             raise HTTPException(status_code=401, detail="Session has been signed out")
+        if admin_session.created_at and admin_session.created_at < _last_ist_midnight_utc():
+            # Every admin session ends at 12:00 AM IST: a session started
+            # before the most recent midnight is revoked on its next request.
+            admin_session.revoked_at = datetime.utcnow()
+            admin_session.revoked_by = "system"
+            admin_session.revoke_reason = "Automatic midnight logout"
+            db.commit()
+            request.session.pop("admin_username", None)
+            request.session.pop("admin_session_id", None)
+            raise HTTPException(status_code=401, detail="Session expired at midnight. Please log in again.")
         admin_session.last_seen_at = datetime.utcnow()
         db.commit()
     else:

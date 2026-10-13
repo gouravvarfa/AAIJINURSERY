@@ -101,6 +101,15 @@ class SalesOrderItemOut(BaseModel):
     unit_price: float
     tax_amount: float
     line_total: float
+    variant_id: Optional[int] = None
+    tray_size: Optional[int] = None
+    allocated: int = 0
+    pending: int = 0
+    to_prepare: bool = False
+    # Stock position of this line's plant / tray (filled in on the detail view)
+    physical_stock: Optional[int] = None
+    reserved_stock: Optional[int] = None
+    available_stock: Optional[int] = None
 
 
 class SalesOrderItemIn(BaseModel):
@@ -109,11 +118,17 @@ class SalesOrderItemIn(BaseModel):
     quantity: int = 1
     unit_price: float = 0
     tax_rate_id: Optional[int] = None
+    # When set, quantity means "number of trays" and unit_price the
+    # per-tray price -- same convention as the website's OrderItem.
+    variant_id: Optional[int] = None
+    # True = the nursery will prepare this line instead of using stock.
+    to_prepare: bool = False
 
 
 class SalesOrderIn(BaseModel):
     contact_id: int
     order_date: datetime
+    delivery_date: Optional[datetime] = None
     notes: str = ""
     items: List[SalesOrderItemIn]
 
@@ -134,6 +149,10 @@ class SalesOrderOut(BaseModel):
     order_number: str
     status: str
     order_date: datetime
+    delivery_date: Optional[datetime] = None
+    # Status of the latest delivery made for this order (None if none yet).
+    # Filled in by the routers from the deliveries table, not stored here.
+    delivery_status: Optional[str] = None
     subtotal: float
     tax_total: float
     total_amount: float
@@ -225,6 +244,8 @@ class PurchaseOrderItemOut(BaseModel):
     unit_price: float
     tax_amount: float
     line_total: float
+    variant_id: Optional[int] = None
+    tray_size: Optional[int] = None
 
 
 class PurchaseOrderItemIn(BaseModel):
@@ -233,6 +254,9 @@ class PurchaseOrderItemIn(BaseModel):
     quantity: int = 1
     unit_price: float = 0
     tax_rate_id: Optional[int] = None
+    # When set, quantity means "number of trays received" and unit_price the
+    # per-tray cost -- same convention as Sales Order/website OrderItem.
+    variant_id: Optional[int] = None
 
 
 class PurchaseOrderIn(BaseModel):

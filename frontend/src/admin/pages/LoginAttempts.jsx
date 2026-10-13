@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIst } from "../communications/time";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 
@@ -71,7 +72,7 @@ export default function LoginAttempts() {
               <tbody>
                 {result.items.map((a) => (
                   <tr key={a.id}>
-                    <td>{new Date(a.created_at).toLocaleString()}</td>
+                    <td>{formatIst(a.created_at)}</td>
                     <td>{a.identifier}</td>
                     <td>
                       <span className={a.success ? "badge badge-accent" : "badge badge-danger"}>

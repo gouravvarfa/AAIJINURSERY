@@ -39,8 +39,11 @@ def _business_name() -> str:
 def _order_contact(order):
     """(mobile, customer_name) for whichever contact info the order has --
     same fallback the existing email/CallMeBot code already uses."""
-    mobile = (order.customer.mobile if order.customer else "") or order.delivery_mobile
-    name = (order.customer.name if order.customer else "") or order.delivery_name or "Customer"
+    # What the customer typed on THIS order's checkout wins over the account
+    # profile: that is the person and number the team is meant to reach for
+    # this order (a different name/number than the account is normal).
+    mobile = order.delivery_mobile or (order.customer.mobile if order.customer else "")
+    name = order.delivery_name or (order.customer.name if order.customer else "") or "Customer"
     return mobile, name
 
 
@@ -101,6 +104,12 @@ def send_email(to_email: str, subject: str, body: str) -> None:
 
 
 def send_whatsapp_admin_alert(message: str) -> None:
+    from app.communications.gate import is_messaging_enabled, record_blocked
+
+    if not is_messaging_enabled():
+        record_blocked()
+        print("[whatsapp] Messaging is switched off, skipping admin alert")
+        return
     phone = os.environ.get("CALLMEBOT_PHONE", "")
     apikey = os.environ.get("CALLMEBOT_APIKEY", "")
     if not phone or not apikey:
@@ -117,6 +126,50 @@ def send_whatsapp_admin_alert(message: str) -> None:
         record_error("External APIs", "WhatsApp", "send_whatsapp_admin_alert", "external:whatsapp", "EXTERNAL", 502, None, exc)
 
 
+# Statuses whose customer message also names the driver, and the approved
+# templates that carry the driver details. If no driver is set on the order,
+# or the template is not ACTIVE yet, the normal status template is sent.
+DRIVER_TEMPLATES = {
+    "Packed": "order_packed_driver",
+    "Out For Delivery": "out_for_delivery_driver",
+}
+
+
+def _driver_mobile(phone: str) -> str:
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    return f"+91{digits[-10:]}" if len(digits) >= 10 else (phone or "")
+
+
+def _queue_order_with_driver(order, event_type: str, new_status: str) -> bool:
+    """Sends the driver-detail version of a status message. Returns False when
+    it does not apply (no driver, no phone, other status, template not active),
+    so the caller falls back to the standard message -- never both."""
+    template_name = DRIVER_TEMPLATES.get(new_status)
+    driver = getattr(order, "driver", None)
+    if not template_name or not driver or not (driver.phone or "").strip():
+        return False
+    mobile, name = _order_contact(order)
+    if not mobile:
+        return False
+    from app.communications.models import WhatsAppTemplate
+    from app.communications.service import queue_message
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        tpl = db.query(WhatsAppTemplate).filter(WhatsAppTemplate.name == template_name).first()
+        if not tpl or tpl.status != "ACTIVE" or not tpl.is_active:
+            return False
+    finally:
+        db.close()
+    queue_message(
+        event_type=event_type, mobile=mobile, customer_name=name, template_name=template_name,
+        template_params=[name, f"ORD-{order.id}", driver.name, _driver_mobile(driver.phone), order.vehicle_label or "N/A"],
+        source_module="orders", source_id=order.id, customer_id=order.customer_id,
+    )
+    return True
+
+
 def notify_order_status(order, old_status: str | None, new_status: str) -> None:
     message = f"Your order #{order.id} has been {new_status}."
     customer_email = order.customer.email if order.customer else None
@@ -129,7 +182,8 @@ def notify_order_status(order, old_status: str | None, new_status: str) -> None:
     # centrally (never here) -- an event with no active/approved template
     # simply gets logged as such, it never raises.
     event_type = STATUS_TO_EVENT.get(new_status, f"ORDER_{new_status.upper().replace(' ', '_')}")
-    _queue_order_event(order, event_type, [_order_contact(order)[1], f"ORD-{order.id}", f"Rs.{order.total_amount}"])
+    if not _queue_order_with_driver(order, event_type, new_status):
+        _queue_order_event(order, event_type, [_order_contact(order)[1], f"ORD-{order.id}", f"Rs.{order.total_amount}"])
 
     # Separate, additive event -- never replaces the standard ORDER_DELIVERED
     # notification above. Its own event_type gives it its own idempotency key
@@ -163,7 +217,10 @@ def notify_order_awaiting_confirmation(order) -> None:
     customer_email = order.customer.email if order.customer else None
     send_email(customer_email, f"Order #{order.id} Request Received", message)
     send_whatsapp_admin_alert(f"New order request #{order.id} awaiting delivery confirmation.")
-    _queue_order_event(order, "ORDER_CREATED", [_order_contact(order)[1], f"ORD-{order.id}", f"Rs.{order.subtotal}"])
+    # No customer WhatsApp here on purpose: at this point the order is only a
+    # request. The "order confirmed" message (ORDER_CREATED -> order_confirmed
+    # template) is sent when the team confirms it -- see
+    # notify_delivery_confirmed() below.
 
 
 def notify_delivery_confirmed(order) -> None:
@@ -174,7 +231,14 @@ def notify_delivery_confirmed(order) -> None:
     )
     customer_email = order.customer.email if order.customer else None
     send_email(customer_email, f"Order #{order.id} Confirmed", message)
-    _queue_order_event(order, "DELIVERY_FEASIBILITY_CONFIRMED", [_order_contact(order)[1], f"ORD-{order.id}"])
+    # The team has now confirmed the order, so this is when the customer gets
+    # the "order confirmed" WhatsApp -- with the final total (delivery
+    # included). Same idempotency key as before (ORDER_CREATED:{order_id}), so
+    # an order that already received it earlier is never messaged twice.
+    # The approved template prints "Rs." itself, so only the number is passed.
+    # (The separate "delivery confirmed" message is no longer sent here: it
+    # said the same thing as this one a second later.)
+    _queue_order_event(order, "ORDER_CREATED", [_order_contact(order)[1], f"ORD-{order.id}", f"{order.total_amount:.2f}"])
 
 
 def notify_delivery_unavailable(order) -> None:
@@ -198,7 +262,7 @@ def notify_payment_received(order) -> None:
     """Dedicated PAYMENT_RECEIVED WhatsApp event (section 10/11) -- distinct
     from the generic order-status-change message, since a payment can be
     verified without the status label itself saying anything about money."""
-    _queue_order_event(order, "PAYMENT_RECEIVED", [_order_contact(order)[1], f"Rs.{order.total_amount}", f"ORD-{order.id}"])
+    _queue_order_event(order, "PAYMENT_RECEIVED", [_order_contact(order)[1], f"Rs.{order.total_amount:.2f}", f"ORD-{order.id}"])
 
 
 def notify_order_cancelled(db, order, old_status: str | None, cancelled_by: str, reason: str) -> None:

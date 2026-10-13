@@ -15,6 +15,7 @@ import queue
 import threading
 from datetime import datetime
 
+from app.communications.gate import MESSAGING_OFF_CODE, MESSAGING_OFF_MESSAGE, is_messaging_enabled, record_blocked
 from app.communications.models import WhatsAppMessage, WhatsAppTemplate
 from app.communications.provider import get_provider, get_provider_name
 from app.database import SessionLocal
@@ -106,6 +107,19 @@ def _process_one(message_id: int) -> None:
     try:
         msg = db.query(WhatsAppMessage).filter(WhatsAppMessage.id == message_id).first()
         if not msg or msg.status != "QUEUED":
+            return
+
+        if not is_messaging_enabled(db):
+            # Switched off while this was waiting in the queue: stop it here.
+            # Marked FAILED (reason MESSAGING_OFF) so Message History shows
+            # why, and the normal Retry button can send it once messaging
+            # is back on -- it is never sent on its own later.
+            msg.status = "FAILED"
+            msg.error_code = MESSAGING_OFF_CODE
+            msg.error_message = MESSAGING_OFF_MESSAGE
+            msg.failed_at = datetime.utcnow()
+            db.commit()
+            record_blocked()
             return
 
         msg.status = "PROCESSING"

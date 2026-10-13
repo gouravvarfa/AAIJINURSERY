@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { api } from "../../../api";
 import { Loading, Empty } from "../../../components/Loading";
 import SearchBox from "../../accounting/SearchBox";
+import { formatIst } from "../../communications/time";
 
 const STATUS_BADGE = {
   SENT: "badge-accent", DELIVERED: "badge-accent", READ: "badge-accent",
@@ -93,7 +94,7 @@ export default function MessageHistory() {
               {data.items.map((m) => (
                 <Fragment key={m.id}>
                   <tr>
-                    <td>{new Date(m.created_at).toLocaleString()}</td>
+                    <td>{formatIst(m.created_at)}</td>
                     <td>
                       {m.recipient_type === "DRIVER" ? "🚚 " : "👤 "}
                       {m.customer_name || "-"}
@@ -125,8 +126,8 @@ export default function MessageHistory() {
                           <div><strong>Provider Message ID:</strong> {m.provider_message_id || "-"}</div>
                           <div><strong>Params:</strong> {m.template_params.join(", ")}</div>
                           <div><strong>Retry Count:</strong> {m.retry_count}</div>
-                          <div><strong>Sent At:</strong> {m.sent_at ? new Date(m.sent_at).toLocaleString() : "-"}</div>
-                          <div><strong>Failed At:</strong> {m.failed_at ? new Date(m.failed_at).toLocaleString() : "-"}</div>
+                          <div><strong>Sent At:</strong> {formatIst(m.sent_at)}</div>
+                          <div><strong>Failed At:</strong> {formatIst(m.failed_at)}</div>
                           {m.error_code && (
                             <div style={{ gridColumn: "1 / -1" }}>
                               <strong>Error:</strong> {m.error_code} -- {m.error_message}

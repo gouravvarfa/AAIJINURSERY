@@ -18,9 +18,11 @@ Access control, in order:
 import asyncio
 import json
 import logging
+import os
 import time
 from datetime import datetime, timedelta
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -76,6 +78,10 @@ SYSTEM_PROMPT = (
     "Reply in plain text only -- the chat window does not render Markdown, so never use **bold**, *italics*, "
     "headings, or tables; for a list of records, write one plain line per record (e.g. 'Name -- amount -- date'), "
     "not bullet characters like '-'/'*' or numbered markdown lists. "
+    "If a question needs a capability this assistant genuinely doesn't have -- no tool exists for it at all, not "
+    "just a record that happens to be unrecorded -- say so and add: 'Is baare mein developer se "
+    "contact karein.' Don't say this for an ordinary 'not recorded' answer about a specific record; that's a normal, "
+    "complete answer on its own. "
     "EXACT FIELD MEANINGS -- never substitute one for another: 'recorded_by' on a payment is NOT 'approved_by' -- "
     "there is no payment-approval workflow in this system, so if asked who approved a payment say plainly that no "
     "such workflow is recorded, never answer with the recorded_by name. Likewise 'team_confirmed_by' on an online "
@@ -116,10 +122,12 @@ TOOL_GROUPS = {
     "sales": ["get_sales_summary", "get_business_summary", "get_customers_who_purchased", "get_top_selling_plants", "get_customer_counts"],
     "orders": ["get_pending_orders", "get_order_details", "get_order_timeline", "get_customers_who_purchased"],
     "customers": ["search_customer", "get_customer_purchase_history", "get_customer_outstanding", "get_customer_invoices",
-                  "get_customer_timeline", "get_customer_activity", "get_customer_counts", "get_inquiries"],
+                  "get_customer_timeline", "get_customer_activity", "get_customer_counts", "get_recent_customers", "get_inquiries"],
     "accounting": ["get_payment_history", "get_audit_history", "get_voided_invoices", "get_price_overrides", "get_billing_audit",
-                   "get_expenses", "get_purchase_summary", "get_customer_outstanding", "get_customer_invoices"],
-    "inventory": ["get_low_stock_plants", "get_inventory_history", "get_stock_adjustments", "get_top_selling_plants"],
+                   "get_expenses", "get_purchase_summary", "get_purchase_order_details", "get_customer_outstanding",
+                   "get_customer_invoices", "get_employee_activity_timeline"],
+    "inventory": ["get_low_stock_plants", "get_inventory_history", "get_stock_adjustments", "get_top_selling_plants",
+                  "get_website_content_summary"],
     "delivery": ["get_pending_deliveries", "get_deliveries", "get_delivery_timeline", "get_driver_details"],
     "labour": ["get_employee_details", "list_employees", "get_attendance_summary", "get_payroll_summary", "get_worker_advances",
                "get_employee_activity_timeline"],
@@ -141,22 +149,70 @@ TOOL_KEYWORDS = {
     "labour": ["employee", "staff", "worker", "labour", "labor", "mazdoor", "attendance", "hazri", "haziri", "payroll",
                "salary", "tankhwah", "advance", "karmchari", "karmachari"],
     "comms": ["whatsapp", "message", "sms", "notification"],
-    "website": ["website", "blog", "faq", "gallery", "testimonial", "service", "content", "enquir", "inquir", "review"],
+    "website": ["website", "blog", "faq", "gallery", "testimonial", "service", "content", "enquir", "inquir", "review",
+                "plan", "categor"],
     "security": ["gadbad", "gadbadi", "suspicious", "fraud", "risk", "login", "security", "unusual", "kisne", "who did",
-                 "kya kiya", "kya kya", "activity", "chori", "galat"],
+                 "kya kiya", "kya kya", "activity", "chori", "galat", "admin", "panel", "pannel", "kaam", "kam nhi",
+                 "kam nahi", "work", "kis kis", "kaun kaun"],
 }
 CORE_TOOLS = ["get_business_summary", "search_customer"]
 
 
-def _select_tool_schemas(texts: list[str]) -> list[dict]:
-    blob = " ".join(texts).lower()
-    groups = [g for g, words in TOOL_KEYWORDS.items() if any(w in blob for w in words)]
-    if not groups:
-        return ADMIN_TOOL_SCHEMAS
+# Used when neither keywords nor the classifier yield a category -- a broad
+# but bounded set. Never all ~40 tools: that alone (~4.6k tokens per call)
+# exceeds what fits in Groq's free 8k tokens/minute for a multi-call answer.
+GENERAL_GROUPS = ["sales", "customers", "security"]
+
+CLASSIFIER_PROMPT = (
+    "Classify an admin's question about a plant nursery business into one or more of these categories: "
+    "sales (sales/revenue/what sold), orders (website orders), customers (a customer's details/history/dues/enquiries), "
+    "accounting (payments, invoices, bills, expenses, purchases, audits, mismatches), inventory (stock), "
+    "delivery (deliveries, drivers, vehicles), labour (employees, staff, attendance, payroll, advances), "
+    "comms (WhatsApp messages), website (website content), security (admin activity, logins, who did what, "
+    "suspicious/unusual activity). Reply with ONLY the category names, comma-separated, nothing else."
+)
+
+
+def _schemas_for_groups(groups: list[str]) -> list[dict]:
     wanted = set(CORE_TOOLS)
     for g in groups:
-        wanted.update(TOOL_GROUPS[g])
+        wanted.update(TOOL_GROUPS.get(g, []))
     return [t for t in ADMIN_TOOL_SCHEMAS if t["function"]["name"] in wanted]
+
+
+def _keyword_groups(texts: list[str]) -> list[str]:
+    blob = " ".join(texts).lower()
+    return [g for g, words in TOOL_KEYWORDS.items() if any(w in blob for w in words)]
+
+
+def _select_tool_schemas(texts: list[str]) -> list[dict]:
+    """Keyword-only routing (sync); falls back to GENERAL_GROUPS."""
+    return _schemas_for_groups(_keyword_groups(texts) or GENERAL_GROUPS)
+
+
+async def _classify_groups(question: str) -> list[str]:
+    """One tiny no-tools LLM call (~250 tokens) to categorise a question the
+    keywords didn't recognise. Any failure just returns [] -> general set."""
+    for provider in build_provider_chain():
+        if not provider.is_configured():
+            continue
+        try:
+            resp = await provider.chat(
+                [{"role": "system", "content": CLASSIFIER_PROMPT}, {"role": "user", "content": question[:500]}], []
+            )
+        except ProviderError:
+            continue
+        text = (resp.content or "").lower()
+        return [g for g in TOOL_GROUPS if g in text]
+    return []
+
+
+async def _resolve_tool_schemas(texts: list[str]) -> list[dict]:
+    groups = _keyword_groups(texts)
+    if not groups:
+        groups = await _classify_groups(texts[0]) or GENERAL_GROUPS
+        logger.info("Classifier routed question to %s", groups)
+    return _schemas_for_groups(groups)
 
 # Separate rate-limit bucket from the customer gateway's (keyed by admin
 # username, not IP) -- protects the same free-tier Groq/Gemini/OpenRouter
@@ -179,6 +235,24 @@ def _check_rate_limit(key: str) -> bool:
     return True
 
 
+# Appended only for Voice Mode. Changes how the answer is worded, never what
+# data it may contain -- every rule in SYSTEM_PROMPT still applies.
+VOICE_STYLE_PROMPT = (
+    " VOICE MODE: this answer will be spoken aloud to an Indian business owner, so write it the way a "
+    "professional Indian office assistant would say it. Reply in the user's own style: Hindi or Hinglish "
+    "question -> natural Hinglish in Latin script (e.g. 'Aaj total 24 orders aaye hain.'); English question -> "
+    "simple, friendly Indian English. Use short conversational sentences, at most 3 or 4, leading with the "
+    "direct answer. No lists, tables, headings, symbols, IDs or long number dumps -- give the key figures and "
+    "offer more detail if they want it. Never sound formal, textbook-like or robotic. "
+    "The user's message is a speech-to-text transcript of Indian English / Hinglish and may contain mis-heard "
+    "words. Use the conversation so far and the names the tools return (customers, plants, drivers, staff) to "
+    "work out what was obviously meant -- e.g. a near-miss spelling of a real customer or plant name -- and "
+    "answer that, mentioning the name you understood. But if a name, number, date or amount that the answer "
+    "depends on is genuinely unclear or matches nothing, do NOT guess: ask the user in one short sentence to "
+    "say it again."
+)
+
+
 class AdminChatMessageIn(BaseModel):
     role: str
     content: str = Field(max_length=MAX_MESSAGE_LEN)
@@ -187,6 +261,8 @@ class AdminChatMessageIn(BaseModel):
 class AdminChatIn(BaseModel):
     message: str = Field(max_length=MAX_MESSAGE_LEN)
     history: list[AdminChatMessageIn] = []
+    # True when the answer will be read aloud (Voice Mode) -- style only.
+    voice: bool = False
 
 
 class AdminChatOut(BaseModel):
@@ -194,7 +270,7 @@ class AdminChatOut(BaseModel):
     provider: str
 
 
-FALLBACK_REPLY = "AI service is temporarily unavailable. Please try again."
+FALLBACK_REPLY = "AI service is temporarily unavailable. Please try again, or contact the developer if this keeps happening."
 
 
 async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUser, tool_schemas: list[dict] | None = None) -> tuple[str, str, list[str]]:
@@ -239,7 +315,17 @@ async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUs
                 )
                 for tc in response.tool_calls:
                     tools_called.append(tc.name)
-                    result = execute_admin_tool(db, admin, tc.name, tc.arguments)
+                    try:
+                        result = execute_admin_tool(db, admin, tc.name, tc.arguments)
+                    except Exception as exc:
+                        # A hallucinated tool call (e.g. a name outside the
+                        # classifier's restricted set, or arguments a tool
+                        # body doesn't expect) must never crash the whole
+                        # request -- feed the model an error result instead,
+                        # same as a validation failure, so it can recover or
+                        # say it can't help with this.
+                        logger.warning("Admin tool %s raised %s: %s", tc.name, type(exc).__name__, exc)
+                        result = {"error": f"Tool '{tc.name}' failed and could not be run."}
                     local_messages.append(
                         {"role": "tool", "tool_call_id": tc.call_id, "name": tc.name, "content": json.dumps(result)}
                     )
@@ -251,7 +337,7 @@ async def _run_admin_tool_loop(messages: list[dict], db: Session, admin: AdminUs
                 final = await provider.chat(local_messages, [])
                 if final.content:
                     return final.content, provider.name, tools_called
-                return "I couldn't work that out. Could you rephrase your question?", provider.name, tools_called
+                return "I couldn't work that out. Could you rephrase your question, or contact the developer if this isn't something I can help with?", provider.name, tools_called
         except ProviderError as exc:
             logger.warning("Admin AI provider %s failed, falling back: %s", provider.name, exc)
             last_error = exc
@@ -276,7 +362,10 @@ async def admin_chat(payload: AdminChatIn, request: Request, admin: str = Depend
 
     trimmed_history = payload.history[-MAX_HISTORY_MESSAGES:]
     today_ist = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%A, %Y-%m-%d %H:%M")
-    messages = [{"role": "system", "content": f"{SYSTEM_PROMPT} Current date/time (IST): {today_ist}."}]
+    system_prompt = f"{SYSTEM_PROMPT} Current date/time (IST): {today_ist}."
+    if payload.voice:
+        system_prompt += VOICE_STYLE_PROMPT
+    messages = [{"role": "system", "content": system_prompt}]
     messages += [
         {"role": m.role, "content": m.content[:MAX_HISTORY_CHARS]}
         for m in trimmed_history
@@ -286,8 +375,15 @@ async def admin_chat(payload: AdminChatIn, request: Request, admin: str = Depend
 
     started = time.time()
     recent_user_turns = [m.content for m in trimmed_history if m.role == "user"][-2:]
-    tool_schemas = _select_tool_schemas([payload.message, *recent_user_turns])
-    reply, provider_name, tools_called = await _run_admin_tool_loop(messages, db, admin_user, tool_schemas)
+    tool_schemas = await _resolve_tool_schemas([payload.message, *recent_user_turns])
+    try:
+        reply, provider_name, tools_called = await _run_admin_tool_loop(messages, db, admin_user, tool_schemas)
+    except Exception as exc:
+        # Last-resort safety net: an admin typing a question should never
+        # see a 500. Whatever broke, log it and answer with the same
+        # message a provider outage would show.
+        logger.exception("Ask AAIJI crashed unexpectedly: %s", exc)
+        reply, provider_name, tools_called = FALLBACK_REPLY, "none", []
     duration_ms = int((time.time() - started) * 1000)
 
     record_admin_audit(
@@ -302,3 +398,139 @@ async def admin_chat(payload: AdminChatIn, request: Request, admin: str = Depend
         },
     )
     return AdminChatOut(reply=reply, provider=provider_name)
+
+
+# --- Voice Mode speech-to-text -------------------------------------------
+# The browser records the admin's question and posts the raw audio here; it
+# is transcribed by Groq's hosted Whisper (same GROQ_API_KEY as the chat
+# models, separate free quota) and the text goes back to the page, which then
+# asks it through /chat like a typed question. The audio and transcript are
+# never stored or logged here.
+STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+STT_MODELS = [m.strip() for m in os.getenv("GROQ_STT_MODELS", "whisper-large-v3,whisper-large-v3-turbo").split(",") if m.strip()]
+STT_TIMEOUT = httpx.Timeout(25.0, connect=5.0)
+MAX_AUDIO_BYTES = 4 * 1024 * 1024
+STT_AUDIO_EXT = {"audio/webm": "webm", "video/webm": "webm", "audio/mp4": "m4a", "audio/ogg": "ogg", "audio/wav": "wav", "audio/mpeg": "mp3"}
+# Whisper thresholds: above NO_SPEECH it heard no voice at all; below
+# MIN_LOGPROB it heard a voice but is guessing at the words.
+STT_NO_SPEECH = 0.6
+STT_MIN_LOGPROB = -1.0
+# What Whisper tends to "hear" in silence or room noise.
+STT_HALLUCINATIONS = {
+    "", "you", "thank you", "thanks", "thank you very much", "thanks for watching", "thank you for watching",
+    "bye", "okay", "ok", "hmm", "uh", "um", "so", "the", "subtitles by the amara org community",
+}
+STT_RATE_LIMIT_MAX = 40
+_stt_rate_log: dict[str, list[float]] = {}
+
+
+def _check_stt_rate_limit(key: str) -> bool:
+    now = time.time()
+    hits = [t for t in _stt_rate_log.get(key, []) if t > now - RATE_LIMIT_WINDOW_SECONDS]
+    allowed = len(hits) < STT_RATE_LIMIT_MAX
+    if allowed:
+        hits.append(now)
+    _stt_rate_log[key] = hits
+    return allowed
+
+
+# Auto-detect (no forced language). Forcing "en" silently translated Hindi
+# speech into English; forcing "hi" mangled plain English speech into
+# nonsense Devanagari. Auto-detect got both right on real sentences in
+# testing -- it only misread very short (1-2 word) phrases as the wrong
+# language, which full questions aren't.
+STT_LANGUAGE = os.getenv("GROQ_STT_LANGUAGE", "hi")
+# Test-only: lets an admin try a forced language (?lang=hi or ?lang=en)
+# without changing production. Ignored unless STT_ALLOW_LANG_OVERRIDE=1 is
+# set on the server.
+STT_ALLOW_LANG_OVERRIDE = os.getenv("STT_ALLOW_LANG_OVERRIDE") == "1"
+STT_LANGS = {"en", "hi"}
+
+
+class TranscribeOut(BaseModel):
+    text: str
+    # "ok" -- use text. "unclear" -- a voice was heard but not reliably
+    # understood, ask to repeat. "silence" -- no speech in the audio at all.
+    status: str
+
+
+@router.post("/transcribe", response_model=TranscribeOut)
+async def admin_transcribe(request: Request, lang: str | None = None, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+    admin_user = db.query(AdminUser).filter(AdminUser.username == admin).first()
+    if not admin_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if not check_permission(db, admin_user, "ai_assistant", "VIEW"):
+        raise HTTPException(status_code=403, detail="You don't have access to Ask AAIJI.")
+    if not _check_stt_rate_limit(admin):
+        raise HTTPException(status_code=429, detail="Too many voice messages -- please wait a few minutes and try again.")
+
+    content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if content_type not in STT_AUDIO_EXT:
+        raise HTTPException(status_code=415, detail="Unsupported audio format.")
+    if int(request.headers.get("content-length") or 0) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Recording is too long.")
+    audio = await request.body()
+    if len(audio) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Recording is too long.")
+    if len(audio) < 1000:
+        return TranscribeOut(text="", status="silence")
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Voice recognition is not configured.")
+
+    language = lang if (STT_ALLOW_LANG_OVERRIDE and lang in STT_LANGS) else STT_LANGUAGE
+    form = {"response_format": "verbose_json", "temperature": "0"}
+    if language:
+        form["language"] = language
+    data = None
+    for model in STT_MODELS:
+        try:
+            async with httpx.AsyncClient(timeout=STT_TIMEOUT) as client:
+                resp = await client.post(
+                    STT_URL,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    files={"file": (f"speech.{STT_AUDIO_EXT[content_type]}", audio, content_type)},
+                    data={"model": model, **form},
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                break
+            logger.warning("Voice transcription via %s failed: HTTP %s", model, resp.status_code)
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("Voice transcription via %s failed: %s", model, type(exc).__name__)
+    if data is None:
+        raise HTTPException(status_code=503, detail="Voice recognition is temporarily unavailable.")
+
+    # Auto-detect occasionally mistakes a short English/Hindi phrase for an
+    # unrelated language (seen: German, Turkish, Urdu) -- never seen on a
+    # real sentence, only on 1-2 word phrases. Re-run forced to Hindi, which
+    # reads both Hindi and English correctly, instead of returning that text.
+    if not language and data.get("language") not in (None, "english", "hindi"):
+        try:
+            async with httpx.AsyncClient(timeout=STT_TIMEOUT) as client:
+                resp = await client.post(
+                    STT_URL,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    files={"file": (f"speech.{STT_AUDIO_EXT[content_type]}", audio, content_type)},
+                    data={"model": STT_MODELS[0], "response_format": "verbose_json", "temperature": "0", "language": "hi"},
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("Voice transcription retry failed: %s", type(exc).__name__)
+
+    segments = data.get("segments") or []
+    if not segments:
+        text = (data.get("text") or "").strip()
+        doubtful = False
+    else:
+        spoken = [s for s in segments if (s.get("no_speech_prob") or 0) < STT_NO_SPEECH]
+        kept = [s for s in spoken if (s.get("avg_logprob") or 0) > STT_MIN_LOGPROB]
+        doubtful = len(kept) < len(spoken)
+        text = " ".join((s.get("text") or "").strip() for s in kept).strip()
+    if text.lower().strip(" .!?,") in STT_HALLUCINATIONS:
+        text = ""
+    if text:
+        return TranscribeOut(text=text[:MAX_MESSAGE_LEN], status="ok")
+    return TranscribeOut(text="", status="unclear" if doubtful else "silence")

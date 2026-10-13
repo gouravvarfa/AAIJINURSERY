@@ -48,6 +48,14 @@ export default function Home() {
   return (
     <>
       <section className="hero">
+        {/* The nursery photo slider, kept as a wide soft-edged backdrop behind the portrait. */}
+        <div className="hero-bg-slider" aria-hidden="true">
+          <HeroImageSlider
+            alt=""
+            images={parseHeroImages(settings.hero_images)}
+            intervalSeconds={settings.hero_slide_seconds}
+          />
+        </div>
         <div className="container">
           <div>
             <span className="tagline">{settings.tagline}</span>
@@ -80,14 +88,6 @@ export default function Home() {
                 </span>
               </figcaption>
             </figure>
-            {/* The existing nursery photo slider, kept as a supporting visual. */}
-            <div className="hero-image hero-owner-side" aria-hidden="true">
-              <HeroImageSlider
-                alt=""
-                images={parseHeroImages(settings.hero_images)}
-                intervalSeconds={settings.hero_slide_seconds}
-              />
-            </div>
           </div>
         </div>
       </section>

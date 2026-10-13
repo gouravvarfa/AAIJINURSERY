@@ -1584,24 +1584,62 @@ select:focus-visible {
   opacity: 1;
 }
 
-/* Owner portrait card (homepage hero). The nursery slider sits beside it as a
-   smaller supporting photo on wide screens only. */
-.hero-owner {
-  position: relative;
-  width: 100%;
-  max-width: 400px;
-  justify-self: center;
+/* Homepage hero: owner portrait card on the right, nursery photo slider as a
+   wide backdrop whose edges fade out softly (no border). */
+.hero-bg-slider {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 62%;
+  z-index: 0;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 34%), linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent 0%, #000 34%), linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%);
+  mask-composite: intersect;
 }
 
-.hero-owner-card {
+.hero-bg-slider img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 1.4s ease-in-out;
+}
+
+.hero-bg-slider img.is-active {
+  opacity: 0.9;
+}
+
+.hero .container {
   position: relative;
   z-index: 1;
+}
+
+.hero-owner {
+  position: relative;
+  justify-self: center;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* The card's height follows the screen height so the whole portrait is
+   visible without scrolling; its width follows from the 4:5 ratio. */
+.hero-owner-card {
+  position: relative;
   margin: 0;
+  height: clamp(380px, calc(100vh - 210px), 560px);
+  height: clamp(380px, calc(100svh - 210px), 560px);
   aspect-ratio: 4 / 5;
+  max-width: 100%;
   border-radius: 26px;
   overflow: hidden;
-  border: 3px solid rgba(255, 255, 255, 0.55);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  border: 3px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
   background: var(--color-primary-dark);
 }
 
@@ -1609,7 +1647,7 @@ select:focus-visible {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 50% 18%;
+  object-position: 50% 12%;
   display: block;
 }
 
@@ -1653,17 +1691,6 @@ select:focus-visible {
   line-height: 1.25;
 }
 
-.hero-owner-side {
-  position: absolute;
-  z-index: 0;
-  right: -104px;
-  bottom: 110px;
-  width: 44%;
-  aspect-ratio: 4 / 5;
-  border-radius: 20px;
-  border: 3px solid rgba(255, 255, 255, 0.45);
-}
-
 /* Hero outline button: long label on wide screens, short label on phones. */
 .hero-actions .btn-outline span:not(.hide-mobile) { display: none; }
 @media (max-width: 768px) {
@@ -1671,19 +1698,22 @@ select:focus-visible {
   .hero-actions .btn-outline span:not(.hide-mobile) { display: inline; }
 }
 
-@media (max-width: 1180px) {
-  .hero-owner-side {
-    display: none;
-  }
-}
-
 @media (max-width: 760px) {
   .hero .container {
     grid-template-columns: 1fr;
   }
-  .hero-owner {
-    max-width: 360px;
-    margin: 0 auto;
+  .hero-owner-card {
+    height: auto;
+    width: min(100%, 360px);
+  }
+  /* On phones the slider is a faint backdrop behind the whole hero. */
+  .hero-bg-slider {
+    width: 100%;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, #000 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, #000 100%);
+  }
+  .hero-bg-slider img.is-active {
+    opacity: 0.3;
   }
 }
 

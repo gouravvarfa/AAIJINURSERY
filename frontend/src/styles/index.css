@@ -1684,11 +1684,20 @@ select:focus-visible {
   color: var(--color-primary);
 }
 
+.hero-owner-person {
+  display: block;
+  font-size: 1.12rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 1px;
+}
+
 .hero-owner-name {
   display: block;
-  font-size: 0.92rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 500;
   line-height: 1.25;
+  color: var(--color-text-muted);
 }
 
 /* Hero outline button: long label on wide screens, short label on phones. */

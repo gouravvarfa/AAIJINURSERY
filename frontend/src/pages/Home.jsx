@@ -84,6 +84,7 @@ export default function Home() {
                 <span className="hero-owner-dot" aria-hidden="true" />
                 <span>
                   <span className="hero-owner-role">Founder &amp; Owner</span>
+                  <span className="hero-owner-person">Yogesh Septa</span>
                   <span className="hero-owner-name">Shree Aaiji High Tech Nursery</span>
                 </span>
               </figcaption>

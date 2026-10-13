@@ -8,6 +8,8 @@ import SalesOrderItemsField from "../../accounting/SalesOrderItemsField";
 import SearchBox from "../../accounting/SearchBox";
 import ExportButton from "../../accounting/ExportButton";
 import { salesOrderBadgeClass, sourceBadgeClass } from "../../accounting/accountingStatus";
+import DeliveryDateCell, { DeliveryFilter } from "../../accounting/DeliveryDateCell";
+import { deliveryAlert, matchesDeliveryFilter } from "../../accounting/deliveryAlert";
 
 function todayDateInput() {
   return new Date().toISOString().slice(0, 10);
@@ -20,6 +22,7 @@ export default function SalesOrders() {
   const [editingOrder, setEditingOrder] = useState(null); // the saved order being edited, if any
   const [items, setItems] = useState(null);
   const [source, setSource] = useState("");
+  const [deliveryFilter, setDeliveryFilter] = useState("");
   const [q, setQ] = useState("");
   const [mode, setMode] = useState("list"); // list | form
   const [contacts, setContacts] = useState([]);
@@ -308,12 +311,20 @@ export default function SalesOrders() {
     );
   }
 
+  const rows = (items || [])
+    .map((item) => ({
+      item,
+      info: deliveryAlert({ deliveryDate: item.delivery_date, deliveryStatus: item.delivery_status, status: item.status }),
+    }))
+    .filter((r) => matchesDeliveryFilter(r.info, deliveryFilter));
+
   return (
     <div>
       <div className="admin-page-head">
         <h1>Sales Orders</h1>
         <div className="admin-page-head-controls">
           <SourceFilter value={source} onChange={setSource} />
+          <DeliveryFilter value={deliveryFilter} onChange={setDeliveryFilter} />
           <SearchBox value={q} onChange={setQ} placeholder="Search by order # or contact name..." />
           <ExportButton baseUrl="/api/admin/accounting/export/sales-orders.xlsx" />
           <button className="btn btn-sm btn-primary" onClick={startCreate}>
@@ -328,8 +339,8 @@ export default function SalesOrders() {
         </div>
       ) : !items ? (
         <Loading />
-      ) : items.length === 0 ? (
-        <Empty>No sales orders yet. Create your first one.</Empty>
+      ) : rows.length === 0 ? (
+        <Empty>{items.length === 0 ? "No sales orders yet. Create your first one." : "No sales orders match this delivery filter."}</Empty>
       ) : (
         <div className="admin-table-wrap">
           <table className="admin-table">
@@ -338,6 +349,7 @@ export default function SalesOrders() {
                 <th>Order #</th>
                 <th>Contact</th>
                 <th>Date</th>
+                <th>Delivery</th>
                 <th>Total</th>
                 <th>Status</th>
                 <th>Source</th>
@@ -345,11 +357,14 @@ export default function SalesOrders() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {rows.map(({ item, info }) => (
                 <tr key={item.id}>
                   <td>{item.order_number}</td>
                   <td>{item.contact?.name || "-"}</td>
                   <td>{new Date(item.order_date).toLocaleDateString()}</td>
+                  <td>
+                    <DeliveryDateCell info={info} deliveryDate={item.delivery_date} />
+                  </td>
                   <td>₹{item.total_amount.toLocaleString()}</td>
                   <td>
                     <span className={`badge ${salesOrderBadgeClass(item.status)}`}>{item.status}</span>

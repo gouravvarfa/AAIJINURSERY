@@ -141,6 +141,9 @@ class SalesOrderOut(BaseModel):
     status: str
     order_date: datetime
     delivery_date: Optional[datetime] = None
+    # Status of the latest delivery made for this order (None if none yet).
+    # Filled in by the routers from the deliveries table, not stored here.
+    delivery_status: Optional[str] = None
     subtotal: float
     tax_total: float
     total_amount: float

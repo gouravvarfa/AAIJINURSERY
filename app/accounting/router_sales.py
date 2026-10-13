@@ -33,6 +33,27 @@ from app.models import InventoryTransaction
 router = APIRouter(tags=["accounting-sales"])
 
 
+def _attach_delivery_status(db: Session, sales_orders) -> None:
+    """Sets `delivery_status` on each sales order from its latest delivery,
+    in one query for the whole list (no per-row lookups)."""
+    from app.delivery.models import Delivery
+
+    orders = [o for o in sales_orders if o is not None]
+    if not orders:
+        return
+    latest: dict[int, str] = {}
+    rows = (
+        db.query(Delivery.sales_order_id, Delivery.status)
+        .filter(Delivery.sales_order_id.in_([o.id for o in orders]))
+        .order_by(Delivery.id)
+        .all()
+    )
+    for sales_order_id, status in rows:
+        latest[sales_order_id] = status
+    for o in orders:
+        o.delivery_status = latest.get(o.id)
+
+
 def _sale_reference(order_id: int, kind: str, line) -> str:
     """Idempotency key for a sales-order line's stock movement. Tray lines
     get their own key so they hit the tray's stock, not the plant's."""
@@ -65,7 +86,9 @@ def list_sales_orders(
         query = query.join(Contact, Contact.id == SalesOrder.contact_id).filter(
             SalesOrder.order_number.ilike(like) | Contact.name.ilike(like)
         )
-    return query.order_by(SalesOrder.order_date.desc()).all()
+    orders = query.order_by(SalesOrder.order_date.desc()).all()
+    _attach_delivery_status(db, orders)
+    return orders
 
 
 @router.get("/sales-orders/{item_id}", response_model=SalesOrderOut)
@@ -319,7 +342,9 @@ def list_invoices(
         query = query.join(Contact, Contact.id == Invoice.contact_id).filter(
             Invoice.invoice_number.ilike(like) | Contact.name.ilike(like)
         )
-    return query.order_by(Invoice.invoice_date.desc()).all()
+    invoices = query.order_by(Invoice.invoice_date.desc()).all()
+    _attach_delivery_status(db, [i.sales_order for i in invoices])
+    return invoices
 
 
 @router.get("/invoices/{item_id}", response_model=InvoiceOut)
@@ -334,6 +359,7 @@ def get_invoice(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    _attach_delivery_status(db, [item.sales_order])
     return item
 
 

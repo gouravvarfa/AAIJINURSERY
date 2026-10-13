@@ -1905,3 +1905,25 @@ table.admin-table .row-actions {
   color: var(--color-text-muted);
   font-size: 0.88rem;
 }
+
+/* ---- Delivery date alert (Sales Orders / Invoices lists) ---- */
+.dl-cell { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dl-none { color: var(--color-text-muted); }
+.dl-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; padding: 2px 9px 2px 7px; border-radius: 999px; }
+.dl-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: currentColor; }
+.dl-red { color: #b3261e; background: #fdeceb; }
+.dl-orange { color: #a85d00; background: #fff1de; }
+.dl-green { color: #1f7a45; background: #e7f5ec; }
+.dl-red .dl-dot { animation: dlPulseRed 1.8s ease-in-out infinite; }
+.dl-orange .dl-dot { animation: dlPulseOrange 2.6s ease-in-out infinite; }
+@keyframes dlPulseRed {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 48, 37, 0.55); transform: scale(1); }
+  50% { box-shadow: 0 0 0 7px rgba(217, 48, 37, 0); transform: scale(1.12); }
+}
+@keyframes dlPulseOrange {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 140, 0, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(240, 140, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dl-red .dl-dot, .dl-orange .dl-dot { animation: none; }
+}

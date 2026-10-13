@@ -10,6 +10,7 @@ Note: "Bill" in this codebase (app.models.Purchase) is a SUPPLIER/purchase
 bill -- what the business owes a vendor -- not a customer-facing document,
 so it is deliberately never sent to a customer over WhatsApp here.
 """
+from app.accounting.public_pdf import invoice_pdf_url
 from app.communications.service import queue_document_event, queue_event as queue_whatsapp_event
 
 
@@ -38,11 +39,26 @@ def queue_invoice_created(invoice) -> None:
     due = invoice.due_date.strftime("%d %b %Y") if invoice.due_date else "-"
     queue_whatsapp_event(
         event_type="INVOICE_CREATED", mobile=mobile, customer_name=name,
-        template_params=[name, invoice.invoice_number, f"Rs.{invoice.total_amount:.2f}", due],
+        template_params=[name, invoice.invoice_number, f"Rs.{invoice.total_amount:.2f}", due, invoice_pdf_url(invoice.id)],
         source_module="accounting", source_id=f"INV-{invoice.id}",
         customer_id=invoice.contact.customer_id if invoice.contact else None,
     )
-    _queue_invoice_pdf(invoice, mobile, name)
+    # The invoice_link template already carries the PDF link, which works for any
+    # customer. A direct PDF attachment only works inside WhatsApp's 24h window,
+    # so it is sent only while the older text-only template is still in use.
+    if not _link_template_active():
+        _queue_invoice_pdf(invoice, mobile, name)
+
+
+def _link_template_active() -> bool:
+    from app.communications.service import resolve_event_template
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return resolve_event_template(db, "INVOICE_CREATED")[0] == "invoice_link"
+    finally:
+        db.close()
 
 
 def _queue_invoice_pdf(invoice, mobile: str, name: str) -> None:

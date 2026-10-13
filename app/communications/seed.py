@@ -124,6 +124,11 @@ DEFAULT_TEMPLATES = [
         "variables": ["customer_name", "invoice_number", "amount", "due_date"],
     },
     {
+        "name": "invoice_link", "category": "accounting",
+        "preview": "Hello {{customer_name}}, your invoice {{invoice_number}} has been generated. Amount: {{amount}}. Due Date: {{due_date}}.\nView your invoice (PDF): {{invoice_link}}\nThank you.",
+        "variables": ["customer_name", "invoice_number", "amount", "due_date", "invoice_link"],
+    },
+    {
         "name": "welcome_customer", "category": "website",
         "preview": "Hello {{customer_name}}, welcome to {{business_name}}! We're glad to have you with us.",
         "variables": ["customer_name", "business_name"],

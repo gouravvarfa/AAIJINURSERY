@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.accounting.public_pdf import router as public_invoice_pdf_router
 from app.accounting.router import router as accounting_router
 from app.ai.gateway import router as ai_gateway_router
 from app.ai.admin_gateway import router as admin_ai_gateway_router
@@ -511,6 +512,7 @@ app.include_router(communications_router, dependencies=[Depends(require_permissi
 app.include_router(communications_inbox_router, dependencies=[Depends(require_permission("communications", "VIEW"))])
 app.include_router(whatsapp_webhook_router)  # public on purpose -- Meta has no admin login; it self-authenticates via X-Hub-Signature-256
 app.include_router(api_customer.router)
+app.include_router(public_invoice_pdf_router)  # login-free, HMAC-signed link sent on WhatsApp
 app.include_router(ai_gateway_router)
 # No blanket require_permission() here (unlike accounting/labour/delivery/
 # communications above) -- Ask AAIJI is gated by Depends(get_current_admin)

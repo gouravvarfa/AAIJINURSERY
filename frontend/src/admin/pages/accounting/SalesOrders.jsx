@@ -95,6 +95,7 @@ export default function SalesOrders() {
           items: order.items.map((i) => ({
             plant_id: i.plant_id || "",
             variant_id: i.variant_id || "",
+            to_prepare: !!i.to_prepare,
             description: i.description,
             quantity: i.quantity,
             unit_price: i.unit_price,
@@ -141,6 +142,7 @@ export default function SalesOrders() {
         notes: form.notes,
         items: form.items.map((i) => ({
           plant_id: i.plant_id || null,
+          to_prepare: !!i.to_prepare,
           variant_id: i.variant_id || null,
           description: i.description,
           quantity: i.quantity,

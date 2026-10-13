@@ -29,7 +29,7 @@ export default function SalesOrderItemsField({ value, onChange }) {
   }
 
   function addRow() {
-    onChange([...rows, { plant_id: "", variant_id: "", description: "", quantity: 1, unit_price: 0 }]);
+    onChange([...rows, { plant_id: "", variant_id: "", description: "", quantity: 1, unit_price: 0, to_prepare: false }]);
   }
 
   function selectPlant(index, plantId) {
@@ -115,6 +115,23 @@ export default function SalesOrderItemsField({ value, onChange }) {
             <button type="button" className="btn btn-sm btn-danger line-item-remove" onClick={() => removeRow(i)}>
               Remove
             </button>
+            {plant && (() => {
+              const variant = plant.variants?.find((v) => v.id === Number(row.variant_id));
+              const available = variant ? variant.stock_quantity : plant.stock_quantity;
+              const short = Math.max(0, (row.quantity || 0) - available);
+              return (
+                <div className="line-item-stock">
+                  <span>
+                    In stock: <strong>{available.toLocaleString("en-IN")}</strong>
+                    {short > 0 ? <> &mdash; <span style={{ color: "#b3261e" }}>{short.toLocaleString("en-IN")} more than in stock</span></> : null}
+                  </span>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <input type="checkbox" checked={!!row.to_prepare} onChange={(e) => updateRow(i, "to_prepare", e.target.checked)} />
+                    Nursery will prepare (don&apos;t use stock)
+                  </label>
+                </div>
+              );
+            })()}
             {row.quantity > 0 && row.unit_price > 0 && (
               <small className="line-item-total">
                 Line total: ₹{(row.quantity * row.unit_price).toLocaleString()}

@@ -1265,12 +1265,12 @@ def admin_cancel_order(
         )
 
     for item in order.items:
-        if item.plant_id:
+        if item.plant_id and item.allocated > 0:
             restore_stock(
                 db,
                 plant_id=item.plant_id,
                 variant_id=item.variant_id,
-                quantity=item.quantity,
+                quantity=item.allocated,
                 source_type="ORDER_CANCELLATION",
                 source_id=order.id,
                 reference=f"ORDER:{order.id}:SALE_REVERSAL:{item.variant_id or item.plant_id}",
@@ -1550,12 +1550,12 @@ def reject_order_delivery(
     # _sync_cancellation() voids the linked SalesOrder/Invoice automatically
     # -- no separate invoice-void logic needed here.
     for item in order.items:
-        if item.plant_id:
+        if item.plant_id and item.allocated > 0:
             restore_stock(
                 db,
                 plant_id=item.plant_id,
                 variant_id=item.variant_id,
-                quantity=item.quantity,
+                quantity=item.allocated,
                 source_type="DELIVERY_REJECTED",
                 source_id=order.id,
                 reference=f"ORDER:{order.id}:SALE_REVERSAL:{item.variant_id or item.plant_id}",

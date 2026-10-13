@@ -146,6 +146,20 @@ class SalesOrderItem(Base):
     # trays" and unit_price the per-tray price, exactly as OrderItem does.
     variant_id = Column(Integer, nullable=True)
     tray_size = Column(Integer, nullable=True)
+    # How much of `quantity` is taken from nursery stock (set when the order is
+    # invoiced or when the team allocates stock); the rest is still pending.
+    allocated_quantity = Column(Integer, nullable=True)
+    # Admin decision for the pending part: True = the nursery will prepare it.
+    to_prepare = Column(Boolean, nullable=False, default=False)
+
+    @property
+    def allocated(self) -> int:
+        value = 0 if self.allocated_quantity is None else self.allocated_quantity
+        return max(0, min(value, self.quantity or 0))
+
+    @property
+    def pending(self) -> int:
+        return max(0, (self.quantity or 0) - self.allocated)
 
     sales_order = relationship("SalesOrder", back_populates="items")
     plant = relationship("Plant")

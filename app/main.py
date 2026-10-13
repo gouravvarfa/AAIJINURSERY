@@ -26,6 +26,7 @@ from app.ai.admin_gateway import router as admin_ai_gateway_router
 from app.communications import models as communications_models  # noqa: F401 -- registers tables with Base.metadata
 from app.communications.control_router import router as messaging_control_router
 from app.communications.billing_router import router as messaging_billing_router
+from app.inventory_router import router as inventory_demand_router
 from app.communications.router import router as communications_router
 from app.communications.inbox_router import router as communications_inbox_router
 from app.communications.webhook import router as whatsapp_webhook_router
@@ -340,6 +341,31 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE accounting_sales_orders ADD COLUMN delivery_date DATETIME"))
         conn.commit()
 
+    # Stock allocation: how much of each order line came out of nursery stock.
+    # Everything created before this existed was taken from stock in full.
+    order_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(order_items)"))}
+    if "allocated_quantity" not in order_item_columns:
+        conn.execute(text("ALTER TABLE order_items ADD COLUMN allocated_quantity INTEGER"))
+        conn.execute(text("UPDATE order_items SET allocated_quantity = quantity WHERE allocated_quantity IS NULL"))
+        conn.commit()
+    if "to_prepare" not in order_item_columns:
+        conn.execute(text("ALTER TABLE order_items ADD COLUMN to_prepare BOOLEAN NOT NULL DEFAULT 0"))
+        conn.commit()
+    so_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_sales_order_items)"))}
+    if "to_prepare" not in so_item_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN to_prepare BOOLEAN NOT NULL DEFAULT 0"))
+        conn.commit()
+    if "allocated_quantity" not in so_item_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN allocated_quantity INTEGER"))
+        # Online sales-order lines mirror website orders, and invoiced offline
+        # orders already took their stock at invoicing; drafts took none.
+        conn.execute(text(
+            "UPDATE accounting_sales_order_items SET allocated_quantity = quantity WHERE sales_order_id IN "
+            "(SELECT id FROM accounting_sales_orders WHERE source = 'online' OR status = 'Invoiced')"
+        ))
+        conn.execute(text("UPDATE accounting_sales_order_items SET allocated_quantity = 0 WHERE allocated_quantity IS NULL"))
+        conn.commit()
+
     # Same tray-size support, for Purchase Order lines.
     purchase_order_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_purchase_order_items)"))}
     if "variant_id" not in purchase_order_item_columns:
@@ -518,6 +544,7 @@ app.include_router(api_admin_rbac.router)
 app.include_router(api_system_health.router)
 app.include_router(messaging_control_router)  # developer-only (checks inside)
 app.include_router(messaging_billing_router)  # developer-only (checks inside)
+app.include_router(inventory_demand_router)  # stock vs demand + per-line stock/prepare decision (permissions checked inside)
 app.include_router(accounting_router, dependencies=[Depends(require_permission("accounting", "VIEW"))])
 app.include_router(labour_router, dependencies=[Depends(require_permission("labour", "VIEW"))])
 app.include_router(delivery_router, dependencies=[Depends(require_permission("delivery", "VIEW"))])

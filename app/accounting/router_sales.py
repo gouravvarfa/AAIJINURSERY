@@ -27,7 +27,7 @@ from app.accounting.schemas import (
 )
 from app.database import get_db
 from app.deps import get_current_admin
-from app.inventory import InsufficientStockError, deduct_stock, restore_stock
+from app.inventory import allocate_stock, restore_stock
 from app.models import InventoryTransaction
 
 router = APIRouter(tags=["accounting-sales"])
@@ -103,6 +103,14 @@ def get_sales_order(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Sales order not found")
+    from app.inventory_router import stock_position
+
+    for line in item.items:
+        if line.plant_id:
+            pos = stock_position(db, line.plant_id, line.variant_id)
+            line.physical_stock = pos.get("physical_stock")
+            line.reserved_stock = pos.get("reserved_stock")
+            line.available_stock = pos.get("available_stock")
     return item
 
 
@@ -132,6 +140,8 @@ def _add_lines(db: Session, order: SalesOrder, lines) -> float:
                 line_total=line_total,
                 variant_id=line.variant_id,
                 tray_size=tray_size,
+                to_prepare=bool(line.to_prepare),
+                allocated_quantity=0,
             )
         )
     return subtotal
@@ -284,20 +294,20 @@ def convert_to_invoice(
         # shared Plant.stock_quantity the website's own checkout uses, so
         # an offline sale reduces what the website shows as available too.
         if line.plant_id:
-            try:
-                deduct_stock(
+            # Take what is in stock for the part not already allocated; the
+            # rest stays pending (the invoice is never blocked by stock).
+            need = 0 if line.to_prepare else max(0, (line.quantity or 0) - line.allocated)
+            if need:
+                line.allocated_quantity = line.allocated + allocate_stock(
                     db,
                     plant_id=line.plant_id,
                     variant_id=line.variant_id,
-                    quantity=line.quantity,
+                    quantity=need,
                     source_type="SALES_ORDER",
                     source_id=order.id,
                     reference=_sale_reference(order.id, "SALE", line),
                     created_by=admin,
                 )
-            except InsufficientStockError:
-                plant_label = line.plant.name if line.plant else line.description
-                raise HTTPException(status_code=400, detail=f"Insufficient stock for {plant_label}")
 
     old_status = order.status
     order.status = "Invoiced"
@@ -397,17 +407,18 @@ def void_invoice(
     # or voiding an already-Voided invoice, a safe no-op).
     if not already_voided and item.sales_order:
         for line in item.sales_order.items:
-            if line.plant_id:
+            if line.plant_id and line.allocated > 0:
                 # Invoices made before tray lines deducted tray stock took it
                 # from the plant itself -- give it back to wherever it came from.
-                from_tray = bool(line.variant_id) and db.query(InventoryTransaction.id).filter(
-                    InventoryTransaction.reference == _sale_reference(item.sales_order_id, "SALE", line)
+                legacy_plant_level = bool(line.variant_id) and db.query(InventoryTransaction.id).filter(
+                    InventoryTransaction.reference == f"SALES_ORDER:{item.sales_order_id}:SALE:{line.plant_id}"
                 ).first() is not None
+                from_tray = bool(line.variant_id) and not legacy_plant_level
                 restore_stock(
                     db,
                     plant_id=line.plant_id,
                     variant_id=line.variant_id if from_tray else None,
-                    quantity=line.quantity,
+                    quantity=line.allocated,
                     source_type="SALES_ORDER_VOID",
                     source_id=item.sales_order_id,
                     reference=(
@@ -417,6 +428,7 @@ def void_invoice(
                     ),
                     created_by=admin,
                 )
+                line.allocated_quantity = 0
 
     db.commit()
     record_change(

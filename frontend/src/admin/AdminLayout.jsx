@@ -24,6 +24,7 @@ const NAV = [
   { to: "/admin/categories", label: "Categories", module: "products" },
   { to: "/admin/plants", label: "Plants", module: "products" },
   { to: "/admin/purchases", label: "Purchases", module: "products" },
+  { to: "/admin/stock-demand", label: "Stock & Demand", module: "products" },
   { to: "/admin/services", label: "Services", module: "website" },
   { to: "/admin/pricing-plans", label: "Pricing Plans", module: "website" },
   { to: "/admin/faqs", label: "FAQs", module: "website" },

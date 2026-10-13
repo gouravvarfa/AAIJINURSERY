@@ -590,6 +590,10 @@ class OrderItemOut(BaseModel):
     unit_price: float
     quantity: int
     line_total: float
+    # quantity = allocated (taken from nursery stock) + pending (to be prepared)
+    allocated: int = 0
+    pending: int = 0
+    to_prepare: bool = False
 
 
 class OrderStatusHistoryOut(BaseModel):
@@ -618,6 +622,10 @@ class OrderSummaryOut(BaseModel):
     delivery_partner: str = ""
     delivery_city: str = ""
     delivery_state: str = ""
+    # Read-only, already on the Order model: lets the site notice (anywhere the
+    # customer is browsing) that the team has confirmed the order.
+    team_confirmation_status: str = "PENDING"
+    team_confirmed_at: Optional[datetime] = None
 
 
 class OrderSummaryAdminOut(OrderSummaryOut):

@@ -7,15 +7,8 @@ export default function AddToCartButton({ plant, variantId = null, quantity = 1,
   const hasVariants = plant.variants && plant.variants.length > 0;
   const selectedVariant = hasVariants ? plant.variants.find((v) => v.id === variantId) : null;
   const needsVariant = hasVariants && !selectedVariant;
-  const outOfStock = hasVariants
-    ? selectedVariant
-      ? selectedVariant.stock_quantity <= 0
-      : false
-    : plant.stock_quantity <= 0;
-  const exceedsStock = hasVariants
-    ? selectedVariant && quantity > selectedVariant.stock_quantity
-    : quantity > plant.stock_quantity;
-  const disabled = loading || outOfStock || needsVariant || exceedsStock;
+  const invalidQuantity = !Number.isInteger(quantity) || quantity < 1;
+  const disabled = loading || needsVariant || invalidQuantity;
 
   async function handleClick(e) {
     e.preventDefault();
@@ -37,13 +30,9 @@ export default function AddToCartButton({ plant, variantId = null, quantity = 1,
       onClick={handleClick}
       disabled={disabled}
     >
-      {outOfStock
-        ? "Out of Stock"
-        : needsVariant
-          ? "Select a Tray Size"
-          : exceedsStock
-            ? "Not Enough Stock"
-            : loading
+      {needsVariant
+        ? "Select a Tray Size"
+        : loading
               ? "Adding..."
               : "Add to Cart"}
     </button>

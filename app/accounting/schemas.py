@@ -103,6 +103,13 @@ class SalesOrderItemOut(BaseModel):
     line_total: float
     variant_id: Optional[int] = None
     tray_size: Optional[int] = None
+    allocated: int = 0
+    pending: int = 0
+    to_prepare: bool = False
+    # Stock position of this line's plant / tray (filled in on the detail view)
+    physical_stock: Optional[int] = None
+    reserved_stock: Optional[int] = None
+    available_stock: Optional[int] = None
 
 
 class SalesOrderItemIn(BaseModel):
@@ -114,6 +121,8 @@ class SalesOrderItemIn(BaseModel):
     # When set, quantity means "number of trays" and unit_price the
     # per-tray price -- same convention as the website's OrderItem.
     variant_id: Optional[int] = None
+    # True = the nursery will prepare this line instead of using stock.
+    to_prepare: bool = False
 
 
 class SalesOrderIn(BaseModel):

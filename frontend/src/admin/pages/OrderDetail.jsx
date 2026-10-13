@@ -6,6 +6,7 @@ import OrderTracker from "../../components/OrderTracker";
 import CancelOrderModal from "../../components/CancelOrderModal";
 import { useOrderAlerts } from "../OrderAlertContext";
 import WhatsAppActivity from "../communications/WhatsAppActivity";
+import FulfilmentPanel from "../inventory/FulfilmentPanel";
 import { formatIst } from "../communications/time";
 import {
   CANCELLABLE_STATUSES,
@@ -582,6 +583,13 @@ export default function AdminOrderDetail() {
                 {order.payment_status}
               </span>
             </div>
+
+            <FulfilmentPanel
+              kind="order"
+              items={order.items}
+              open={!["Cancelled", "Delivered"].includes(order.status)}
+              onChanged={load}
+            />
 
             {drivers.length > 0 && (
               <div className="admin-form-card" style={{ maxWidth: "none", marginBottom: 20 }}>

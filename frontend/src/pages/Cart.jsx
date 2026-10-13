@@ -4,6 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { Loading, Empty } from "../components/Loading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import QuantityInput from "../components/QuantityInput";
+import { stockNote } from "../utils/quantity";
 
 function CartRow({ item, onUpdateQuantity, onRemove }) {
   const [busy, setBusy] = useState(false);
@@ -13,7 +15,6 @@ function CartRow({ item, onUpdateQuantity, onRemove }) {
   const price = item.unit_price ?? 0;
   const lineTotal = price * item.quantity;
   const availableStock = variant ? variant.stock_quantity : plant?.stock_quantity;
-  const atMaxStock = availableStock != null ? item.quantity >= availableStock : false;
 
   async function changeQuantity(next) {
     if (next < 1 || busy) return;
@@ -54,34 +55,20 @@ function CartRow({ item, onUpdateQuantity, onRemove }) {
             This tray option is no longer available &mdash; please remove
           </span>
         )}
-        {!danglingVariant && availableStock != null && availableStock <= 0 && (
-          <span className="badge badge-gold" style={{ marginTop: 6 }}>
-            Out of Stock
+        {!danglingVariant && availableStock != null && availableStock < item.quantity && (
+          <span className="stock-note" style={{ marginTop: 6, display: "block" }}>
+            {stockNote(availableStock, item.quantity)}
           </span>
         )}
       </div>
 
-      <div className="cart-row-qty">
-        <button
-          type="button"
-          className="qty-btn"
-          onClick={() => changeQuantity(item.quantity - 1)}
-          disabled={busy || item.quantity <= 1}
-          aria-label={`Decrease quantity of ${plant?.name || "item"}`}
-        >
-          &minus;
-        </button>
-        <span className="qty-value">{item.quantity}</span>
-        <button
-          type="button"
-          className="qty-btn"
-          onClick={() => changeQuantity(item.quantity + 1)}
-          disabled={busy || atMaxStock}
-          aria-label={`Increase quantity of ${plant?.name || "item"}`}
-        >
-          +
-        </button>
-      </div>
+      <QuantityInput
+        value={item.quantity}
+        onChange={changeQuantity}
+        label={`Quantity of ${plant?.name || "item"}`}
+        disabled={busy}
+        commitOnBlur
+      />
 
       <div className="cart-row-subtotal">&#8377;{lineTotal}</div>
 

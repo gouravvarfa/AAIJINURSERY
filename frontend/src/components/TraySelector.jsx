@@ -1,3 +1,6 @@
+import QuantityInput from "./QuantityInput";
+import { stockNote } from "../utils/quantity";
+
 export default function TraySelector({ plant, selectedVariantId, onSelect, quantity, onQuantityChange }) {
   const variants = plant.variants || [];
   const selected = variants.find((v) => v.id === selectedVariantId) || null;
@@ -17,12 +20,11 @@ export default function TraySelector({ plant, selectedVariantId, onSelect, quant
             <button
               key={variant.id}
               type="button"
-              className={`pill tray-pill ${selectedVariantId === variant.id ? "active" : ""} ${outOfStock ? "tray-pill-disabled" : ""}`}
-              onClick={() => !outOfStock && onSelect(variant.id)}
-              disabled={outOfStock}
+              className={`pill tray-pill ${selectedVariantId === variant.id ? "active" : ""}`}
+              onClick={() => onSelect(variant.id)}
             >
               {variant.tray_size} Plants
-              {outOfStock ? " (Out of Stock)" : ""}
+              {outOfStock ? " (Made to order)" : ""}
             </button>
           );
         })}
@@ -31,32 +33,15 @@ export default function TraySelector({ plant, selectedVariantId, onSelect, quant
       {selected ? (
         <>
           <div className="tray-selector-label">Number of Trays</div>
-          <div className="cart-row-qty" style={{ marginBottom: 10 }}>
-            <button
-              type="button"
-              className="qty-btn"
-              onClick={() => onQuantityChange(Math.max(1, quantity - 1))}
-              disabled={quantity <= 1}
-              aria-label="Decrease number of trays"
-            >
-              &minus;
-            </button>
-            <span className="qty-value">{quantity}</span>
-            <button
-              type="button"
-              className="qty-btn"
-              onClick={() => onQuantityChange(Math.min(selected.stock_quantity, quantity + 1))}
-              disabled={quantity >= selected.stock_quantity}
-              aria-label="Increase number of trays"
-            >
-              +
-            </button>
+          <div style={{ marginBottom: 10 }}>
+            <QuantityInput value={quantity} onChange={onQuantityChange} label="Number of trays" />
           </div>
           <div className="tray-selector-total">
             Selected: <strong>{quantity} &times; {selected.tray_size} Plants</strong>
             <br />
             {quantity} &times; {selected.tray_size} &times; &#8377;{plant.price} = &#8377;{total}
           </div>
+          <div className="stock-note">{stockNote(selected.stock_quantity, quantity)}</div>
         </>
       ) : (
         <div className="tray-selector-total tray-selector-hint">Please select a tray size above.</div>

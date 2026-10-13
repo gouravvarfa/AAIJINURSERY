@@ -5,6 +5,7 @@ import { Loading } from "../../../components/Loading";
 import { salesOrderBadgeClass, sourceBadgeClass } from "../../accounting/accountingStatus";
 import AuditTrail from "../../accounting/AuditTrail";
 import DeliveryPanel from "../../accounting/DeliveryPanel";
+import FulfilmentPanel from "../../inventory/FulfilmentPanel";
 
 export default function SalesOrderDetail() {
   const { id } = useParams();
@@ -151,6 +152,15 @@ export default function SalesOrderDetail() {
               <p style={{ color: "var(--color-text-muted)", margin: 0 }}>No invoice yet.</p>
             )}
           </div>
+
+          {order.source === "offline" && (
+            <FulfilmentPanel
+              kind="sales_order"
+              items={order.items}
+              open={["Draft", "Confirmed", "Invoiced"].includes(order.status)}
+              onChanged={load}
+            />
+          )}
 
           {order.source === "offline" && <DeliveryPanel salesOrder={order} />}
 

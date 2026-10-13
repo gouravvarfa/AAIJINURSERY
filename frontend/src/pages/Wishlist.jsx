@@ -44,7 +44,7 @@ function WishlistRow({ item, onRemove }) {
         </Link>
         {plant && <div className="cart-row-price">&#8377;{plant.effective_price}</div>}
         <span className={`badge ${outOfStock ? "badge-gold" : "badge-accent"}`} style={{ marginTop: 6 }}>
-          {outOfStock ? "Out of Stock" : "In Stock"}
+          {outOfStock ? "Made to Order" : "In Stock"}
         </span>
       </div>
 
@@ -53,9 +53,9 @@ function WishlistRow({ item, onRemove }) {
           type="button"
           className="btn btn-primary btn-sm"
           onClick={handleAddToCart}
-          disabled={busy || outOfStock}
+          disabled={busy}
         >
-          {outOfStock ? "Out of Stock" : "Add to Cart"}
+          Add to Cart
         </button>
         <button type="button" className="btn btn-outline dark btn-sm" onClick={handleRemove} disabled={busy}>
           Remove

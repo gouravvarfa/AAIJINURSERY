@@ -1927,3 +1927,11 @@ table.admin-table .row-actions {
 @media (prefers-reduced-motion: reduce) {
   .dl-red .dl-dot, .dl-orange .dl-dot { animation: none; }
 }
+
+/* ---- Stock & preparation (orders) ---- */
+.fulfil-line { padding: 12px 0; border-top: 1px solid var(--color-border); display: grid; gap: 8px; }
+.fulfil-line:first-of-type { border-top: 0; }
+.fulfil-numbers { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.9rem; color: var(--color-text-muted); }
+.fulfil-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fulfil-qty { width: 110px; text-align: center; }
+.line-item-stock { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.85rem; color: var(--color-text-muted); }

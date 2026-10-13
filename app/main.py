@@ -23,6 +23,8 @@ from app.accounting.public_pdf import router as public_invoice_pdf_router
 from app.accounting.router import router as accounting_router
 from app.ai.gateway import router as ai_gateway_router
 from app.ai.admin_gateway import router as admin_ai_gateway_router
+from app.ai.admin_assistant_gateway import router as admin_assistant_router
+from app.ai.admin_assistant_control import router as admin_assistant_control_router
 from app.communications import models as communications_models  # noqa: F401 -- registers tables with Base.metadata
 from app.communications.control_router import router as messaging_control_router
 from app.communications.billing_router import router as messaging_billing_router
@@ -561,6 +563,10 @@ app.include_router(ai_gateway_router)
 # ask, but each individual answer is still scoped to what their role is
 # actually allowed to see.
 app.include_router(admin_ai_gateway_router)
+# Admin Assistant (restricted chatbot): get_current_admin + developer ON/OFF switch
+# + per-tool RBAC inside the gateway; the control router is developer-only.
+app.include_router(admin_assistant_router)
+app.include_router(admin_assistant_control_router)
 
 
 STATIC_SITEMAP_PATHS = [

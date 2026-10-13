@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { api } from "../api";
 import { Loading } from "../components/Loading";
 import ErrorBoundary from "../components/ErrorBoundary";
 import { OrderAlertProvider } from "./OrderAlertContext";
@@ -41,6 +42,7 @@ const NAV = [
 const DEVELOPER_NAV = [
   { to: "/admin/admins", label: "Admins" },
   { to: "/admin/developer/messaging", label: "Messaging ON/OFF" },
+  { to: "/admin/developer/admin-chatbot", label: "Admin Chatbot ON/OFF" },
   { to: "/admin/developer/messaging-bill", label: "Messaging Bill" },
   { to: "/admin/developer/activity-log", label: "Activity Log" },
   { to: "/admin/developer/roles-permissions", label: "Roles & Permissions" },
@@ -200,6 +202,18 @@ export default function AdminLayout() {
   const [devOpen, setDevOpen] = useState(false);
   const location = useLocation();
   const navRef = useRef(null);
+  // Admin Assistant visibility only -- the backend enforces the developer's
+  // ON/OFF switch on every request regardless of what this says.
+  const [assistantOn, setAssistantOn] = useState(false);
+
+  useEffect(() => {
+    if (!username) return undefined;
+    let cancelled = false;
+    api.get("/admin/assistant/status").then((s) => !cancelled && setAssistantOn(Boolean(s.enabled))).catch(() => !cancelled && setAssistantOn(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [username, location.pathname]);
 
   // Close the drawer automatically on route change (covers link clicks,
   // including ones not caught by the delegated click handler below).
@@ -245,6 +259,7 @@ export default function AdminLayout() {
         </div>
         <nav className="admin-nav" ref={navRef} onClick={closeDrawerOnLinkClick}>
           <NavGroup items={NAV} hasPermission={hasPermission} />
+          {assistantOn && <NavLink to="/admin/assistant">Admin Assistant</NavLink>}
           <NavGroup heading="Accounting" items={ACCOUNTING_NAV} hasPermission={hasPermission} />
           <NavGroup heading="Employees & Labour" items={WORKFORCE_NAV} hasPermission={hasPermission} />
           <NavGroup heading="Delivery Management" items={DELIVERY_NAV} hasPermission={hasPermission} />

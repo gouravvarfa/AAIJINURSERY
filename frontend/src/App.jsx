@@ -30,6 +30,7 @@ import NotFound from "./pages/NotFound";
 import AdminLayout from "./admin/AdminLayout";
 import AdminDashboard from "./admin/pages/Dashboard";
 import AskAaiji from "./admin/pages/AskAaiji";
+import AdminAssistant from "./admin/pages/AdminAssistant";
 import AdminAnalytics from "./admin/pages/Analytics";
 import AdminPurchases from "./admin/pages/Purchases";
 import AdminOrders from "./admin/pages/Orders";
@@ -52,6 +53,7 @@ import AdminAdmins from "./admin/pages/Admins";
 import AdminActivityLog from "./admin/pages/ActivityLog";
 import AdminSystemInfo from "./admin/pages/SystemInfo";
 import AdminMessagingControl from "./admin/pages/developer/MessagingControl";
+import AdminChatbotControl from "./admin/pages/developer/AdminChatbotControl";
 import AdminMessagingBilling from "./admin/pages/developer/MessagingBilling";
 import AdminStockDemand from "./admin/pages/StockDemand";
 import AdminSessions from "./admin/pages/Sessions";
@@ -158,6 +160,7 @@ export default function App() {
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
           <Route path="ai" element={<AskAaiji />} />
+          <Route path="assistant" element={<AdminAssistant />} />
           <Route path="analytics" element={<AdminAnalytics />} />
           <Route path="orders" element={<AdminOrders />} />
           <Route path="orders/:id" element={<AdminOrderDetail />} />
@@ -180,6 +183,7 @@ export default function App() {
           <Route path="developer/activity-log" element={<AdminActivityLog />} />
           <Route path="developer/system-info" element={<AdminSystemInfo />} />
           <Route path="developer/messaging" element={<AdminMessagingControl />} />
+          <Route path="developer/admin-chatbot" element={<AdminChatbotControl />} />
           <Route path="developer/messaging-bill" element={<AdminMessagingBilling />} />
           <Route path="stock-demand" element={<AdminStockDemand />} />
           <Route path="developer/sessions" element={<AdminSessions />} />

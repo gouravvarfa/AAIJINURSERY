@@ -1584,12 +1584,106 @@ select:focus-visible {
   opacity: 1;
 }
 
-@media (max-width: 860px) {
+/* Owner portrait card (homepage hero). The nursery slider sits beside it as a
+   smaller supporting photo on wide screens only. */
+.hero-owner {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  justify-self: center;
+}
+
+.hero-owner-card {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  aspect-ratio: 4 / 5;
+  border-radius: 26px;
+  overflow: hidden;
+  border: 3px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  background: var(--color-primary-dark);
+}
+
+.hero-owner-card > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 18%;
+  display: block;
+}
+
+.hero-owner-badge {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+  color: var(--color-primary-dark);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+}
+
+.hero-owner-dot {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(46, 139, 87, 0.18);
+}
+
+.hero-owner-role {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+.hero-owner-name {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.hero-owner-side {
+  position: absolute;
+  z-index: 0;
+  right: -104px;
+  bottom: 110px;
+  width: 44%;
+  aspect-ratio: 4 / 5;
+  border-radius: 20px;
+  border: 3px solid rgba(255, 255, 255, 0.45);
+}
+
+/* Hero outline button: long label on wide screens, short label on phones. */
+.hero-actions .btn-outline span:not(.hide-mobile) { display: none; }
+@media (max-width: 768px) {
+  .hero-actions .btn-outline .hide-mobile { display: none; }
+  .hero-actions .btn-outline span:not(.hide-mobile) { display: inline; }
+}
+
+@media (max-width: 1180px) {
+  .hero-owner-side {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
   .hero .container {
     grid-template-columns: 1fr;
   }
-  .hero-image {
-    order: -1;
+  .hero-owner {
+    max-width: 360px;
+    margin: 0 auto;
   }
 }
 

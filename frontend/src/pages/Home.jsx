@@ -63,12 +63,31 @@ export default function Home() {
               </Link>
             </div>
           </div>
-          <div className="hero-image">
-            <HeroImageSlider
-              alt="Lush green plants"
-              images={parseHeroImages(settings.hero_images)}
-              intervalSeconds={settings.hero_slide_seconds}
-            />
+          <div className="hero-owner">
+            <figure className="hero-owner-card">
+              <img
+                src="/images/owner.webp"
+                alt="Founder and owner of Shree Aaiji High Tech Nursery"
+                width="880"
+                height="1320"
+                fetchPriority="high"
+              />
+              <figcaption className="hero-owner-badge">
+                <span className="hero-owner-dot" aria-hidden="true" />
+                <span>
+                  <span className="hero-owner-role">Founder &amp; Owner</span>
+                  <span className="hero-owner-name">Shree Aaiji High Tech Nursery</span>
+                </span>
+              </figcaption>
+            </figure>
+            {/* The existing nursery photo slider, kept as a supporting visual. */}
+            <div className="hero-image hero-owner-side" aria-hidden="true">
+              <HeroImageSlider
+                alt=""
+                images={parseHeroImages(settings.hero_images)}
+                intervalSeconds={settings.hero_slide_seconds}
+              />
+            </div>
           </div>
         </div>
       </section>

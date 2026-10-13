@@ -117,6 +117,18 @@ function NavGroup({ heading, items, hasPermission }) {
   );
 }
 
+const ROLE_LABELS = { developer: "Developer", super_access: "Super Access", admin: "Admin" };
+
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="m16 17 5-5-5-5" />
+      <path d="M21 12H9" />
+    </svg>
+  );
+}
+
 function HamburgerIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -291,24 +303,25 @@ export default function AdminLayout() {
           )}
         </nav>
         <div className="admin-drawer-footer">
-          <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-            <span className="admin-logo-chip" style={{ borderRadius: "50%", background: "rgba(255,255,255,0.15)", color: "#fff", fontWeight: 700 }}>
+          <div className="admin-user-chip">
+            <span className="admin-user-avatar" aria-hidden="true">
               {(username || "A").charAt(0).toUpperCase()}
             </span>
-            <span style={{ color: "#fff", fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {username}
+            <span className="admin-user-meta">
+              <span className="admin-user-name">{username}</span>
+              <span className="admin-user-role">{ROLE_LABELS[role] || "Team"}</span>
             </span>
-          </span>
-          <a
-            href="#"
-            style={{ color: "#f3a6a0", fontSize: "0.85rem", fontWeight: 600, flexShrink: 0 }}
-            onClick={(e) => {
-              e.preventDefault();
+          </div>
+          <button
+            type="button"
+            className="admin-logout-btn"
+            onClick={() => {
               if (confirm("Are you sure you want to log out?")) logout();
             }}
           >
+            <LogoutIcon />
             Log out
-          </a>
+          </button>
         </div>
       </aside>
       <div className="admin-main">

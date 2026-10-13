@@ -19,7 +19,7 @@ export default function SendMessage() {
 
   useEffect(() => {
     api.get("/admin/customers").then(setCustomers).catch(() => {});
-    api.get("/admin/communications/templates").then((rows) => setTemplates(rows.filter((t) => t.is_active))).catch(() => {});
+    api.get("/admin/communications/templates").then((rows) => setTemplates(rows.filter((t) => t.status === "ACTIVE"))).catch(() => {});
   }, []);
 
   const filteredCustomers = useMemo(() => {

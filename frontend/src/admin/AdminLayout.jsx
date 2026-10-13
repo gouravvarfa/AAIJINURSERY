@@ -5,6 +5,7 @@ import { Loading } from "../components/Loading";
 import ErrorBoundary from "../components/ErrorBoundary";
 import { OrderAlertProvider } from "./OrderAlertContext";
 import OrderAlertBell from "./OrderAlertBell";
+import InboxAlert, { InboxBadge } from "./communications/InboxAlert";
 import logoImg from "../assets/logo.png";
 
 // `module: null` means always visible to any logged-in admin (e.g. the
@@ -106,6 +107,7 @@ function NavGroup({ heading, items, hasPermission }) {
       {visible.map((item) => (
         <NavLink key={item.to} to={item.to} end={item.end}>
           {item.label}
+          {item.to === "/admin/communications/inbox" && <InboxBadge />}
         </NavLink>
       ))}
     </>
@@ -220,6 +222,7 @@ export default function AdminLayout() {
 
   return (
     <OrderAlertProvider>
+    {hasPermission("communications") && <InboxAlert />}
     <div className="admin-shell">
       {drawerOpen && <div className="admin-drawer-overlay" onClick={() => setDrawerOpen(false)} aria-hidden="true" />}
       <aside className={`admin-sidebar${drawerOpen ? " open" : ""}`}>

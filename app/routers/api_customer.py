@@ -806,6 +806,9 @@ def cancel_order(
 
     order = get_or_404_order(db, order_id, customer_id)
     notify_order_cancelled(db, order, old_status, cancelled_by="customer", reason=payload.remarks)
+    from app.delivery.order_sync import cancel_delivery_for_order
+
+    cancel_delivery_for_order(order.id, "customer")
     return order
 
 

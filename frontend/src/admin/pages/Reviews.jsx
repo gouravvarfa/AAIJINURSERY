@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIstDate } from "../communications/time";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 
@@ -78,7 +79,7 @@ export default function Reviews() {
                   <td>{"★".repeat(item.rating)}{"☆".repeat(5 - item.rating)}</td>
                   <td style={{ maxWidth: 280 }}>{item.comment || "-"}</td>
                   <td>#{item.order_id}</td>
-                  <td>{new Date(item.created_at).toLocaleDateString()}</td>
+                  <td>{formatIstDate(item.created_at)}</td>
                   <td>
                     <span
                       className={`badge ${

@@ -7,6 +7,7 @@ import PlantCarousel from "../components/PlantCarousel";
 import PlantExplorer from "../components/PlantExplorer";
 import HeroImageSlider, { parseHeroImages } from "../components/HeroImageSlider";
 import Stars from "../components/Stars";
+import GoogleReviewButton from "../components/GoogleReviewButton";
 import Avatar from "../components/Avatar";
 import { Loading } from "../components/Loading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -183,6 +184,11 @@ export default function Home() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {settings.google_review_url && (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 28 }}>
+              <GoogleReviewButton url={settings.google_review_url} label="Write a Review on Google" />
             </div>
           )}
         </div>

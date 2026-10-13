@@ -159,3 +159,24 @@ def _tell_driver(delivery_id: int) -> None:
             db.close()
     except Exception:
         logger.exception("could not notify the driver for delivery %s", delivery_id)
+
+
+def cancel_delivery_for_order(order_id: int, admin: str) -> None:
+    """The order was cancelled: its open delivery (if any) is cancelled too.
+    No customer message from here -- the order's own cancellation message
+    already told them."""
+    db = SessionLocal()
+    try:
+        from app.delivery.models import record_delivery_event
+
+        _, delivery = _find_delivery(db, order_id)
+        if not delivery:
+            return
+        record_delivery_event(db, delivery.id, "STATUS_CHANGED", delivery.status, "Cancelled", admin, f"Order #{order_id} was cancelled")
+        delivery.status = "Cancelled"
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("delivery cancel sync failed for order_id=%s (the cancellation itself is unaffected)", order_id)
+    finally:
+        db.close()

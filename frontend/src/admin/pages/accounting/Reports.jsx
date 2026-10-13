@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIst } from "../../communications/time";
 import { api } from "../../../api";
 import { Loading, Empty } from "../../../components/Loading";
 import DateRangePicker from "../../analytics/DateRangePicker";
@@ -189,7 +190,7 @@ function ReportBody({ id, data }) {
       return (
         <>
           <p style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-            As of {new Date(data.as_of).toLocaleString()}. This is a simplified summary (no full double-entry
+            As of {formatIst(data.as_of)}. This is a simplified summary (no full double-entry
             ledger), not an audited statement -- inventory value is an estimate from historical purchase cost.
           </p>
           <div className="stat-cards">

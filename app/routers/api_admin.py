@@ -1294,6 +1294,9 @@ def admin_cancel_order(
     order = _get_order_or_404(db, order_id)
     log_activity(db, admin, "order_cancel", f"Order #{order.id} cancelled")
     notify_order_cancelled(db, order, old_status, cancelled_by="admin", reason=payload.remarks)
+    from app.delivery.order_sync import cancel_delivery_for_order
+
+    cancel_delivery_for_order(order.id, admin)
     return order
 
 

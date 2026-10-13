@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIst } from "../communications/time";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 
@@ -69,8 +70,8 @@ export default function Sessions() {
                   <td style={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis" }}>
                     {s.user_agent || "—"}
                   </td>
-                  <td>{new Date(s.created_at).toLocaleString()}</td>
-                  <td>{new Date(s.last_seen_at).toLocaleString()}</td>
+                  <td>{formatIst(s.created_at)}</td>
+                  <td>{formatIst(s.last_seen_at)}</td>
                   <td>
                     <span className={s.revoked_at ? "badge badge-muted" : "badge badge-accent"}>
                       {s.revoked_at ? "Revoked" : "Active"}

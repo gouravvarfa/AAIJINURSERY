@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIst } from "../../communications/time";
 import { api } from "../../../api";
 import { Loading, Empty } from "../../../components/Loading";
 import { LogLevelBadge } from "../../system-health/badges";
@@ -116,7 +117,7 @@ export default function SystemHealthSystemLogs() {
               <tbody>
                 {result.items.map((l) => (
                   <tr key={l.id}>
-                    <td>{new Date(l.created_at).toLocaleString()}</td>
+                    <td>{formatIst(l.created_at)}</td>
                     <td><LogLevelBadge level={l.level} /></td>
                     <td>{l.module || "-"}</td>
                     <td>{l.method ? `${l.method} ${l.endpoint}` : "-"}</td>

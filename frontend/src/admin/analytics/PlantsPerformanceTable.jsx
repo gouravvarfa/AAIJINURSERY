@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIstDate } from "../communications/time";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 import { rangeQuery } from "./useAnalyticsFilters";
@@ -199,7 +200,7 @@ export default function PlantsPerformanceTable({ filters }) {
                     <td>{p.profit != null ? `₹${p.profit.toLocaleString()}` : "N/A"}</td>
                     <td>{p.profit_pct != null ? `${p.profit_pct}%` : "N/A"}</td>
                     <td>{p.order_count}</td>
-                    <td>{p.last_sold_at ? new Date(p.last_sold_at).toLocaleDateString() : "-"}</td>
+                    <td>{p.last_sold_at ? formatIstDate(p.last_sold_at) : "-"}</td>
                     <td>
                       <span className={`badge ${STATUS_BADGE[p.performance_status] || "badge-muted"}`}>
                         {p.performance_status}

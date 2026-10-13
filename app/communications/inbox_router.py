@@ -81,6 +81,19 @@ def list_conversations(q: str = Query("", max_length=60), db: Session = Depends(
     return {"items": items, "total_unread": sum(unread.values())}
 
 
+@router.get("/unread-count", dependencies=[Depends(require_permission("communications", "VIEW"))])
+def unread_count(db: Session = Depends(get_db)):
+    q = db.query(WhatsAppInboxMessage).filter(WhatsAppInboxMessage.direction == "IN", WhatsAppInboxMessage.is_read.is_(False))
+    latest = q.order_by(WhatsAppInboxMessage.id.desc()).first()
+    return {
+        "count": q.count(),
+        "latest": (
+            {"mobile": latest.mobile, "body": (latest.body or "")[:80], "at": latest.created_at.isoformat() if latest.created_at else None}
+            if latest else None
+        ),
+    }
+
+
 @router.get("/messages", dependencies=[Depends(require_permission("communications", "VIEW"))])
 def thread(mobile: str = Query(..., min_length=6, max_length=20), db: Session = Depends(get_db)):
     rows = (

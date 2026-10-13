@@ -22,3 +22,10 @@ export function formatIst(value, withSeconds = false) {
     hour12: true,
   });
 }
+
+// Date only (no time), in India time -- for created_at style timestamps.
+export function formatIstDate(value) {
+  const d = parseServerDate(value);
+  if (!d || Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" });
+}

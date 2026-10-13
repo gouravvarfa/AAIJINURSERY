@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { formatIst, formatIstDate } from "../../communications/time";
 import { api } from "../../../api";
 import { Loading, Empty } from "../../../components/Loading";
 import { SeverityBadge, StatusBadge } from "../../system-health/badges";
@@ -121,8 +122,8 @@ export default function SystemHealthErrorHistory() {
                         {item.message}
                       </td>
                       <td>{item.occurrence_count}</td>
-                      <td>{new Date(item.first_seen).toLocaleDateString()}</td>
-                      <td>{new Date(item.last_seen).toLocaleString()}</td>
+                      <td>{formatIstDate(item.first_seen)}</td>
+                      <td>{formatIst(item.last_seen)}</td>
                       <td><StatusBadge status={item.status} /></td>
                       <td>
                         <button type="button" className="btn btn-outline dark" onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}>

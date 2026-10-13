@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatIstDate } from "../communications/time";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
@@ -134,7 +135,7 @@ export default function AdminOrders() {
                         {o.delivery_mobile || o.customer?.mobile || "-"}
                       </div>
                     </td>
-                    <td>{new Date(o.created_at).toLocaleDateString()}</td>
+                    <td>{formatIstDate(o.created_at)}</td>
                     <td>&#8377;{o.total_amount}</td>
                     <td>
                       <span className={`badge ${statusBadgeClass(o.status)}`}>{o.status}</span>
@@ -192,7 +193,7 @@ export default function AdminOrders() {
                 </div>
                 <div className="admin-order-card-row">
                   <span className="label">Placed</span>
-                  <span className="value">{new Date(o.created_at).toLocaleDateString()}</span>
+                  <span className="value">{formatIstDate(o.created_at)}</span>
                 </div>
                 <div className="admin-order-card-row">
                   <span className="label">Total</span>

@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { Loading, Empty } from "../components/Loading";
 import Stars from "../components/Stars";
+import GoogleReviewButton from "../components/GoogleReviewButton";
+import { useSettings } from "../context/SettingsContext";
 import Avatar from "../components/Avatar";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 export default function Testimonials() {
+  const settings = useSettings();
   const [testimonials, setTestimonials] = useState(null);
   useDocumentTitle("Testimonials | Aaiji Nursery");
 
@@ -19,6 +22,11 @@ export default function Testimonials() {
         <div className="container">
           <h1>Testimonials</h1>
           <p>What our customers say about us.</p>
+          {settings.google_review_url && (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+              <GoogleReviewButton url={settings.google_review_url} label="Write a Review on Google" />
+            </div>
+          )}
         </div>
       </section>
 

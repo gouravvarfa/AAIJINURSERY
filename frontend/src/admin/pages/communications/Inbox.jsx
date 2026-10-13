@@ -10,9 +10,10 @@ function fmtTime(iso) {
   if (!iso) return "";
   const d = new Date(`${iso}Z`); // backend stores naive UTC
   const today = new Date();
-  return d.toDateString() === today.toDateString()
-    ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString([], { day: "numeric", month: "short" });
+  const ist = (x) => x.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
+  return ist(d) === ist(today)
+    ? d.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" });
 }
 
 export default function Inbox() {

@@ -25,6 +25,7 @@ from app.ai.gateway import router as ai_gateway_router
 from app.ai.admin_gateway import router as admin_ai_gateway_router
 from app.communications import models as communications_models  # noqa: F401 -- registers tables with Base.metadata
 from app.communications.control_router import router as messaging_control_router
+from app.communications.billing_router import router as messaging_billing_router
 from app.communications.router import router as communications_router
 from app.communications.inbox_router import router as communications_inbox_router
 from app.communications.webhook import router as whatsapp_webhook_router
@@ -505,6 +506,7 @@ app.include_router(api_admin_analytics.router, dependencies=[Depends(require_per
 app.include_router(api_admin_rbac.router)
 app.include_router(api_system_health.router)
 app.include_router(messaging_control_router)  # developer-only (checks inside)
+app.include_router(messaging_billing_router)  # developer-only (checks inside)
 app.include_router(accounting_router, dependencies=[Depends(require_permission("accounting", "VIEW"))])
 app.include_router(labour_router, dependencies=[Depends(require_permission("labour", "VIEW"))])
 app.include_router(delivery_router, dependencies=[Depends(require_permission("delivery", "VIEW"))])

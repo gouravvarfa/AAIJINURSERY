@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ORDERS_CHANGED_EVENT } from "../hooks/useOrderConfirmations";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
@@ -45,6 +46,14 @@ export default function OrderDetail() {
   useEffect(() => {
     if (session?.type === "customer") load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, id]);
+
+  // Quiet refresh when the background poll sees this customer's orders change.
+  useEffect(() => {
+    if (session?.type !== "customer") return undefined;
+    const refresh = () => api.get(`/customer/orders/${id}`).then(setOrder).catch(() => {});
+    window.addEventListener(ORDERS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(ORDERS_CHANGED_EVENT, refresh);
   }, [session, id]);
 
   if (session === undefined) return <Loading />;

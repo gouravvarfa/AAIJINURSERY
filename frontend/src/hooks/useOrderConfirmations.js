@@ -9,10 +9,15 @@ import { api } from "../api";
 // "Already seen" ids live in localStorage per customer. The first look after
 // login only records what is already confirmed (no popup for old orders);
 // after that, every order that turns CONFIRMED is shown exactly once, even if
-// the customer was away when it happened. Polling is light (every 20s while
+// the customer was away when it happened. Polling is light (every 8s while
 // the tab is visible) and silent on errors, and it reconciles by order id so
 // repeated or overlapping responses can't create duplicate popups.
-const POLL_MS = 20000;
+const POLL_MS = 8000;
+// Fired on window whenever any of the customer's orders changed status (or
+// confirmation / payment state) since the last look, so pages that show order
+// data (My Orders, Order Details) can refresh themselves without a reload.
+export const ORDERS_CHANGED_EVENT = "aaiji:orders-changed";
+const signatureOf = (orders) => orders.map((o) => `${o.id}:${o.status}:${o.team_confirmation_status}:${o.payment_status}`).join("|");
 const key = (customerId) => `aaiji_seen_confirmed_${customerId}`;
 
 function loadSeen(customerId) {
@@ -36,6 +41,7 @@ export default function useOrderConfirmations(customerId) {
   const [queue, setQueue] = useState([]); // orders waiting to be announced, oldest first
   const seenRef = useRef(null);
   const queuedRef = useRef(new Set());
+  const signatureRef = useRef(null);
 
   const check = useCallback(async () => {
     if (!customerId) return;
@@ -46,6 +52,11 @@ export default function useOrderConfirmations(customerId) {
       return; // offline / server hiccup: try again next time
     }
     if (!Array.isArray(orders)) return;
+    const signature = signatureOf(orders);
+    if (signatureRef.current !== null && signature !== signatureRef.current) {
+      window.dispatchEvent(new Event(ORDERS_CHANGED_EVENT));
+    }
+    signatureRef.current = signature;
     const confirmed = orders.filter((o) => o.team_confirmation_status === "CONFIRMED" && o.status !== "Cancelled");
 
     if (seenRef.current === null) {
@@ -70,6 +81,7 @@ export default function useOrderConfirmations(customerId) {
   useEffect(() => {
     seenRef.current = null;
     queuedRef.current = new Set();
+    signatureRef.current = null;
     setQueue([]);
     if (!customerId) return undefined;
     check();

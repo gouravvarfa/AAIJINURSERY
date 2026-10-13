@@ -34,7 +34,7 @@ export default function TraySelector({ plant, selectedVariantId, onSelect, quant
         <>
           <div className="tray-selector-label">Number of Trays</div>
           <div style={{ marginBottom: 10 }}>
-            <QuantityInput value={quantity} onChange={onQuantityChange} label="Number of trays" />
+            <QuantityInput value={quantity} onChange={onQuantityChange} label="Number of trays" directEntry />
           </div>
           <div className="tray-selector-total">
             Selected: <strong>{quantity} &times; {selected.tray_size} Plants</strong>

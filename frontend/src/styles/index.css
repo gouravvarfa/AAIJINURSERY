@@ -4566,3 +4566,24 @@ button.wishlist-btn.card-wishlist-btn.active {
 @media (prefers-reduced-motion: reduce) {
   .oc-overlay, .oc-modal { animation: none; }
 }
+
+/* Direct quantity entry beside the +/- control */
+.qty-with-direct { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 26px; }
+.qty-direct-label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--color-text-muted); margin-bottom: 6px; }
+.qty-direct-row { display: flex; gap: 8px; align-items: center; }
+.qty-direct-input {
+  width: 130px;
+  height: 40px;
+  padding: 0 12px;
+  font: inherit;
+  font-weight: 600;
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--color-primary);
+}
+.qty-direct-input:focus { outline: 2px solid var(--color-accent); outline-offset: 1px; border-color: var(--color-accent); }
+.qty-direct-set { height: 40px; }
+.qty-direct-error { margin-top: 6px; font-size: 0.82rem; color: #b3261e; }
+.qty-input { cursor: text; }
+.qty-input:hover:not(:disabled) { border-color: var(--color-accent); }

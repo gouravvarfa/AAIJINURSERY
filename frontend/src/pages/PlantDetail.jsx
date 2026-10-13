@@ -130,7 +130,7 @@ export default function PlantDetail() {
                     &#8377;{plant.effective_price}
                     {plant.discount_price ? <span className="strike">&#8377;{plant.price}</span> : null}
                   </div>
-                  <QuantityInput value={quantity} onChange={setQuantity} label="Quantity" />
+                  <QuantityInput value={quantity} onChange={setQuantity} label="Quantity" directEntry />
                   <div className="stock-note">{stockNote(plant.stock_quantity, quantity)}</div>
                 </div>
               )}

@@ -23,7 +23,7 @@ export default function SalesOrders() {
   const [q, setQ] = useState("");
   const [mode, setMode] = useState("list"); // list | form
   const [contacts, setContacts] = useState([]);
-  const [form, setForm] = useState({ contact_id: "", order_date: todayDateInput(), notes: "", items: [] });
+  const [form, setForm] = useState({ contact_id: "", order_date: todayDateInput(), delivery_date: "", notes: "", items: [] });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -87,6 +87,7 @@ export default function SalesOrders() {
         setForm({
           contact_id: order.contact_id,
           order_date: String(order.order_date).slice(0, 10),
+          delivery_date: order.delivery_date ? String(order.delivery_date).slice(0, 10) : "",
           notes: order.notes || "",
           items: order.items.map((i) => ({
             plant_id: i.plant_id || "",
@@ -111,7 +112,7 @@ export default function SalesOrders() {
 
   function startCreate() {
     setEditingOrder(null);
-    setForm({ contact_id: "", order_date: todayDateInput(), notes: "", items: [] });
+    setForm({ contact_id: "", order_date: todayDateInput(), delivery_date: "", notes: "", items: [] });
     setError("");
     api.get("/admin/accounting/contacts").then(setContacts);
     setMode("form");
@@ -133,6 +134,7 @@ export default function SalesOrders() {
       const body = {
         contact_id: Number(form.contact_id),
         order_date: form.order_date,
+        delivery_date: form.delivery_date || null,
         notes: form.notes,
         items: form.items.map((i) => ({
           plant_id: i.plant_id || null,
@@ -268,6 +270,17 @@ export default function SalesOrders() {
                 required
                 value={form.order_date}
                 onChange={(e) => setForm((f) => ({ ...f, order_date: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="delivery_date">Delivery Date (optional)</label>
+              <input
+                id="delivery_date"
+                type="date"
+                className="form-control"
+                min={form.order_date}
+                value={form.delivery_date}
+                onChange={(e) => setForm((f) => ({ ...f, delivery_date: e.target.value }))}
               />
             </div>
             <div className="form-group">

@@ -134,6 +134,7 @@ def create_sales_order(
         order_number="",  # set after flush once we have the id
         status="Draft",
         order_date=payload.order_date,
+        delivery_date=payload.delivery_date,
         notes=payload.notes,
         source="offline",
         created_by=admin,
@@ -185,6 +186,7 @@ def update_sales_order(
     subtotal = _add_lines(db, order, payload.items)
     order.contact_id = contact.id
     order.order_date = payload.order_date
+    order.delivery_date = payload.delivery_date
     order.notes = payload.notes
     order.subtotal = round(subtotal, 2)
     order.tax_total = 0.0

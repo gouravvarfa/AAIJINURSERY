@@ -58,6 +58,12 @@ export default function AdminOrderDetail() {
   const [updatingCallStatus, setUpdatingCallStatus] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [callError, setCallError] = useState("");
+  const [drivers, setDrivers] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [driverId, setDriverId] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
+  const [savingDriver, setSavingDriver] = useState(false);
+  const [driverMsg, setDriverMsg] = useState("");
 
   function load() {
     setOrder(null);
@@ -67,6 +73,8 @@ export default function AdminOrderDetail() {
       .then((data) => {
         setOrder(data);
         setSelectedStatus(data.status);
+        setDriverId(data.driver_id ? String(data.driver_id) : "");
+        setVehicleId(data.vehicle_id ? String(data.vehicle_id) : "");
         setFeasibility(data.delivery_feasibility === "PENDING" ? "" : data.delivery_feasibility);
         setDistanceKm(data.delivery_distance_km ?? "");
         setCostMode(data.delivery_cost_mode || "MANUAL");
@@ -86,7 +94,35 @@ export default function AdminOrderDetail() {
 
   useEffect(() => {
     api.get("/admin/admins").then(setAdmins).catch(() => {});
+    // Staff without Delivery access just don't get the driver picker.
+    api.get("/admin/delivery/drivers").then(setDrivers).catch(() => {});
+    api.get("/admin/delivery/vehicles").then(setVehicles).catch(() => {});
   }, []);
+
+  function pickDriver(value) {
+    setDriverId(value);
+    setDriverMsg("");
+    const d = drivers.find((x) => String(x.id) === value);
+    if (d && d.assigned_vehicle_id) setVehicleId(String(d.assigned_vehicle_id));
+    if (!value) setVehicleId("");
+  }
+
+  async function saveDriver() {
+    setSavingDriver(true);
+    setDriverMsg("");
+    try {
+      await api.put(`/admin/orders/${id}/driver`, {
+        driver_id: driverId ? Number(driverId) : null,
+        vehicle_id: vehicleId ? Number(vehicleId) : null,
+      });
+      setDriverMsg("Saved.");
+      load();
+    } catch (err) {
+      setDriverMsg(err.message || "Could not save the driver.");
+    } finally {
+      setSavingDriver(false);
+    }
+  }
 
   async function updateCallStatus(newStatus) {
     setUpdatingCallStatus(true);
@@ -546,6 +582,42 @@ export default function AdminOrderDetail() {
                 {order.payment_status}
               </span>
             </div>
+
+            {drivers.length > 0 && (
+              <div className="admin-form-card" style={{ maxWidth: "none", marginBottom: 20 }}>
+                <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Driver &amp; Vehicle</h2>
+                <div className="form-group">
+                  <label htmlFor="order-driver">Driver</label>
+                  <select id="order-driver" className="form-control" value={driverId} onChange={(e) => pickDriver(e.target.value)}>
+                    <option value="">No driver</option>
+                    {drivers.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}{d.phone ? ` - ${d.phone}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="order-vehicle">Vehicle</label>
+                  <select id="order-vehicle" className="form-control" value={vehicleId} disabled={!driverId} onChange={(e) => setVehicleId(e.target.value)}>
+                    <option value="">No vehicle</option>
+                    {vehicles.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name_model ? `${v.name_model} (${v.registration_number})` : v.registration_number}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button type="button" className="btn btn-primary btn-block" disabled={savingDriver} onClick={saveDriver}>
+                  {savingDriver ? "Saving..." : "Save driver"}
+                </button>
+                {driverMsg && <p style={{ margin: "10px 0 0", fontSize: "0.9rem" }}>{driverMsg}</p>}
+                <p style={{ margin: "10px 0 0", fontSize: "0.82rem", color: "var(--color-text-muted)" }}>
+                  When this order is marked <strong>Packed</strong> or <strong>Out For Delivery</strong>, the customer's WhatsApp
+                  includes the driver&apos;s name, phone number and vehicle. Set this before changing the status.
+                </p>
+              </div>
+            )}
 
             <div className="admin-form-card" style={{ maxWidth: "none" }}>
               <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Order Status Management</h2>

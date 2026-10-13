@@ -4,6 +4,7 @@ import { api } from "../../../api";
 import { Loading } from "../../../components/Loading";
 import { salesOrderBadgeClass, sourceBadgeClass } from "../../accounting/accountingStatus";
 import AuditTrail from "../../accounting/AuditTrail";
+import DeliveryPanel from "../../accounting/DeliveryPanel";
 
 export default function SalesOrderDetail() {
   const { id } = useParams();
@@ -118,6 +119,14 @@ export default function SalesOrderDetail() {
             <p style={{ margin: 0 }}>{order.contact?.name}</p>
             <p style={{ margin: 0, color: "var(--color-text-muted)" }}>{order.contact?.email}</p>
             <p style={{ margin: 0, color: "var(--color-text-muted)" }}>{order.contact?.phone}</p>
+            <p style={{ margin: "10px 0 0" }}>
+              Delivery date:{" "}
+              <strong>
+                {order.delivery_date
+                  ? new Date(order.delivery_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                  : "not set"}
+              </strong>
+            </p>
           </div>
 
           <div className="admin-form-card" style={{ maxWidth: "none", marginBottom: 20 }}>
@@ -142,6 +151,8 @@ export default function SalesOrderDetail() {
               <p style={{ color: "var(--color-text-muted)", margin: 0 }}>No invoice yet.</p>
             )}
           </div>
+
+          {order.source === "offline" && <DeliveryPanel salesOrder={order} />}
 
           {canConvert && (
             <div className="admin-form-card" style={{ maxWidth: "none" }}>

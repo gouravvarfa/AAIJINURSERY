@@ -126,6 +126,50 @@ def send_whatsapp_admin_alert(message: str) -> None:
         record_error("External APIs", "WhatsApp", "send_whatsapp_admin_alert", "external:whatsapp", "EXTERNAL", 502, None, exc)
 
 
+# Statuses whose customer message also names the driver, and the approved
+# templates that carry the driver details. If no driver is set on the order,
+# or the template is not ACTIVE yet, the normal status template is sent.
+DRIVER_TEMPLATES = {
+    "Packed": "order_packed_driver",
+    "Out For Delivery": "out_for_delivery_driver",
+}
+
+
+def _driver_mobile(phone: str) -> str:
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    return f"+91{digits[-10:]}" if len(digits) >= 10 else (phone or "")
+
+
+def _queue_order_with_driver(order, event_type: str, new_status: str) -> bool:
+    """Sends the driver-detail version of a status message. Returns False when
+    it does not apply (no driver, no phone, other status, template not active),
+    so the caller falls back to the standard message -- never both."""
+    template_name = DRIVER_TEMPLATES.get(new_status)
+    driver = getattr(order, "driver", None)
+    if not template_name or not driver or not (driver.phone or "").strip():
+        return False
+    mobile, name = _order_contact(order)
+    if not mobile:
+        return False
+    from app.communications.models import WhatsAppTemplate
+    from app.communications.service import queue_message
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        tpl = db.query(WhatsAppTemplate).filter(WhatsAppTemplate.name == template_name).first()
+        if not tpl or tpl.status != "ACTIVE" or not tpl.is_active:
+            return False
+    finally:
+        db.close()
+    queue_message(
+        event_type=event_type, mobile=mobile, customer_name=name, template_name=template_name,
+        template_params=[name, f"ORD-{order.id}", driver.name, _driver_mobile(driver.phone), order.vehicle_label or "N/A"],
+        source_module="orders", source_id=order.id, customer_id=order.customer_id,
+    )
+    return True
+
+
 def notify_order_status(order, old_status: str | None, new_status: str) -> None:
     message = f"Your order #{order.id} has been {new_status}."
     customer_email = order.customer.email if order.customer else None
@@ -138,7 +182,8 @@ def notify_order_status(order, old_status: str | None, new_status: str) -> None:
     # centrally (never here) -- an event with no active/approved template
     # simply gets logged as such, it never raises.
     event_type = STATUS_TO_EVENT.get(new_status, f"ORDER_{new_status.upper().replace(' ', '_')}")
-    _queue_order_event(order, event_type, [_order_contact(order)[1], f"ORD-{order.id}", f"Rs.{order.total_amount}"])
+    if not _queue_order_with_driver(order, event_type, new_status):
+        _queue_order_event(order, event_type, [_order_contact(order)[1], f"ORD-{order.id}", f"Rs.{order.total_amount}"])
 
     # Separate, additive event -- never replaces the standard ORDER_DELIVERED
     # notification above. Its own event_type gives it its own idempotency key

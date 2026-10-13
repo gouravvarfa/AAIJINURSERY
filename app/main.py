@@ -147,6 +147,12 @@ with engine.connect() as conn:
     if "razorpay_payment_id" not in order_columns:
         conn.execute(text("ALTER TABLE orders ADD COLUMN razorpay_payment_id VARCHAR(100)"))
         conn.commit()
+    if "driver_id" not in order_columns:
+        conn.execute(text("ALTER TABLE orders ADD COLUMN driver_id INTEGER REFERENCES delivery_drivers(id)"))
+        conn.commit()
+    if "vehicle_id" not in order_columns:
+        conn.execute(text("ALTER TABLE orders ADD COLUMN vehicle_id INTEGER REFERENCES delivery_vehicles(id)"))
+        conn.commit()
     if "razorpay_signature" not in order_columns:
         conn.execute(text("ALTER TABLE orders ADD COLUMN razorpay_signature VARCHAR(255)"))
         conn.commit()
@@ -327,6 +333,11 @@ with engine.connect() as conn:
         conn.commit()
     if "tray_size" not in sales_order_item_columns:
         conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN tray_size INTEGER"))
+        conn.commit()
+
+    sales_order_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_sales_orders)"))}
+    if "delivery_date" not in sales_order_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_orders ADD COLUMN delivery_date DATETIME"))
         conn.commit()
 
     # Same tray-size support, for Purchase Order lines.

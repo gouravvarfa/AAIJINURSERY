@@ -651,11 +651,33 @@ class Order(Base):
     delivered_at = Column(DateTime, nullable=True)
     notes = Column(Text, default="")
 
+    # Who is delivering this order (set by the team from the order page). Only
+    # used so the Packed / Out For Delivery WhatsApp can name the driver.
+    driver_id = Column(Integer, ForeignKey("delivery_drivers.id"), nullable=True)
+    vehicle_id = Column(Integer, ForeignKey("delivery_vehicles.id"), nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     customer = relationship("Customer")
+    driver = relationship("Driver", foreign_keys=[driver_id])
+    vehicle = relationship("Vehicle", foreign_keys=[vehicle_id])
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+    @property
+    def driver_name(self) -> str:
+        return self.driver.name if self.driver else ""
+
+    @property
+    def driver_phone(self) -> str:
+        return self.driver.phone if self.driver else ""
+
+    @property
+    def vehicle_label(self) -> str:
+        v = self.vehicle
+        if not v:
+            return ""
+        return f"{v.name_model} ({v.registration_number})" if v.name_model else v.registration_number
     history = relationship(
         "OrderStatusHistory",
         back_populates="order",

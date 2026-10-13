@@ -108,6 +108,8 @@ class SalesOrder(Base):
     order_number = Column(String(40), default="")
     status = Column(String(20), nullable=False, default="Draft", index=True)
     order_date = Column(DateTime, default=datetime.utcnow, index=True)
+    # When this order is planned to be delivered (optional).
+    delivery_date = Column(DateTime, nullable=True)
     subtotal = Column(Float, default=0)
     tax_total = Column(Float, default=0)
     total_amount = Column(Float, default=0)

@@ -82,6 +82,7 @@ from app.schemas import (
     OrderAdminUpdateIn,
     OrderAssignIn,
     OrderCallStatusIn,
+    OrderDriverIn,
     OrderCancelIn,
     OrderConfirmIn,
     OrderDeliveryReviewIn,
@@ -1243,6 +1244,10 @@ def update_order_status(
     if status_changed:
         log_activity(db, admin, "order_status_update", f"Order #{order.id}: {old_status} -> {order.status}")
         notify_order_status(order, old_status, order.status)
+        from app.delivery.order_sync import sync_delivery_from_order
+
+        sync_delivery_from_order(order.id, order.status, admin)
+        order = _get_order_or_404(db, order_id)
     return order
 
 
@@ -1333,6 +1338,38 @@ def assign_order(
     order.assigned_to = target
     db.commit()
     log_activity(db, admin, "order_assigned", f"Order #{order.id} -> {target or 'Unassigned'}")
+    return _get_order_or_404(db, order_id)
+
+
+@router.put(
+    "/orders/{order_id}/driver",
+    dependencies=[Depends(require_permission("orders", "EDIT"))],
+    response_model=OrderAdminOut,
+)
+def set_order_driver(
+    order_id: int,
+    payload: OrderDriverIn,
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from app.delivery.models import Driver, Vehicle
+
+    order = _get_order_or_404(db, order_id)
+    driver = db.query(Driver).filter(Driver.id == payload.driver_id).first() if payload.driver_id else None
+    vehicle = db.query(Vehicle).filter(Vehicle.id == payload.vehicle_id).first() if payload.vehicle_id else None
+    if payload.driver_id and not driver:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    if payload.vehicle_id and not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    if vehicle and not driver:
+        raise HTTPException(status_code=400, detail="Choose a driver along with the vehicle")
+    order.driver_id = driver.id if driver else None
+    order.vehicle_id = vehicle.id if vehicle else None
+    db.commit()
+    log_activity(db, admin, "order_driver", f"Order #{order.id}: driver {driver.name if driver else 'removed'}")
+    from app.delivery.order_sync import sync_delivery_driver
+
+    sync_delivery_driver(order.id, admin)
     return _get_order_or_404(db, order_id)
 
 

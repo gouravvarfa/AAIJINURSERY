@@ -119,6 +119,7 @@ class SalesOrderItemIn(BaseModel):
 class SalesOrderIn(BaseModel):
     contact_id: int
     order_date: datetime
+    delivery_date: Optional[datetime] = None
     notes: str = ""
     items: List[SalesOrderItemIn]
 
@@ -139,6 +140,7 @@ class SalesOrderOut(BaseModel):
     order_number: str
     status: str
     order_date: datetime
+    delivery_date: Optional[datetime] = None
     subtotal: float
     tax_total: float
     total_amount: float

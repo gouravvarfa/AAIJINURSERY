@@ -683,6 +683,16 @@ class OrderAdminOut(OrderOut):
     order_acknowledged: bool = False
     acknowledged_by: str = ""
     acknowledged_at: Optional[datetime] = None
+    driver_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
+    driver_name: str = ""
+    driver_phone: str = ""
+    vehicle_label: str = ""
+
+
+class OrderDriverIn(BaseModel):
+    driver_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
 
 
 class OrderCallStatusIn(BaseModel):

@@ -158,7 +158,7 @@ def _queue_order_with_driver(order, event_type: str, new_status: str) -> bool:
     db = SessionLocal()
     try:
         tpl = db.query(WhatsAppTemplate).filter(WhatsAppTemplate.name == template_name).first()
-        if not tpl or tpl.status != "ACTIVE" or not tpl.is_active:
+        if not tpl or tpl.status != "ACTIVE":
             return False
     finally:
         db.close()

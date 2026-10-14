@@ -56,6 +56,7 @@ import AdminMessagingControl from "./admin/pages/developer/MessagingControl";
 import AdminChatbotControl from "./admin/pages/developer/AdminChatbotControl";
 import AdminMessagingBilling from "./admin/pages/developer/MessagingBilling";
 import AdminStockDemand from "./admin/pages/StockDemand";
+import AdminStockOrders from "./admin/pages/StockOrders";
 import AdminSessions from "./admin/pages/Sessions";
 import AdminLoginAttempts from "./admin/pages/LoginAttempts";
 import AdminRolesPermissions from "./admin/pages/RolesPermissions";
@@ -186,6 +187,7 @@ export default function App() {
           <Route path="developer/admin-chatbot" element={<AdminChatbotControl />} />
           <Route path="developer/messaging-bill" element={<AdminMessagingBilling />} />
           <Route path="stock-demand" element={<AdminStockDemand />} />
+          <Route path="stock-orders" element={<AdminStockOrders />} />
           <Route path="developer/sessions" element={<AdminSessions />} />
           <Route path="developer/login-attempts" element={<AdminLoginAttempts />} />
           <Route path="developer/roles-permissions" element={<AdminRolesPermissions />} />

@@ -29,6 +29,7 @@ from app.database import get_db
 from app.deps import get_current_admin
 from app.inventory import allocate_stock, restore_stock
 from app.models import InventoryTransaction
+from app.stock_orders import queue_stock_team_new_order
 
 router = APIRouter(tags=["accounting-sales"])
 
@@ -185,6 +186,7 @@ def create_sales_order(
     record_change(db, "accounting_sales_orders", order.id, "create", changed_by=admin)
     db.commit()
     queue_sales_order_created(order)
+    queue_stock_team_new_order(order, db)
     return get_sales_order(order.id, admin, db)
 
 

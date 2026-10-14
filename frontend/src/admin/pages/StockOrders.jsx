@@ -14,7 +14,7 @@ export default function StockOrders() {
   const canEdit = hasPermission("inventory", "EDIT");
   const [data, setData] = useState(null);
   const [q, setQ] = useState("");
-  const [onlyPending, setOnlyPending] = useState(true);
+  const [onlyPending, setOnlyPending] = useState(false);
   const [error, setError] = useState("");
   const [drafts, setDrafts] = useState({}); // line_id -> typed prepare quantity
   const [busy, setBusy] = useState(null);
@@ -109,7 +109,7 @@ export default function StockOrders() {
           />
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} />
-            Only lines still needing plants
+            Hide lines already fully given
           </label>
           <button type="button" className="btn btn-outline dark" onClick={load}>Refresh</button>
         </div>
@@ -133,7 +133,7 @@ export default function StockOrders() {
           </div>
 
           {data.items.length === 0 ? (
-            <Empty>{onlyPending ? "No order is waiting for plants right now." : "No open orders."}</Empty>
+            <Empty>{onlyPending ? "No order is waiting for plants right now. Untick the filter to see every open order." : "No open orders."}</Empty>
           ) : (
             <div className="admin-table-wrap">
               <table className="admin-table">
@@ -164,16 +164,19 @@ export default function StockOrders() {
                           {r.order_notes && <div style={{ color: "var(--color-text-muted)", fontSize: "0.78rem" }}>{r.order_notes}</div>}
                         </td>
                         <td>{r.order_number}</td>
-                        <td>{r.product}</td>
-                        <td>{n(r.quantity)} {r.unit}</td>
-                        <td>{n(r.allocated)}</td>
-                        <td>{n(r.pending)}</td>
                         <td>
-                          {n(r.available_stock)}
+                          {r.product}
+                          {!r.has_plant && <div style={{ color: "var(--color-text-muted)", fontSize: "0.78rem" }}>No plant linked to this line</div>}
+                        </td>
+                        <td>{r.has_plant ? `${n(r.quantity)} ${r.unit}` : n(r.quantity)}</td>
+                        <td>{r.has_plant ? n(r.allocated) : "-"}</td>
+                        <td>{r.has_plant ? n(r.pending) : "-"}</td>
+                        <td>
+                          {r.has_plant ? n(r.available_stock) : "-"}
                           {r.shortage > 0 && <span className="dl-pill dl-red" style={{ marginLeft: 6 }}><span className="dl-label">short {n(r.shortage)}</span></span>}
                         </td>
                         <td>
-                          {canEdit && r.pending > 0 ? (
+                          {canEdit && r.has_plant && r.pending > 0 ? (
                             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                               <input
                                 type="number"
@@ -202,7 +205,9 @@ export default function StockOrders() {
                         <td>{fmtDate(r.delivery_date)}</td>
                         {canEdit && (
                           <td>
-                            {r.pending > 0 ? (
+                            {!r.has_plant ? (
+                              "-"
+                            ) : r.pending > 0 ? (
                               <button type="button" className="btn btn-sm btn-outline dark" onClick={() => openReady(r)}>
                                 Mark ready
                               </button>

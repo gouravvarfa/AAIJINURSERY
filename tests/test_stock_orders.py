@@ -112,3 +112,35 @@ def test_alert_numbers_and_new_order_alert_never_blocks_saving(client):
 
     assert client.delete(f"{S}/alert-recipients/{r.json()['id']}").status_code == 200
     assert not any(x["id"] == r.json()["id"] for x in client.get(f"{S}/alert-recipients").json())
+
+
+def test_free_text_line_and_invoiced_order_still_show_for_stock_team(client):
+    _login(client)
+    plant = _plant(client, 50)
+    contact = client.post(f"{A}/contacts", json={"name": "Free Text Party", "phone": "9000000088"}).json()
+    r = client.post(f"{A}/sales-orders", json={
+        "contact_id": contact["id"], "order_date": "2026-10-14T00:00:00",
+        "items": [
+            {"description": "10 tray tomato (typed, no plant picked)", "quantity": 10, "unit_price": 5},
+            {"plant_id": plant["id"], "description": "linked", "quantity": 5, "unit_price": 5},
+        ],
+    })
+    assert r.status_code == 201, r.text
+    order_id = r.json()["id"]
+
+    rows = [x for x in client.get(S).json()["items"] if x["sales_order_id"] == order_id]
+    assert sorted(x["has_plant"] for x in rows) == [False, True]
+    free = next(x for x in rows if not x["has_plant"])
+    assert free["customer_name"] == "Free Text Party" and free["quantity"] == 10 and free["available_stock"] is None
+    # No stock actions are possible on a line with no plant.
+    assert client.put(f"{S}/lines/{free['line_id']}/prepare", json={"prepare_quantity": 5}).status_code == 404
+
+    # Invoicing gives the in-stock line from stock (nothing pending) -- it must still be listed.
+    assert client.post(f"{A}/sales-orders/{order_id}/convert-to-invoice", json={"due_date": "2026-10-30T00:00:00"}).status_code == 200
+    rows = [x for x in client.get(S).json()["items"] if x["sales_order_id"] == order_id]
+    assert len(rows) == 2
+    linked = next(x for x in rows if x["has_plant"])
+    assert linked["pending"] == 0
+    # The optional "hide fully given" filter drops it again.
+    hidden = [x for x in client.get(f"{S}?only_pending=true").json()["items"] if x["line_id"] == linked["line_id"]]
+    assert hidden == []

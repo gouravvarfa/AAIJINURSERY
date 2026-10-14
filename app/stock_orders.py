@@ -33,7 +33,7 @@ from app.communications.phone import normalize_mobile
 from app.database import Base, get_db
 from app.deps import get_current_admin
 from app.inventory import MAX_ORDER_QUANTITY, allocate_stock, restore_stock
-from app.inventory_router import _open_offline_lines
+from app.inventory_router import OPEN_SO_STATUSES, _delivery_done, _open_offline_lines
 from app.models import Plant, PlantVariant
 from app.permissions import require_permission
 
@@ -138,11 +138,27 @@ def remove_recipient(recipient_id: int, db: Session = Depends(get_db)):
 
 # ---------- Order lines ----------
 
+def _all_open_offline_lines(db: Session):
+    """Every open offline Sales Order line, including free-text lines that are not
+    linked to a plant -- the stock team must see the whole order, even where there
+    is no stock to track."""
+    return (
+        db.query(SalesOrderItem)
+        .join(SalesOrder, SalesOrder.id == SalesOrderItem.sales_order_id)
+        .filter(
+            SalesOrder.source == "offline",
+            SalesOrder.status.in_(OPEN_SO_STATUSES),
+            ~_delivery_done(SalesOrder.id),
+        )
+    )
+
+
 def _line_row(line: SalesOrderItem, available: int) -> dict:
     order = line.sales_order
     is_tray = bool(line.variant_id)
     name = (line.plant.name if line.plant else line.description) or "Item"
     return {
+        "has_plant": bool(line.plant_id),
         "line_id": line.id,
         "sales_order_id": order.id,
         "order_number": order.order_number,
@@ -170,7 +186,7 @@ def list_stock_orders(
     db: Session = Depends(get_db),
 ):
     lines = (
-        _open_offline_lines(db)
+        _all_open_offline_lines(db)
         .options(joinedload(SalesOrderItem.sales_order).joinedload(SalesOrder.contact), joinedload(SalesOrderItem.plant))
         .order_by(SalesOrder.delivery_date.is_(None), SalesOrder.delivery_date, SalesOrder.id.desc(), SalesOrderItem.id)
         .all()
@@ -183,6 +199,10 @@ def list_stock_orders(
     for line in lines:
         available = variant_stock.get(line.variant_id, 0) if line.variant_id else plant_stock.get(line.plant_id, 0)
         row = _line_row(line, available)
+        if not row["has_plant"]:
+            # No product linked, so there is no stock to compare against or give from.
+            row["available_stock"] = None
+            row["shortage"] = 0
         if only_pending and row["pending"] <= 0:
             continue
         if needle and needle not in f'{row["customer_name"]} {row["order_number"]} {row["product"]}'.lower():
@@ -192,7 +212,7 @@ def list_stock_orders(
         "items": rows,
         "totals": {
             "lines": len(rows),
-            "pending": sum(r["pending"] for r in rows),
+            "pending": sum(r["pending"] for r in rows if r["has_plant"]),
             "shortage": sum(r["shortage"] for r in rows),
         },
     }

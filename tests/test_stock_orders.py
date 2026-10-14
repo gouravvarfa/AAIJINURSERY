@@ -144,3 +144,19 @@ def test_free_text_line_and_invoiced_order_still_show_for_stock_team(client):
     # The optional "hide fully given" filter drops it again.
     hidden = [x for x in client.get(f"{S}?only_pending=true").json()["items"] if x["line_id"] == linked["line_id"]]
     assert hidden == []
+
+
+def test_newest_order_is_listed_first_whatever_its_delivery_date(client):
+    _login(client)
+    plant = _plant(client, 10)
+    contact = client.post(f"{A}/contacts", json={"name": "Order Sort Party", "phone": "9000000099"}).json()
+    ids = []
+    for delivery in ("2026-10-20T00:00:00", None, "2233-03-22T00:00:00"):
+        r = client.post(f"{A}/sales-orders", json={
+            "contact_id": contact["id"], "order_date": "2026-10-14T00:00:00", "delivery_date": delivery,
+            "items": [{"plant_id": plant["id"], "description": "x", "quantity": 1, "unit_price": 1}],
+        })
+        assert r.status_code == 201, r.text
+        ids.append(r.json()["id"])
+    listed = [x["sales_order_id"] for x in client.get(S).json()["items"] if x["sales_order_id"] in ids]
+    assert listed == sorted(ids, reverse=True)

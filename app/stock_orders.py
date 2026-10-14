@@ -188,7 +188,7 @@ def list_stock_orders(
     lines = (
         _all_open_offline_lines(db)
         .options(joinedload(SalesOrderItem.sales_order).joinedload(SalesOrder.contact), joinedload(SalesOrderItem.plant))
-        .order_by(SalesOrder.delivery_date.is_(None), SalesOrder.delivery_date, SalesOrder.id.desc(), SalesOrderItem.id)
+        .order_by(SalesOrder.id.desc(), SalesOrderItem.id)
         .all()
     )
     plant_stock = {p.id: p.stock_quantity or 0 for p in db.query(Plant.id, Plant.stock_quantity).all()}

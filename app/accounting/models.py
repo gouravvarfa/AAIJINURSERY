@@ -151,6 +151,12 @@ class SalesOrderItem(Base):
     allocated_quantity = Column(Integer, nullable=True)
     # Admin decision for the pending part: True = the nursery will prepare it.
     to_prepare = Column(Boolean, nullable=False, default=False)
+    # Stock team's internal nursery target for this line (may be more than what
+    # is pending, to cover plants lost while growing) and how many good plants
+    # have been recorded as ready so far. Never touches price or the customer's
+    # quantity.
+    prepare_quantity = Column(Integer, nullable=True)
+    prepared_quantity = Column(Integer, nullable=True)
 
     @property
     def allocated(self) -> int:

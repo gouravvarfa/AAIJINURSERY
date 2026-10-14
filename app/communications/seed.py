@@ -34,6 +34,7 @@ DEFAULT_EVENT_SETTINGS = [
     ("DELIVERY_ASSIGNED_TO_DRIVER", "Delivery Assigned to Driver"),
     ("TRIP_ASSIGNED_TO_DRIVER", "Trip Assigned to Driver"),
     ("GOOGLE_REVIEW_REQUEST", "Google Review Request"),
+    ("SALES_ORDER_STOCK_ALERT", "New Sales Order (Stock Team Alert)"),
 ]
 
 # THE central event -> template map (never hardcoded per module). Every
@@ -66,6 +67,7 @@ DEFAULT_EVENT_TEMPLATE_MAP = [
     ("DELIVERY_ASSIGNED_TO_DRIVER", "delivery_assigned_to_driver"),
     ("TRIP_ASSIGNED_TO_DRIVER", "trip_assigned_to_driver"),
     ("GOOGLE_REVIEW_REQUEST", "google_review_request"),
+    ("SALES_ORDER_STOCK_ALERT", "stock_new_sales_order"),
 ]
 
 # The 7 core templates use the exact copy specified in the WhatsApp
@@ -217,6 +219,11 @@ DEFAULT_TEMPLATES = [
         "name": "google_review_request", "category": "orders",
         "preview": "Hello {{customer_name}}, thank you for shopping with AAIJI Nursery!\nWe hope you are happy with your plants and your overall experience.\nPlease share your honest experience with us on Google: {{review_url}}",
         "variables": ["customer_name", "review_url"],
+    },
+    {
+        "name": "stock_new_sales_order", "category": "stock",
+        "preview": "New order {{order_number}} from {{customer_name}}.\nItems: {{items}}\nPlease open your Stock panel to check stock and plan what to prepare.",
+        "variables": ["customer_name", "order_number", "items"],
     },
 ]
 

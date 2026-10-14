@@ -29,6 +29,7 @@ from app.communications import models as communications_models  # noqa: F401 -- 
 from app.communications.control_router import router as messaging_control_router
 from app.communications.billing_router import router as messaging_billing_router
 from app.inventory_router import router as inventory_demand_router
+from app.stock_orders import router as stock_orders_router
 from app.communications.router import router as communications_router
 from app.communications.inbox_router import router as communications_inbox_router
 from app.communications.webhook import router as whatsapp_webhook_router
@@ -368,6 +369,14 @@ with engine.connect() as conn:
         conn.execute(text("UPDATE accounting_sales_order_items SET allocated_quantity = 0 WHERE allocated_quantity IS NULL"))
         conn.commit()
 
+    # Stock team's "how many to grow" target and "how many came out good" count.
+    if "prepare_quantity" not in so_item_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN prepare_quantity INTEGER"))
+        conn.commit()
+    if "prepared_quantity" not in so_item_columns:
+        conn.execute(text("ALTER TABLE accounting_sales_order_items ADD COLUMN prepared_quantity INTEGER"))
+        conn.commit()
+
     # Same tray-size support, for Purchase Order lines.
     purchase_order_item_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(accounting_purchase_order_items)"))}
     if "variant_id" not in purchase_order_item_columns:
@@ -547,6 +556,7 @@ app.include_router(api_system_health.router)
 app.include_router(messaging_control_router)  # developer-only (checks inside)
 app.include_router(messaging_billing_router)  # developer-only (checks inside)
 app.include_router(inventory_demand_router)  # stock vs demand + per-line stock/prepare decision (permissions checked inside)
+app.include_router(stock_orders_router)  # stock team's order list + prepare/ready (permissions checked inside)
 app.include_router(accounting_router, dependencies=[Depends(require_permission("accounting", "VIEW"))])
 app.include_router(labour_router, dependencies=[Depends(require_permission("labour", "VIEW"))])
 app.include_router(delivery_router, dependencies=[Depends(require_permission("delivery", "VIEW"))])

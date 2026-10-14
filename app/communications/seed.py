@@ -131,7 +131,7 @@ DEFAULT_TEMPLATES = [
     },
     {
         "name": "admin_new_order", "category": "orders",
-        "preview": "New website order {{order_number}} received. Customer: {{customer_name}}. Items: {{items}}. Total: {{amount}}. Placed: {{order_time}}. Status: {{status}}.",
+        "preview": "New order received on the Shree Aaiji nursery website. Order number: {{order_number}}. Customer name: {{customer_name}}. Ordered plants: {{items}}. Total order amount: {{amount}}. Order placed on: {{order_time}}. Current status: {{status}}. Please review this order and call the customer to confirm delivery.",
         "variables": ["order_number", "customer_name", "items", "amount", "order_time", "status"],
     },
     {

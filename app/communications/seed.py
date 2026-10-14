@@ -34,6 +34,9 @@ DEFAULT_EVENT_SETTINGS = [
     ("DELIVERY_ASSIGNED_TO_DRIVER", "Delivery Assigned to Driver"),
     ("TRIP_ASSIGNED_TO_DRIVER", "Trip Assigned to Driver"),
     ("GOOGLE_REVIEW_REQUEST", "Google Review Request"),
+    ("ADMIN_NEW_ORDER", "New Order Alert (to admin)"),
+    ("ORDER_PREPARING", "Order Being Prepared"),
+    ("ORDER_DELIVERY_DATE", "Delivery Date Set"),
 ]
 
 # THE central event -> template map (never hardcoded per module). Every
@@ -66,6 +69,9 @@ DEFAULT_EVENT_TEMPLATE_MAP = [
     ("DELIVERY_ASSIGNED_TO_DRIVER", "delivery_assigned_to_driver"),
     ("TRIP_ASSIGNED_TO_DRIVER", "trip_assigned_to_driver"),
     ("GOOGLE_REVIEW_REQUEST", "google_review_request"),
+    ("ADMIN_NEW_ORDER", "admin_new_order"),
+    ("ORDER_PREPARING", "order_preparing"),
+    ("ORDER_DELIVERY_DATE", "order_delivery_date"),
 ]
 
 # The 7 core templates use the exact copy specified in the WhatsApp
@@ -122,6 +128,21 @@ DEFAULT_TEMPLATES = [
         "name": "invoice_created", "category": "accounting",
         "preview": "Hello {{customer_name}}, your invoice {{invoice_number}} has been generated. Amount: {{amount}}. Due Date: {{due_date}}.",
         "variables": ["customer_name", "invoice_number", "amount", "due_date"],
+    },
+    {
+        "name": "admin_new_order", "category": "orders",
+        "preview": "New website order {{order_number}} received. Customer: {{customer_name}}. Items: {{items}}. Total: {{amount}}. Placed: {{order_time}}. Status: {{status}}.",
+        "variables": ["order_number", "customer_name", "items", "amount", "order_time", "status"],
+    },
+    {
+        "name": "order_preparing", "category": "orders",
+        "preview": "Hello {{customer_name}}, we are preparing your order {{order_number}}. We will confirm the delivery date shortly.\nThank you.",
+        "variables": ["customer_name", "order_number"],
+    },
+    {
+        "name": "order_delivery_date", "category": "orders",
+        "preview": "Hello {{customer_name}}, the delivery date for your order {{order_number}} is {{delivery_date}}.\nThank you.",
+        "variables": ["customer_name", "order_number", "delivery_date"],
     },
     {
         "name": "order_packed_driver", "category": "orders",

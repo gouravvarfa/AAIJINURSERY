@@ -29,7 +29,9 @@ from app.models import (
     WishlistItem,
 )
 from app.notifications import (
+    notify_admin_new_order,
     notify_order_awaiting_confirmation,
+    notify_welcome_customer,
     notify_order_cancelled,
     notify_order_status,
     notify_payment_received,
@@ -121,6 +123,7 @@ def register(payload: CustomerRegisterIn, request: Request, db: Session = Depend
     request.session["customer_id"] = customer.id
     db.add(CustomerActivityLog(customer_id=customer.id, action="register"))
     db.commit()
+    notify_welcome_customer(customer)
     return customer
 
 
@@ -616,6 +619,7 @@ def checkout(
 
     order = get_or_404_order(db, order.id, customer_id)
     notify_order_awaiting_confirmation(order)
+    notify_admin_new_order(order)  # once per genuinely new order; the idempotency-key early return above never reaches here
     # New Order Alert (real-time admin dashboard): fires exactly once per
     # genuinely new order -- the idempotency_key short-circuit above
     # returns early for a retried submit before this line is ever reached.

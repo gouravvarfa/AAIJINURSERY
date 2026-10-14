@@ -65,6 +65,9 @@ export default function AdminOrderDetail() {
   const [vehicleId, setVehicleId] = useState("");
   const [savingDriver, setSavingDriver] = useState(false);
   const [driverMsg, setDriverMsg] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [savingDate, setSavingDate] = useState(false);
+  const [dateMsg, setDateMsg] = useState("");
 
   function load() {
     setOrder(null);
@@ -74,6 +77,7 @@ export default function AdminOrderDetail() {
       .then((data) => {
         setOrder(data);
         setSelectedStatus(data.status);
+        setDeliveryDate(data.expected_delivery_date ? String(data.expected_delivery_date).slice(0, 10) : "");
         setDriverId(data.driver_id ? String(data.driver_id) : "");
         setVehicleId(data.vehicle_id ? String(data.vehicle_id) : "");
         setFeasibility(data.delivery_feasibility === "PENDING" ? "" : data.delivery_feasibility);
@@ -99,6 +103,21 @@ export default function AdminOrderDetail() {
     api.get("/admin/delivery/drivers").then(setDrivers).catch(() => {});
     api.get("/admin/delivery/vehicles").then(setVehicles).catch(() => {});
   }, []);
+
+  async function saveDeliveryDate() {
+    if (!deliveryDate) return;
+    setSavingDate(true);
+    setDateMsg("");
+    try {
+      await api.put(`/admin/orders/${id}/status`, { expected_delivery_date: `${deliveryDate}T00:00:00` });
+      setDateMsg("Saved. The customer is told the delivery date on WhatsApp.");
+      load();
+    } catch (err) {
+      setDateMsg(err.message || "Could not save the delivery date.");
+    } finally {
+      setSavingDate(false);
+    }
+  }
 
   function pickDriver(value) {
     setDriverId(value);
@@ -582,6 +601,18 @@ export default function AdminOrderDetail() {
               <span className={`badge ${paymentBadgeClass(order.payment_status)}`}>
                 {order.payment_status}
               </span>
+            </div>
+
+            <div className="admin-form-card" style={{ maxWidth: "none", marginBottom: 20 }}>
+              <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Delivery Date</h2>
+              <div className="form-group">
+                <label htmlFor="order-delivery-date">When will this order be delivered?</label>
+                <input id="order-delivery-date" type="date" className="form-control" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
+              </div>
+              <button type="button" className="btn btn-primary btn-block" disabled={savingDate || !deliveryDate || order.status === "Cancelled"} onClick={saveDeliveryDate}>
+                {savingDate ? "Saving..." : "Save delivery date"}
+              </button>
+              {dateMsg && <p style={{ margin: "10px 0 0", fontSize: "0.9rem" }}>{dateMsg}</p>}
             </div>
 
             <FulfilmentPanel

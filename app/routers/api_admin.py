@@ -1198,6 +1198,7 @@ def update_order_status(
     order = _get_order_or_404(db, order_id)
     old_status = order.status
     status_changed = False
+    old_delivery_date = order.expected_delivery_date
 
     if payload.status is not None and payload.status != order.status:
         # Feature 2: an order can't progress past its initial "Pending"
@@ -1248,6 +1249,10 @@ def update_order_status(
 
         sync_delivery_from_order(order.id, order.status, admin)
         order = _get_order_or_404(db, order_id)
+    if order.expected_delivery_date and (not old_delivery_date or old_delivery_date.date() != order.expected_delivery_date.date()):
+        from app.notifications import notify_order_delivery_date
+
+        notify_order_delivery_date(order)
     return order
 
 

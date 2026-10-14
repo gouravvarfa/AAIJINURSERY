@@ -219,6 +219,7 @@ def update_sales_order(
     subtotal = _add_lines(db, order, payload.items)
     order.contact_id = contact.id
     order.order_date = payload.order_date
+    previous_delivery_date = order.delivery_date
     order.delivery_date = payload.delivery_date
     order.notes = payload.notes
     order.subtotal = round(subtotal, 2)
@@ -230,6 +231,10 @@ def update_sales_order(
     db.commit()
     record_change(db, "accounting_sales_orders", order.id, "edit", changed_by=admin, changes=changes)
     db.commit()
+    if order.delivery_date and (not previous_delivery_date or previous_delivery_date.date() != order.delivery_date.date()):
+        from app.notifications import notify_sales_order_delivery_date
+
+        notify_sales_order_delivery_date(order)
     return get_sales_order(order.id, admin, db)
 
 

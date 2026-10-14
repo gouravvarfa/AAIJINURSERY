@@ -305,3 +305,114 @@ def notify_order_cancelled(db, order, old_status: str | None, cancelled_by: str,
 
     send_whatsapp_admin_alert(f"Order #{order.id} CANCELLED by {cancelled_by}. Reason: {reason_text}")
     _queue_order_event(order, "ORDER_CANCELLED", [customer_name, f"ORD-{order.id}"])
+
+
+# ---------------------------------------------------------------------------
+# Extra WhatsApp messages (all go through queue_event, so they use the central
+# event -> template map, the messaging ON/OFF switch, idempotency and retry).
+# ---------------------------------------------------------------------------
+from datetime import timedelta, timezone  # noqa: E402
+
+_IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _one_line(text: str, limit: int = 900) -> str:
+    """WhatsApp template variables can't hold newlines/tabs or long runs of spaces."""
+    flat = " ".join(str(text or "").split())
+    return flat if len(flat) <= limit else flat[: limit - 1].rstrip() + "..."
+
+
+def format_date(value) -> str:
+    return value.strftime("%d %b %Y").lstrip("0") if value else ""
+
+
+def notify_admin_new_order(order) -> None:
+    """One alert to the configured admin number for every NEW website order.
+    The number comes from the ADMIN_ORDER_ALERT_MOBILE environment variable, so
+    it is not hardcoded anywhere; without it nothing is sent. Idempotent per
+    order (event key ADMIN_NEW_ORDER:<order id>), so a retried request cannot
+    alert twice."""
+    mobile = os.environ.get("ADMIN_ORDER_ALERT_MOBILE", "").strip()
+    if not mobile:
+        return
+    items = ", ".join(
+        f"{i.plant_name} x{i.quantity}" + (f" (tray of {i.tray_size})" if i.tray_size else "") for i in order.items
+    )
+    placed = (order.created_at or datetime.utcnow()).replace(tzinfo=timezone.utc).astimezone(_IST)
+    queue_whatsapp_event(
+        event_type="ADMIN_NEW_ORDER", mobile=mobile, customer_name="Admin",
+        template_params=[
+            f"ORD-{order.id}", _order_contact(order)[1], _one_line(items), f"Rs.{order.total_amount:.2f}",
+            placed.strftime("%d %b %Y, %I:%M %p").lstrip("0"), "Pending - awaiting confirmation",
+        ],
+        source_module="orders", source_id=order.id, recipient_type="ADMIN",
+    )
+
+
+def notify_order_preparing(order) -> None:
+    """Customer: the nursery is preparing the order (sent once per order)."""
+    _queue_order_event_with_id(order, "ORDER_PREPARING", f"{order.id}", [_order_contact(order)[1], f"ORD-{order.id}"])
+
+
+def notify_order_delivery_date(order) -> None:
+    """Customer: the delivery date the team has set (re-sent only if the date changes)."""
+    if not order.expected_delivery_date:
+        return
+    day = format_date(order.expected_delivery_date)
+    _queue_order_event_with_id(
+        order, "ORDER_DELIVERY_DATE", f"{order.id}:{order.expected_delivery_date:%Y-%m-%d}",
+        [_order_contact(order)[1], f"ORD-{order.id}", day],
+    )
+
+
+def _queue_order_event_with_id(order, event_type: str, source_id: str, template_params: list) -> None:
+    mobile, name = _order_contact(order)
+    if not mobile:
+        return
+    queue_whatsapp_event(
+        event_type=event_type, mobile=mobile, customer_name=name, template_params=template_params,
+        source_module="orders", source_id=source_id, customer_id=order.customer_id,
+    )
+
+
+def notify_sales_order_preparing(sales_order) -> None:
+    contact = sales_order.contact
+    if not contact or not contact.phone:
+        return
+    queue_whatsapp_event(
+        event_type="ORDER_PREPARING", mobile=contact.phone, customer_name=contact.name,
+        template_params=[contact.name, sales_order.order_number],
+        source_module="accounting", source_id=f"SO-{sales_order.id}",
+        customer_id=contact.customer_id,
+    )
+
+
+def notify_sales_order_delivery_date(sales_order) -> None:
+    contact = sales_order.contact
+    if not contact or not contact.phone or not sales_order.delivery_date:
+        return
+    queue_whatsapp_event(
+        event_type="ORDER_DELIVERY_DATE", mobile=contact.phone, customer_name=contact.name,
+        template_params=[contact.name, sales_order.order_number, format_date(sales_order.delivery_date)],
+        source_module="accounting", source_id=f"SO-{sales_order.id}:{sales_order.delivery_date:%Y-%m-%d}",
+        customer_id=contact.customer_id,
+    )
+
+
+def notify_enquiry_received(name: str, mobile: str, inquiry_id) -> None:
+    if not (mobile or "").strip():
+        return
+    queue_whatsapp_event(
+        event_type="ENQUIRY_RECEIVED", mobile=mobile.strip(), customer_name=name or "Customer",
+        template_params=[name or "Customer"], source_module="website", source_id=f"INQ-{inquiry_id}",
+    )
+
+
+def notify_welcome_customer(customer) -> None:
+    if not (customer.mobile or "").strip():
+        return
+    queue_whatsapp_event(
+        event_type="WELCOME_CUSTOMER", mobile=customer.mobile.strip(), customer_name=customer.name,
+        template_params=[customer.name, _business_name()], source_module="website",
+        source_id=f"CUST-{customer.id}", customer_id=customer.id,
+    )

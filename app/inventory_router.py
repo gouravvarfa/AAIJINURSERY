@@ -220,4 +220,8 @@ def fulfil(payload: FulfilIn, admin: str = Depends(get_current_admin), db: Sessi
         record_change(db, "accounting_sales_orders", parent_id, "fulfilment", changed_by=admin,
                       changes={"line": (None, f"{line.id}: {payload.action} {payload.quantity or ''}".strip())})
     db.commit()
+    if payload.action == "prepare":
+        from app.notifications import notify_order_preparing, notify_sales_order_preparing
+
+        (notify_order_preparing if payload.kind == "order" else notify_sales_order_preparing)(parent)
     return {"item_id": line.id, "quantity": line.quantity, "allocated": line.allocated, "pending": line.pending, "to_prepare": bool(line.to_prepare)}

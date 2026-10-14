@@ -330,6 +330,9 @@ def create_inquiry(payload: InquiryIn, db: Session = Depends(get_db)):
     db.add(inquiry)
     db.commit()
     db.refresh(inquiry)
+    from app.notifications import notify_enquiry_received
+
+    notify_enquiry_received(inquiry.name, inquiry.mobile, inquiry.id)
     return inquiry
 
 
@@ -367,6 +370,9 @@ def create_enquiry(payload: EnquiryCreateIn, request: Request, db: Session = Dep
     db.add(InquiryStatusHistory(inquiry_id=inquiry.id, old_status="", new_status="new", note="Enquiry submitted by customer"))
     db.commit()
     db.refresh(inquiry)
+    from app.notifications import notify_enquiry_received
+
+    notify_enquiry_received(inquiry.name, inquiry.mobile, inquiry.id)
     return inquiry
 
 

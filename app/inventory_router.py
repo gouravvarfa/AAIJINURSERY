@@ -112,7 +112,7 @@ def _row(plant: Plant, variant: Optional[PlantVariant], demand: dict, in_product
         "to_prepare": d["prepare"],
         "shortage": max(0, pending - available),
         "in_production": making,  # planned output of batches not finished yet (never counted as ready stock)
-        "to_produce": max(0, pending - available - making),  # still to be put into a batch
+        "to_produce": max(0, pending - available),  # still to make (unfinished old-style batches are NOT subtracted: nothing in the screens can finish them)
         "open_lines": d["orders"],
     }
 

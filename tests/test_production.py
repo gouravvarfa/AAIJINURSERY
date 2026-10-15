@@ -101,7 +101,7 @@ def test_whole_story_with_random_numbers():
                                               "links": [{"kind": "order", "item_id": admin.get(f"{A}/orders/{oid}").json()["items"][0]["id"]}]}).json()
     assert batch["status"] == "Draft" and batch["batch_number"] == f"BATCH-{batch['id']}"
     row = _row(admin, plant["id"])
-    assert (row["in_production"], row["to_produce"], row["available_stock"]) == (demand, 0, 0)   # planned, never counted as ready stock
+    assert (row["in_production"], row["to_produce"], row["available_stock"]) == (demand, demand, 0)   # planned, never counted as ready stock, and it does not hide what is still to make
 
     r = admin.post(f"{S}/batches/{batch['id']}/issue-seeds", json={"quantity": issued, "request_id": "i1"}).json()
     assert (r["seeds_issued"], r["status"]) == (issued, "In Progress") and _seed_balance(seed["id"]) == 100

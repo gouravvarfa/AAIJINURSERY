@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 import { StockHelp, num } from "../stock/stockUi";
+import SeedEntries from "./stock/SeedEntries";
 import { sanitizeQuantityText } from "../../utils/quantity";
 
 // Stock: how many plants are ready, how many orders are waiting, and what to do.
@@ -26,6 +27,9 @@ export default function StockDemand() {
   const [count, setCount] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [plants, setPlants] = useState([]);
+
+  useEffect(() => { api.get("/admin/plants").then(setPlants).catch(() => {}); }, []);
 
   function load() {
     setError("");
@@ -77,6 +81,7 @@ export default function StockDemand() {
       <div className="stock-actions-row">
         <Link className="btn btn-primary" to="/admin/stock/add">+ Add plants I made</Link>
         <Link className="btn btn-outline dark" to="/admin/stock/allocations">Orders waiting for plants</Link>
+        <a className="btn btn-outline dark" href="#seed-entries" onClick={(e) => { e.preventDefault(); document.getElementById("seed-entries")?.scrollIntoView({ behavior: "smooth" }); }}>+ New Seed Entry</a>
       </div>
       {!data && !error ? <Loading /> : data ? (
         rows.length === 0 ? <Empty>{onlyAction ? "Nothing needs action right now." : "No plants found."}</Empty> : (
@@ -123,6 +128,7 @@ export default function StockDemand() {
           </form>
         </div>
       )}
+      <div id="seed-entries"><SeedEntries plants={plants} onChanged={load} /></div>
     </div>
   );
 }

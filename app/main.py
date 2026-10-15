@@ -558,6 +558,8 @@ app.include_router(api_system_health.router)
 app.include_router(messaging_control_router)  # developer-only (checks inside)
 app.include_router(messaging_billing_router)  # developer-only (checks inside)
 app.include_router(production_router)  # seeds, production batches, ledger, yield (permissions checked inside)
+from app.seed_entries import router as seed_entries_router
+app.include_router(seed_entries_router)  # walk-in seed entries (permissions checked inside)
 app.include_router(inventory_demand_router)  # stock vs demand + per-line stock/prepare decision (permissions checked inside)
 app.include_router(stock_orders_router)  # stock team's order list + prepare/ready (permissions checked inside)
 app.include_router(accounting_router, dependencies=[Depends(require_permission("accounting", "VIEW"))])

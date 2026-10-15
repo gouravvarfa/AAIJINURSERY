@@ -96,3 +96,52 @@ class ProductionBatchOrder(Base):
     batch_id = Column(Integer, ForeignKey("production_batches.id"), nullable=False, index=True)
     kind = Column(String(20), nullable=False)  # order | sales_order
     item_id = Column(Integer, nullable=False)
+
+
+class SeedEntry(Base):
+    """A customer visits and hands over seeds to be grown for them. The seeds are the
+    customer's (not the nursery's seed store), so nothing is deducted from stock. The
+    entry is saved at once as "seeds given / production pending" and is updated later
+    with the plants that were prepared. Extra usable plants (beyond what the customer
+    needs) go into ready stock through the normal ledger."""
+
+    __tablename__ = "seed_entries"
+    __table_args__ = (UniqueConstraint("request_id", name="uq_seed_entry_request"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    entry_number = Column(String(20), default="")
+    request_id = Column(String(60), nullable=False)  # one id per form, so a double click saves once
+    contact_id = Column(Integer, ForeignKey("accounting_contacts.id"), nullable=False, index=True)
+    customer_name = Column(String(150), default="")  # snapshot
+    plant_id = Column(Integer, ForeignKey("plants.id"), nullable=False, index=True)
+    variant_id = Column(Integer, nullable=True)
+    tray_size = Column(Integer, nullable=True)
+    seeds_given = Column(Integer, nullable=False, default=0)
+    prepared_plants = Column(Integer, nullable=False, default=0)  # healthy plants made for the customer (running total)
+    extra_plants = Column(Integer, nullable=False, default=0)  # extra usable plants -> ready stock (running total)
+    extra_units_added = Column(Integer, nullable=False, default=0)  # what has already gone into ready stock (trays or plants)
+    rejected_plants = Column(Integer, nullable=False, default=0)  # dead / not usable, incl. seeds that never grew
+    status = Column(String(20), nullable=False, default="Pending", index=True)  # Pending | In Progress | Completed
+    entry_date = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    reference = Column(String(80), default="")
+    notes = Column(Text, default="")
+    created_by = Column(String(80), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class SeedEntryUpdate(Base):
+    __tablename__ = "seed_entry_updates"
+    __table_args__ = (UniqueConstraint("request_id", name="uq_seed_entry_update_request"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    entry_id = Column(Integer, ForeignKey("seed_entries.id"), nullable=False, index=True)
+    request_id = Column(String(60), nullable=False)
+    prepared_add = Column(Integer, nullable=False, default=0)
+    extra_add = Column(Integer, nullable=False, default=0)
+    rejected_add = Column(Integer, nullable=False, default=0)
+    finished = Column(Boolean, nullable=False, default=False)
+    notes = Column(Text, default="")
+    created_by = Column(String(80), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)

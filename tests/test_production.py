@@ -282,3 +282,28 @@ def test_add_plants_for_a_tray_product_needs_a_tray_and_a_full_tray():
     assert admin.post(f"{S}/add-plants", json={"plant_id": plant["id"], "variant_id": v["id"], "good_plants": 100, "request_id": rid()}).status_code == 400   # less than a tray
     ok = admin.post(f"{S}/add-plants", json={"plant_id": plant["id"], "variant_id": v["id"], "good_plants": 1062, "request_id": rid()}).json()
     assert (ok["added_units"], ok["loose_plants"], ok["new_ready"]) == (8, 62, 10) and _ready(plant["id"], v["id"]) == 10
+
+
+def test_customer_history_groups_website_and_offline_orders_by_mobile():
+    admin = _admin()
+    plant = _plant(admin, stock=500)
+    cust = _customer()
+    mobile = "9811100022"
+    oid = cust.post("/api/customer/checkout", json={
+        "delivery_name": "History Person", "delivery_mobile": mobile, "delivery_line1": "L", "delivery_city": "C", "delivery_state": "S", "delivery_pincode": "452001",
+        "payment_method": "COD", "buy_now_plant_id": plant["id"], "buy_now_quantity": 40, "idempotency_key": f"hist-{plant['id']}"}).json()["id"]
+    contact = admin.post(f"{A}/accounting/contacts", json={"name": "History Person", "phone": mobile}).json()
+    so = admin.post(f"{A}/accounting/sales-orders", json={"contact_id": contact["id"], "order_date": "2026-10-15T00:00:00",
+                                                          "items": [{"plant_id": plant["id"], "description": "x", "quantity": 25, "unit_price": 5}]}).json()
+    admin.post(f"{A}/orders/{oid}/cancel", json={"remarks": "t"})
+    h = admin.get(f"{A}/stock-orders/history?q=History Person").json()
+    assert h["total_customers"] == 1, h                       # website + offline = the same person (same mobile)
+    c = h["customers"][0]
+    assert c["orders"] == 2 and c["open_orders"] == 1         # SO still open, website one cancelled
+    by = {l["order_number"]: l for l in c["lines"]}
+    assert by[f"ORD-{oid}"]["status"] == "Cancelled" and by[f"ORD-{oid}"]["source"] == "Website" and by[f"ORD-{oid}"]["ordered"] == 40
+    assert by[so["order_number"]]["source"] == "Offline" and by[so["order_number"]]["open"] is True
+    # search by order number finds the customer, a stranger's name finds nobody
+    assert admin.get(f"{A}/stock-orders/history?q={so['order_number']}").json()["total_customers"] >= 1
+    assert admin.get(f"{A}/stock-orders/history?q=zzz-nobody-zzz").json()["total_customers"] == 0
+    assert TestClient(app).get(f"{A}/stock-orders/history").status_code == 401

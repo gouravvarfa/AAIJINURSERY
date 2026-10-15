@@ -272,6 +272,7 @@ export default function StockOrders() {
           </div>
         </div>
       )}
+      <CustomerHistory q={q} />
     </div>
   );
 }
@@ -356,6 +357,65 @@ function AlertNumbers({ canEdit }) {
           <button className="btn btn-primary" disabled={saving}>{saving ? "Adding..." : "Add number"}</button>
         </form>
       )}
+    </div>
+  );
+}
+
+const STATUS_BADGE = { Delivered: "badge-accent", Cancelled: "badge-danger", Voided: "badge-danger" };
+
+// Everything each customer has ever ordered (website + offline), newest customer first.
+function CustomerHistory({ q }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setData(null);
+    const query = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+    api.get(`/admin/stock-orders/history${query}`).then(setData).catch((err) => setError(err.message || "Could not load the customer history."));
+  }, [q]);
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <h2 style={{ fontSize: "1.2rem", marginBottom: 4 }}>Customer history</h2>
+      <p style={{ margin: "0 0 12px", color: "var(--color-text-muted)", fontSize: "0.88rem" }}>
+        Every order each customer has placed (website and phone/counter), together in one place. Click a customer to see their orders. The search box above filters this too.
+      </p>
+      {error && <div className="alert alert-error">{error}</div>}
+      {!data && !error ? <Loading /> : data && data.customers.length === 0 ? <Empty>No customer history yet.</Empty> : data ? (
+        <div className="cust-history">
+          {data.customers.map((c) => (
+            <details key={`${c.mobile}-${c.name}`} className="cust-history-item" open={Boolean(q.trim()) && data.customers.length <= 3}>
+              <summary>
+                <strong>{c.name}</strong>
+                {c.mobile && <span className="cust-history-meta"> · {c.mobile}</span>}
+                <span className="cust-history-meta"> · {c.orders} order{c.orders === 1 ? "" : "s"}</span>
+                {c.open_orders > 0 && <span className="badge badge-gold" style={{ marginLeft: 8 }}>{c.open_orders} open</span>}
+                <span className="cust-history-meta" style={{ float: "right" }}>Last order {fmtDate(c.last_order)}</span>
+              </summary>
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead><tr><th>Date</th><th>Order</th><th>From</th><th>Plant</th><th>Ordered</th><th>Given from stock</th><th>Delivery date</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {c.lines.map((l, i) => (
+                      <tr key={`${l.order_number}-${i}`}>
+                        <td>{fmtDate(l.when)}</td>
+                        <td><a href={l.link}>{l.order_number}</a></td>
+                        <td>{l.source}</td>
+                        <td>{l.product}</td>
+                        <td>{n(l.ordered)} {l.unit}</td>
+                        <td>{n(l.given)}</td>
+                        <td>{fmtDate(l.delivery_date)}</td>
+                        <td><span className={`badge ${STATUS_BADGE[l.status] || (l.open ? "badge-gold" : "badge-muted")}`}>{l.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ))}
+          {data.total_customers > data.customers.length && <p className="stock-hint">Showing the {data.customers.length} most recent of {data.total_customers} customers. Use the search to find others.</p>}
+        </div>
+      ) : null}
     </div>
   );
 }

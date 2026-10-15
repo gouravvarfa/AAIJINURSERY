@@ -218,6 +218,73 @@ def list_stock_orders(
     }
 
 
+# ---------- Customer history ----------
+
+def _customer_key(mobile: str, name: str) -> str:
+    digits = "".join(ch for ch in (mobile or "") if ch.isdigit())[-10:]
+    return f"m:{digits}" if len(digits) >= 10 else f"n:{(name or '').strip().lower()}"
+
+
+@router.get("/history", dependencies=[Depends(require_permission("inventory", "VIEW"))])
+def customer_history(q: Optional[str] = Query(None, description="Customer name, mobile, order # or plant"), db: Session = Depends(get_db)):
+    """Everything every customer has ever ordered (website and offline), grouped by
+    customer, newest first. Customers are matched by mobile number (or by name when
+    there is no number), so one person's website and phone orders sit together."""
+    from app.inventory_router import OPEN_ORDER_STATUSES
+    from app.models import Order, OrderItem
+
+    groups: dict = {}
+
+    def add(key, name, mobile, when, line):
+        g = groups.setdefault(key, {"name": name, "mobile": mobile, "last": when, "lines": [], "orders": set()})
+        if when and (g["last"] is None or when > g["last"]):
+            g["last"], g["name"] = when, name or g["name"]
+        g["mobile"] = g["mobile"] or mobile
+        g["orders"].add(line["order_number"])
+        g["lines"].append({**line, "when": when})
+
+    for item in (db.query(OrderItem).join(Order, Order.id == OrderItem.order_id).options(joinedload(OrderItem.order))
+                 .order_by(OrderItem.id.desc()).limit(3000)):
+        o = item.order
+        add(_customer_key(o.delivery_mobile, o.delivery_name), o.delivery_name, o.delivery_mobile, o.created_at, {
+            "source": "Website", "order_number": f"ORD-{o.id}", "link": f"/admin/orders/{o.id}", "product": item.plant_name + (f" - tray of {item.tray_size}" if item.tray_size else ""),
+            "unit": "trays" if item.tray_size else "plants", "ordered": item.quantity, "given": item.allocated, "prepared": None,
+            "status": o.status, "open": o.status in OPEN_ORDER_STATUSES, "delivery_date": o.expected_delivery_date})
+
+    from app.delivery.models import Delivery
+    done_sos = {sid for (sid,) in db.query(Delivery.sales_order_id).filter(Delivery.status.in_(("Delivered", "Partially Delivered")), Delivery.sales_order_id.isnot(None))}
+    for line in (db.query(SalesOrderItem).join(SalesOrder, SalesOrder.id == SalesOrderItem.sales_order_id)
+                 .filter(SalesOrder.source == "offline").options(joinedload(SalesOrderItem.sales_order).joinedload(SalesOrder.contact), joinedload(SalesOrderItem.plant))
+                 .order_by(SalesOrderItem.id.desc()).limit(3000)):
+        so, c = line.sales_order, line.sales_order.contact
+        delivered = so.id in done_sos
+        status = "Delivered" if delivered else so.status
+        add(_customer_key(c.phone if c else "", c.name if c else ""), c.name if c else "-", c.phone if c else "", so.order_date, {
+            "source": "Offline", "order_number": so.order_number, "link": f"/admin/accounting/sales-orders/{so.id}",
+            "product": ((line.plant.name if line.plant else line.description) or "Item") + (f" - tray of {line.tray_size}" if line.tray_size else ""),
+            "unit": "trays" if line.variant_id else "plants", "ordered": line.quantity or 0, "given": line.allocated, "prepared": line.prepared_quantity or 0,
+            "status": status, "open": (so.status in OPEN_SO_STATUSES) and not delivered, "delivery_date": so.delivery_date})
+
+    needle = (q or "").strip().lower()
+    out = []
+    for g in groups.values():
+        lines = g["lines"]
+        if needle:
+            hay_customer = f'{g["name"]} {g["mobile"]}'.lower()
+            if needle not in hay_customer:
+                lines = [l for l in lines if needle in f'{l["order_number"]} {l["product"]}'.lower()]
+                if not lines:
+                    continue
+        lines = sorted(lines, key=lambda l: l["when"] or datetime.min, reverse=True)[:100]
+        out.append({
+            "name": g["name"] or "-", "mobile": g["mobile"] or "", "orders": len({l["order_number"] for l in lines}),
+            "open_orders": len({l["order_number"] for l in lines if l["open"]}), "last_order": g["last"],
+            "lines": [{**l, "when": l["when"]} for l in lines],
+        })
+    out.sort(key=lambda c: c["last_order"] or datetime.min, reverse=True)
+    return {"customers": out[:150], "total_customers": len(out)}
+
+
 def _open_line(db: Session, line_id: int) -> SalesOrderItem:
     line = _open_offline_lines(db).filter(SalesOrderItem.id == line_id).first()
     if not line:

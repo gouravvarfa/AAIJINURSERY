@@ -283,3 +283,30 @@ def allocate_stock(
             raise
         return take
     return 0
+
+
+def set_stock_with_ledger(
+    db: Session,
+    *,
+    plant_id: int,
+    variant_id: int | None,
+    new_quantity: int,
+    source_type: str,
+    created_by: str,
+    transaction_type: str = "MANUAL_ADJUSTMENT",
+    notes: str = "",
+) -> int:
+    """For forms that show a stock number the admin can type over: instead of
+    overwriting the balance silently, the difference to what is in the
+    database NOW is written to the ledger (so ledger and balance always agree).
+    Returns the signed difference that was applied (0 = nothing to do)."""
+    target = _target(plant_id, variant_id)
+    current = db.query(target.model.stock_quantity).filter(target.model.id == target.id).scalar() or 0
+    delta = int(new_quantity) - int(current)
+    if delta == 0:
+        return 0
+    adjust_stock(
+        db, plant_id=plant_id, variant_id=variant_id, quantity_delta=delta, transaction_type=transaction_type,
+        source_type=source_type, created_by=created_by, notes=notes,
+    )
+    return delta

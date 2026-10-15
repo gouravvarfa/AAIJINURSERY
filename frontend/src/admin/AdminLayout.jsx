@@ -25,8 +25,6 @@ const NAV = [
   { to: "/admin/categories", label: "Categories", module: "products" },
   { to: "/admin/plants", label: "Plants", module: "products" },
   { to: "/admin/purchases", label: "Purchases", module: "products" },
-  { to: "/admin/stock-demand", label: "Stock & Demand", module: "products" },
-  { to: "/admin/stock-orders", label: "Stock Orders", module: "inventory" },
   { to: "/admin/services", label: "Services", module: "website" },
   { to: "/admin/pricing-plans", label: "Pricing Plans", module: "website" },
   { to: "/admin/faqs", label: "FAQs", module: "website" },
@@ -38,6 +36,17 @@ const NAV = [
   { to: "/admin/customers", label: "Customers", module: "customers" },
   { to: "/admin/customer-logs", label: "Customer Logs", module: "customers" },
   { to: "/admin/settings", label: "Site Settings", module: "website" },
+];
+
+const STOCK_NAV = [
+  { to: "/admin/stock-demand", label: "Stock Overview", module: "products" },
+  { to: "/admin/stock-orders", label: "Stock Orders", module: "inventory" },
+  { to: "/admin/stock/seeds", label: "Seeds (beej)", module: "products" },
+  { to: "/admin/stock/batches", label: "Production Batches", module: "products" },
+  { to: "/admin/stock/ready", label: "Ready Plants", module: "products" },
+  { to: "/admin/stock/allocations", label: "Orders & Allocations", module: "products" },
+  { to: "/admin/stock/movements", label: "Stock Movements", module: "products" },
+  { to: "/admin/stock/yield", label: "Yield & Wastage", module: "products" },
 ];
 
 const DEVELOPER_NAV = [
@@ -273,6 +282,7 @@ export default function AdminLayout() {
         <nav className="admin-nav" ref={navRef} onClick={closeDrawerOnLinkClick}>
           <NavGroup items={NAV} hasPermission={hasPermission} />
           {assistantOn && <NavLink to="/admin/assistant">Admin Assistant</NavLink>}
+          <NavGroup heading="Stock" items={STOCK_NAV} hasPermission={hasPermission} />
           <NavGroup heading="Accounting" items={ACCOUNTING_NAV} hasPermission={hasPermission} />
           <NavGroup heading="Employees & Labour" items={WORKFORCE_NAV} hasPermission={hasPermission} />
           <NavGroup heading="Delivery Management" items={DELIVERY_NAV} hasPermission={hasPermission} />

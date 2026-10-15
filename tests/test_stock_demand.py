@@ -100,7 +100,8 @@ def test_admin_gives_from_stock_prepares_and_cancel_restores_only_what_was_given
     assert _stock(plant["id"]) == 1000  # only the 700 that was given comes back
     db = SessionLocal()
     try:
-        assert db.query(InventoryTransaction).filter(InventoryTransaction.plant_id == plant["id"]).count() == 2  # give + restore
+        rows = db.query(InventoryTransaction).filter(InventoryTransaction.plant_id == plant["id"]).all()
+        assert sorted(r.transaction_type for r in rows) == ["OPENING_STOCK", "SALE", "SALE_REVERSAL"]  # opening + give + restore
     finally:
         db.close()
     closed = admin.post(f"{A}/inventory/fulfil", json={"kind": "order", "item_id": line["id"], "action": "stock"})

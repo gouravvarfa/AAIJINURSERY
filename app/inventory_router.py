@@ -94,10 +94,11 @@ def demand_by_target(db: Session, plant_id: Optional[int] = None) -> dict:
     return out
 
 
-def _row(plant: Plant, variant: Optional[PlantVariant], demand: dict) -> dict:
+def _row(plant: Plant, variant: Optional[PlantVariant], demand: dict, in_production: Optional[dict] = None) -> dict:
     d = demand.get((plant.id, variant.id if variant else None), {"reserved": 0, "pending": 0, "prepare": 0, "orders": 0})
     available = (variant.stock_quantity if variant else plant.stock_quantity) or 0
     pending = d["pending"]
+    making = (in_production or {}).get((plant.id, variant.id if variant else None), 0)
     return {
         "plant_id": plant.id,
         "variant_id": variant.id if variant else None,
@@ -110,6 +111,8 @@ def _row(plant: Plant, variant: Optional[PlantVariant], demand: dict) -> dict:
         "undecided": pending - d["prepare"],
         "to_prepare": d["prepare"],
         "shortage": max(0, pending - available),
+        "in_production": making,  # planned output of batches not finished yet (never counted as ready stock)
+        "to_produce": max(0, pending - available - making),  # still to be put into a batch
         "open_lines": d["orders"],
     }
 
@@ -124,21 +127,26 @@ def stock_position(db: Session, plant_id: int, variant_id: Optional[int]) -> dic
 
 @router.get("/stock-demand", dependencies=[Depends(require_permission("products", "VIEW"))])
 def stock_demand(only_shortage: bool = False, db: Session = Depends(get_db)):
+    from app.production_router import planned_by_target
+
     demand = demand_by_target(db)
+    making = planned_by_target(db)
     rows = []
     for plant in db.query(Plant).order_by(Plant.name).all():
         variants = db.query(PlantVariant).filter(PlantVariant.plant_id == plant.id).all()
         if variants:
-            rows.extend(_row(plant, v, demand) for v in variants)
+            rows.extend(_row(plant, v, demand, making) for v in variants)
         else:
-            rows.append(_row(plant, None, demand))
+            rows.append(_row(plant, None, demand, making))
     if only_shortage:
-        rows = [r for r in rows if r["shortage"] > 0]
+        rows = [r for r in rows if r["shortage"] > 0 or r["to_produce"] > 0]
     totals = {
         "outstanding_demand": sum(r["outstanding_demand"] for r in rows),
         "shortage": sum(r["shortage"] for r in rows),
         "undecided": sum(r["undecided"] for r in rows),
         "to_prepare": sum(r["to_prepare"] for r in rows),
+        "in_production": sum(r["in_production"] for r in rows),
+        "to_produce": sum(r["to_produce"] for r in rows),
     }
     return {
         "items": rows,

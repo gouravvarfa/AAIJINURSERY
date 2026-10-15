@@ -2020,3 +2020,39 @@ table.admin-table .row-actions {
 .fulfil-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .fulfil-qty { width: 110px; text-align: center; }
 .line-item-stock { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.85rem; color: var(--color-text-muted); }
+
+/* ---- Stock section (seeds, batches, ready plants) ---- */
+.stock-help { background: #f1f7f3; border: 1px solid #d5e6da; border-radius: 12px; margin-bottom: 18px; }
+.stock-help-head { width: 100%; text-align: left; background: transparent; border: 0; padding: 12px 16px; font: inherit; font-weight: 700; color: var(--color-primary); cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.stock-help-toggle { margin-left: auto; font-weight: 600; font-size: 0.82rem; color: var(--color-text-muted); }
+.stock-help-body { padding: 0 20px 14px; }
+.stock-help-body ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.stock-help-note { margin: 10px 0 0; font-size: 0.88rem; color: var(--color-text-muted); }
+.stock-hint { margin: 10px 0 0; font-size: 0.86rem; color: var(--color-text-muted); }
+.stock-form-row, .stock-form-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.stock-form-grid { flex-direction: column; align-items: stretch; max-width: 640px; }
+.stock-form-row label, .stock-form-grid label, .stock-block { display: grid; gap: 6px; font-weight: 600; font-size: 0.9rem; flex: 1 1 200px; }
+.stock-block { max-width: 520px; margin: 4px 0 12px; }
+.stock-form-row small { font-weight: 400; color: var(--color-text-muted); }
+.stock-suggest { background: #fff8e8; border: 1px solid #f0dfb2; border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; font-size: 0.9rem; }
+.stock-check { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+.stock-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 0 0 16px; }
+.stock-steps li { padding: 6px 14px; border-radius: 999px; background: #eef1ef; color: #5b6b63; font-weight: 600; font-size: 0.88rem; }
+.stock-steps li.done { background: #dff1e4; color: #1f7a45; }
+.stock-facts { display: flex; flex-wrap: wrap; gap: 18px 36px; }
+.stock-facts div { display: grid; gap: 2px; }
+.stock-facts span { font-size: 0.8rem; color: var(--color-text-muted); }
+.stock-facts strong { font-size: 1.1rem; }
+.stock-facts small { color: var(--color-text-muted); }
+.stock-sub { font-size: 1rem; margin: 14px 0 8px; }
+.stock-ok { color: #1f7a45; font-weight: 600; margin: 8px 0; }
+.stock-warn { color: #b3261e; font-weight: 600; margin: 8px 0; }
+.stock-kpis { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; }
+.stock-kpis div { background: #fff; border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 20px; display: grid; gap: 2px; min-width: 170px; }
+.stock-kpis span { font-size: 0.82rem; color: var(--color-text-muted); }
+.stock-kpis strong { font-size: 1.5rem; }
+.stock-kpis .alert-red strong { color: #b3261e; }
+.stock-advice { font-weight: 600; font-size: 0.9rem; }
+.stock-advice-red { color: #b3261e; }
+.stock-advice-orange { color: #a85d00; }
+.stock-advice-green { color: #1f7a45; }

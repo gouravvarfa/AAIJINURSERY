@@ -14,7 +14,7 @@ from app.audit import SUPER_ACCESS_GRANTED, SUPER_ACCESS_REVOKED, record_admin_a
 from app.auth import hash_password
 from app.database import get_db
 from app.deps import get_current_admin, get_current_developer
-from app.inventory import adjust_stock, restore_stock
+from app.inventory import adjust_stock, restore_stock, set_stock_with_ledger
 from app.permissions import require_permission
 from app.models import (
     CANCELLABLE_STATUSES,
@@ -506,7 +506,7 @@ def create_plant(
         description=payload.description.strip(),
         price=payload.price,
         discount_price=payload.discount_price,
-        stock_quantity=payload.stock_quantity,
+        stock_quantity=0,  # opening stock goes through the ledger below
         sku=payload.sku.strip(),
         image_url=payload.image_url.strip(),
         care_level=payload.care_level.strip(),
@@ -517,11 +517,22 @@ def create_plant(
     )
     db.add(item)
     db.flush()
+    if not payload.variants and payload.stock_quantity:
+        set_stock_with_ledger(db, plant_id=item.id, variant_id=None, new_quantity=payload.stock_quantity,
+                              source_type="PLANT_FORM", created_by=admin, transaction_type="OPENING_STOCK", notes="Opening stock when the plant was created")
 
     if payload.variants:
         for v in payload.variants:
-            db.add(PlantVariant(plant_id=item.id, tray_size=v.tray_size, stock_quantity=v.stock_quantity))
-        item.stock_quantity = sum(v.stock_quantity for v in payload.variants)
+            row = PlantVariant(plant_id=item.id, tray_size=v.tray_size, stock_quantity=0)
+            db.add(row)
+            db.flush()
+            if v.stock_quantity:
+                set_stock_with_ledger(db, plant_id=item.id, variant_id=row.id, new_quantity=v.stock_quantity,
+                                      source_type="PLANT_FORM", created_by=admin, transaction_type="OPENING_STOCK",
+                                      notes=f"Opening stock of the {v.tray_size}-plant tray")
+        db.flush()
+        db.expire(item)
+        item.stock_quantity = db.query(func.coalesce(func.sum(PlantVariant.stock_quantity), 0)).filter(PlantVariant.plant_id == item.id).scalar()
 
     db.commit()
     db.refresh(item)
@@ -545,7 +556,6 @@ def update_plant(
     item.description = payload.description.strip()
     item.price = payload.price
     item.discount_price = payload.discount_price
-    item.stock_quantity = payload.stock_quantity
     item.sku = payload.sku.strip()
     item.image_url = payload.image_url.strip()
     item.care_level = payload.care_level.strip()
@@ -554,12 +564,40 @@ def update_plant(
     item.is_active = payload.is_active
     item.availability_status = payload.availability_status
 
-    if payload.variants is not None:
-        db.query(PlantVariant).filter(PlantVariant.plant_id == item.id).delete()
-        for v in payload.variants:
-            db.add(PlantVariant(plant_id=item.id, tray_size=v.tray_size, stock_quantity=v.stock_quantity))
-        if payload.variants:
-            item.stock_quantity = sum(v.stock_quantity for v in payload.variants)
+    # Stock is never overwritten here: every change is recorded as a ledger
+    # movement (the difference to the balance in the database right now), and
+    # tray options are updated in place so a tray keeps its identity (id) across edits.
+    db.flush()
+    existing = {v.tray_size: v for v in db.query(PlantVariant).filter(PlantVariant.plant_id == item.id)}
+    if payload.variants:
+        wanted = {v.tray_size: v for v in payload.variants}
+        for size, row in list(existing.items()):
+            if size not in wanted:
+                set_stock_with_ledger(db, plant_id=item.id, variant_id=row.id, new_quantity=0, source_type="PLANT_FORM",
+                                      created_by=admin, notes="Tray option removed in the plant form")
+                db.delete(row)
+        db.flush()
+        for size, v in wanted.items():
+            row = existing.get(size)
+            if row is None:
+                row = PlantVariant(plant_id=item.id, tray_size=size, stock_quantity=0)
+                db.add(row)
+                db.flush()
+            set_stock_with_ledger(db, plant_id=item.id, variant_id=row.id, new_quantity=v.stock_quantity, source_type="PLANT_FORM",
+                                  created_by=admin, notes="Edited in the plant form")
+        db.expire(item)
+        item.stock_quantity = db.query(func.coalesce(func.sum(PlantVariant.stock_quantity), 0)).filter(PlantVariant.plant_id == item.id).scalar()
+    elif payload.variants is not None:  # an explicit empty list: the plant becomes a plain, per-plant product
+        for row in existing.values():
+            set_stock_with_ledger(db, plant_id=item.id, variant_id=row.id, new_quantity=0, source_type="PLANT_FORM",
+                                  created_by=admin, notes="Tray option removed in the plant form")
+            db.delete(row)
+        db.flush()
+        set_stock_with_ledger(db, plant_id=item.id, variant_id=None, new_quantity=payload.stock_quantity, source_type="PLANT_FORM",
+                              created_by=admin, notes="Edited in the plant form")
+    elif not existing:
+        set_stock_with_ledger(db, plant_id=item.id, variant_id=None, new_quantity=payload.stock_quantity, source_type="PLANT_FORM",
+                              created_by=admin, notes="Edited in the plant form")
 
     db.commit()
     db.refresh(item)

@@ -30,6 +30,8 @@ from app.communications.control_router import router as messaging_control_router
 from app.communications.billing_router import router as messaging_billing_router
 from app.inventory_router import router as inventory_demand_router
 from app.stock_orders import router as stock_orders_router
+import app.production_models  # noqa: F401  (registers the seed / production tables)
+from app.production_router import router as production_router
 from app.communications.router import router as communications_router
 from app.communications.inbox_router import router as communications_inbox_router
 from app.communications.webhook import router as whatsapp_webhook_router
@@ -555,6 +557,7 @@ app.include_router(api_admin_rbac.router)
 app.include_router(api_system_health.router)
 app.include_router(messaging_control_router)  # developer-only (checks inside)
 app.include_router(messaging_billing_router)  # developer-only (checks inside)
+app.include_router(production_router)  # seeds, production batches, ledger, yield (permissions checked inside)
 app.include_router(inventory_demand_router)  # stock vs demand + per-line stock/prepare decision (permissions checked inside)
 app.include_router(stock_orders_router)  # stock team's order list + prepare/ready (permissions checked inside)
 app.include_router(accounting_router, dependencies=[Depends(require_permission("accounting", "VIEW"))])

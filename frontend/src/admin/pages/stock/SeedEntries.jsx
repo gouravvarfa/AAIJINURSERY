@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../../../api";
 import { sanitizeQuantityText } from "../../../utils/quantity";
 import { num } from "../../stock/stockUi";
@@ -8,7 +9,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 const BADGE = { Pending: "badge-gold", "In Progress": "badge-accent", Completed: "badge-muted" };
 const EMPTY = { customer_id: "", new_name: "", new_phone: "", plant_id: "", variant_id: "", seeds: "", date: today(), reference: "", notes: "" };
 
-// Seeds a walk-in customer hands over. Lives inside the Stock page (no separate page).
+// Seeds a walk-in customer hands over. Lives on the Stock page (no separate page).
+// The plants that come out are recorded on the "Add Plants" page by choosing the customer there.
 export default function SeedEntries({ plants, onChanged }) {
   const [data, setData] = useState(null);
   const [customers, setCustomers] = useState([]);
@@ -18,10 +20,8 @@ export default function SeedEntries({ plants, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
-  const [upd, setUpd] = useState(null); // { entry, prepared, extra, rejected, notes }
   const [showAll, setShowAll] = useState(false);
   const formId = useRef(newId());
-  const updId = useRef(newId());
 
   function load() {
     api.get(`/admin/stock/seed-entries?status=${showAll ? "all" : "open"}`).then(setData).catch((e) => setError(e.message || "Could not load seed entries."));
@@ -62,42 +62,36 @@ export default function SeedEntries({ plants, onChanged }) {
     }
   }
 
-  async function saveUpdate(e, finish) {
-    e.preventDefault();
-    if (busy) return;
+  async function closeEntry(r) {
+    if (busy || !window.confirm(`Close ${r.entry_number}? The ${num(r.remaining)} seeds that are left will be counted as not grown.`)) return;
     setBusy(true);
     setError("");
     try {
-      const r = await api.post(`/admin/stock/seed-entries/${upd.entry.id}/update`, {
-        prepared_plants: Number(upd.prepared || 0), extra_plants: Number(upd.extra || 0), rejected_plants: Number(upd.rejected || 0), finish, notes: upd.notes, request_id: updId.current,
-      });
-      setMsg(`${r.entry_number} updated: ${num(r.prepared_plants)} for the customer, ${num(r.extra_plants)} extra, ${num(r.remaining)} seeds remaining${r.status === "Completed" ? " (completed)" : ""}.`);
-      setUpd(null);
-      updId.current = newId();
+      await api.post(`/admin/stock/seed-entries/${r.id}/update`, { finish: true, request_id: newId() });
+      setMsg(`${r.entry_number} closed.`);
       load();
       onChanged?.();
     } catch (err) {
-      setError(err.message || "Could not update the entry.");
+      setError(err.message || "Could not close the entry.");
     } finally {
       setBusy(false);
     }
   }
 
   const t = data?.totals;
-  const numSet = (k) => (e) => setUpd({ ...upd, [k]: sanitizeQuantityText(e.target.value, 100000000) });
   return (
-    <section style={{ marginTop: 24 }} aria-label="Seed entries">
-      <div className="stock-actions-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ fontSize: "1.2rem", margin: 0 }}>Customer seeds (production pending)</h2>
+    <section className="seed-card" aria-label="Seed entries">
+      <div className="seed-head">
+        <div>
+          <h2>Customer seeds</h2>
+          <p>Customer gave seeds? Save them here. When the plants are ready, press "Add plants" on that row.</p>
+        </div>
         <button type="button" className="btn btn-primary" onClick={() => { setOpen(!open); setMsg(""); setError(""); }}>{open ? "Close" : "+ New Seed Entry"}</button>
       </div>
-      <p className="stock-hint" style={{ margin: "6px 0 12px" }}>
-        When a customer gives seeds, save them here at once. Seeds are not ready plants, so they do not add to Ready now. Update the same entry later when plants are prepared.
-      </p>
       {msg && <div className="alert alert-success" role="status">{msg}</div>}
       {error && <div className="alert alert-error">{error}</div>}
       {open && (
-        <div className="admin-form-card" style={{ maxWidth: 640, marginBottom: 16 }}>
+        <div className="seed-form">
           <form onSubmit={save} className="stock-form-grid">
             {addNew ? (
               <>
@@ -142,57 +136,42 @@ export default function SeedEntries({ plants, onChanged }) {
         </div>
       )}
       {t && (
-        <div className="stock-actions-row" style={{ gap: 16, flexWrap: "wrap" }} data-testid="seed-totals">
-          <span><strong>{num(t.open_entries)}</strong> open entries</span>
-          <span><strong>{num(t.seeds_given)}</strong> seeds given</span>
-          <span><strong>{num(t.remaining)}</strong> seeds still to grow</span>
-          <span><strong>{num(t.prepared)}</strong> prepared for customers</span>
-          <span><strong>{num(t.extra)}</strong> extra plants</span>
+        <div className="seed-kpis" data-testid="seed-totals">
+          <div><span>{num(t.open_entries)}</span>Open entries</div>
+          <div><span>{num(t.seeds_given)}</span>Seeds given</div>
+          <div><span>{num(t.remaining)}</span>Still to grow</div>
+          <div><span>{num(t.prepared)}</span>Ready for customers</div>
+          <div><span>{num(t.extra)}</span>Extra plants</div>
         </div>
       )}
-      <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0" }}>
-        <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show completed entries too
-      </label>
       {data && data.items.length === 0 ? <p className="stock-hint">No seed entries yet.</p> : data && (
         <div className="admin-table-wrap">
           <table className="admin-table">
-            <thead><tr><th>Entry</th><th>Date</th><th>Customer</th><th>Plant</th><th>Seeds given</th><th>Prepared</th><th>Extra</th><th>Remaining</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Customer</th><th>Plant</th><th>Seeds</th><th>Ready</th><th>Left</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {data.items.map((r) => (
                 <tr key={r.id}>
-                  <td>{r.entry_number}{r.reference ? <div className="stock-hint">{r.reference}</div> : null}</td>
-                  <td>{r.entry_date}</td>
-                  <td>{r.customer_name}</td>
+                  <td><strong>{r.customer_name}</strong><div className="stock-hint">{r.entry_number} · {r.entry_date}{r.reference ? ` · ${r.reference}` : ""}</div></td>
                   <td>{r.plant_name}</td>
                   <td>{num(r.seeds_given)}</td>
-                  <td>{num(r.prepared_plants)}</td>
-                  <td>{num(r.extra_plants)}</td>
+                  <td>{num(r.prepared_plants)}{r.extra_plants > 0 ? <div className="stock-hint">+{num(r.extra_plants)} extra</div> : null}</td>
                   <td>{num(r.remaining)}</td>
                   <td><span className={`badge ${BADGE[r.status] || "badge-muted"}`}>{r.status_label}</span></td>
-                  <td>{r.status !== "Completed" && <button type="button" className="btn btn-sm btn-outline dark" onClick={() => { setUpd({ entry: r, prepared: "", extra: "", rejected: "", notes: "" }); updId.current = newId(); setError(""); }}>Update production</button>}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {r.status !== "Completed" && <>
+                      <Link className="btn btn-sm btn-primary" to={`/admin/stock/add?seed=${r.id}`}>Add plants</Link>{" "}
+                      <button type="button" className="btn btn-sm btn-outline dark" disabled={busy} onClick={() => closeEntry(r)}>Close</button>
+                    </>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      {upd && (
-        <div className="admin-form-card" style={{ maxWidth: 560, marginTop: 16 }}>
-          <h3 style={{ marginTop: 0 }}>Update {upd.entry.entry_number}: {upd.entry.customer_name}, {upd.entry.plant_name}</h3>
-          <p className="stock-hint">{num(upd.entry.remaining)} seeds remaining. Write only the NEW numbers since the last update. Extra usable plants go into Ready now.</p>
-          <form onSubmit={(e) => saveUpdate(e, false)} className="stock-form-grid">
-            <label>Prepared for this customer<input className="form-control" inputMode="numeric" value={upd.prepared} onChange={numSet("prepared")} /></label>
-            <label>Extra usable plants<input className="form-control" inputMode="numeric" value={upd.extra} onChange={numSet("extra")} /></label>
-            <label>Rejected / dead<input className="form-control" inputMode="numeric" value={upd.rejected} onChange={numSet("rejected")} /></label>
-            <label>Notes (optional)<input className="form-control" maxLength={1000} value={upd.notes} onChange={(e) => setUpd({ ...upd, notes: e.target.value })} /></label>
-            <div>
-              <button className="btn btn-primary" disabled={busy || !(Number(upd.prepared) || Number(upd.extra) || Number(upd.rejected))}>{busy ? "Saving..." : "Save update"}</button>{" "}
-              <button type="button" className="btn btn-outline dark" disabled={busy} onClick={(e) => saveUpdate(e, true)}>Save and finish (rest did not grow)</button>{" "}
-              <button type="button" className="btn btn-outline dark" onClick={() => setUpd(null)}>Cancel</button>
-            </div>
-          </form>
-        </div>
-      )}
+      <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0" }}>
+        <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show completed entries too
+      </label>
     </section>
   );
 }

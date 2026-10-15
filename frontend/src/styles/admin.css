@@ -1,2070 +1,2081 @@
-.admin-shell {
-  display: flex;
-  min-height: 100vh;
-  background: var(--color-bg);
-}
-
-.admin-sidebar {
-  width: 240px;
-  background: var(--color-primary-dark);
-  color: rgba(255, 255, 255, 0.85);
-  flex-shrink: 0;
-  padding: 24px 0 0;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow-y: auto;
-}
-
-/* Pinned user/log-out bar at the bottom of the sidebar (desktop). The
-   mobile drawer re-declares .admin-drawer-footer inside its media query. */
-.admin-drawer-footer {
-  position: sticky;
-  bottom: 0;
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  background: var(--color-primary-dark);
-}
-
-.admin-user-chip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.admin-user-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.8rem;
-}
-
-.admin-user-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.25;
-}
-
-.admin-user-name {
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.admin-user-role {
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 0.66rem;
-  letter-spacing: 0.02em;
-}
-
-.admin-logout-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-  padding: 4px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 6px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.9);
-  font: inherit;
-  font-size: 0.74rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.admin-logout-btn:hover,
-.admin-logout-btn:focus-visible {
-  background: rgba(231, 76, 60, 0.18);
-  border-color: rgba(243, 166, 160, 0.6);
-  color: #fff;
-  outline: none;
-}
-
-.admin-sidebar .brand {
-  color: #fff;
-  padding: 0 20px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  margin-bottom: 16px;
-}
-
-.admin-logo-chip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: #fff;
-  padding: 4px;
-  flex-shrink: 0;
-}
-
-.admin-logo-chip img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.admin-nav a {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 20px;
-  font-weight: 600;
-  font-size: 0.92rem;
-  color: rgba(255, 255, 255, 0.75);
-  border-left: 3px solid transparent;
-}
-
-.admin-nav a:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-}
-
-.admin-nav a.active {
-  background: rgba(64, 145, 108, 0.2);
-  border-left-color: var(--color-accent-light);
-  color: #fff;
-}
-
-.admin-nav .logout-btn {
-  margin-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  padding-top: 16px;
-}
-
-.admin-nav-heading {
-  margin-top: 16px;
-  padding: 8px 20px 4px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.admin-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.admin-topbar {
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  padding: 18px 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.admin-content {
-  padding: 28px;
-}
-
-.admin-page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 22px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-/* Compact variant of the base .form-control (which uses a large 12px/14px
-   padding meant for standalone form fields) -- used wherever a date input/
-   select/search box sits inline next to a .btn-sm action (Export, Search,
-   +New) across every Accounting list page's filter row (ExportButton,
-   SourceFilter, SearchBox), so they all line up at the same height instead
-   of the oversized field dwarfing the buttons beside it. */
-.admin-control-sm {
-  padding: 8px 12px;
-  font-size: 0.85rem;
-  height: 36px;
-}
-
-/* Single-row container for an Accounting list page's filters + actions
-   (source/status dropdowns, search box, date-range export, +New) -- sits
-   on the same line as the page's <h1> inside .admin-page-head, wrapping as
-   one unit only when the viewport is too narrow to fit everything. */
-.admin-page-head-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.admin-page-head h1 {
-  font-size: 1.5rem;
-  margin: 0;
-}
-
-/* ----- Status banner (used by Dashboard's "no new orders" state and the
-   "Ask AAIJI" shortcut card) -- base rule works on every width; the mobile
-   media query further down only tweaks spacing, it doesn't redefine this. */
-.admin-status-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--color-border);
-  background: #eef7f0;
-  color: var(--color-primary-dark);
-  font-weight: 600;
-  font-size: 0.9rem;
-  margin-bottom: 20px;
-  transition: box-shadow 0.15s ease;
-}
-
-a.admin-status-banner:hover {
-  box-shadow: var(--shadow);
-}
-
-.admin-status-banner.alert {
-  background: #fdf1e6;
-  color: #8a5a1f;
-  border-color: #f3d9b8;
-}
-
-.admin-status-banner-icon {
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-}
-
-.admin-status-banner.alert .admin-status-banner-icon {
-  background: #d98b2b;
-}
-
-.stat-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 18px;
-  margin-bottom: 32px;
-}
-
-.stat-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 20px;
-  box-shadow: var(--shadow);
-}
-
-.stat-card .num {
-  font-family: var(--font-heading);
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: var(--color-primary);
-}
-
-.stat-card .label {
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
-  margin-top: 4px;
-}
-
-.admin-table-wrap {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  overflow-x: auto;
-  box-shadow: var(--shadow);
-}
-
-table.admin-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 640px;
-}
-
-table.admin-table th,
-table.admin-table td {
-  text-align: left;
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 0.9rem;
-  vertical-align: middle;
-}
-
-table.admin-table th {
-  background: var(--color-bg);
-  font-weight: 700;
-  color: var(--color-primary-dark);
-  white-space: nowrap;
-}
-
-table.admin-table tr:last-child td {
-  border-bottom: none;
-}
-
-table.admin-table .row-actions {
-  display: flex;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.admin-form-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 28px;
-  max-width: 720px;
-  box-shadow: var(--shadow);
-}
-
-/* ---------- Tray options editor (admin Plants form) ---------- */
-/* Scoped to .variants-field / .variant-row, no other admin form fields affected. */
-
-.variants-field {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.variant-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: #fff;
-}
-
-.variant-row-inputs {
-  display: flex;
-  gap: 12px;
-  flex: 1;
-  flex-wrap: wrap;
-}
-
-.variant-row-inputs label {
-  flex: 1;
-  display: block;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-primary-dark);
-}
-
-.variant-row-inputs input {
-  margin-top: 4px;
-}
-
-.variant-row-price {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  padding-bottom: 8px;
-}
-
-.variant-row-price strong {
-  color: var(--color-primary-dark);
-}
-
-@media (max-width: 480px) {
-  .variant-row {
-    flex-wrap: wrap;
-  }
-}
-
-.admin-order-detail-grid {
-  display: grid;
-  grid-template-columns: 1.6fr 1fr;
-  gap: 24px;
-  align-items: start;
-}
-
-/* Grid columns default to a min-width based on their content's intrinsic
-   (min-content) size, which lets a wide descendant (e.g. the status tracker)
-   force the whole column — and everything below it — wider than the
-   viewport. min-width: 0 lets these columns actually shrink to fit. */
-.admin-order-detail-grid > div {
-  min-width: 0;
-}
-
-.admin-order-status-history {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.admin-order-status-history-item {
-  padding-left: 16px;
-  border-left: 3px solid var(--color-border);
-}
-
-.admin-order-status-history-item strong {
-  display: block;
-  color: var(--color-primary-dark);
-}
-
-.admin-order-status-history-item .meta {
-  font-size: 0.82rem;
-  color: var(--color-text-muted);
-  margin-top: 2px;
-}
-
-.admin-order-item-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.admin-order-item-row:last-of-type {
-  border-bottom: none;
-}
-
-.admin-order-item-thumb {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  object-fit: cover;
-  background: var(--color-border);
-  flex-shrink: 0;
-}
-
-@media (max-width: 900px) {
-  .admin-order-detail-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ---------- Admin orders: mobile ---------- */
-
-.admin-order-cards {
-  display: none;
-}
-
-.admin-order-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 16px;
-  margin-bottom: 14px;
-}
-
-.admin-order-card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.admin-order-card-id {
-  font-weight: 700;
-  color: var(--color-primary-dark);
-}
-
-.admin-order-card-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 0.88rem;
-  padding: 6px 0;
-  border-top: 1px solid var(--color-border);
-}
-
-.admin-order-card-row:first-of-type {
-  border-top: none;
-}
-
-.admin-order-card-row .label {
-  color: var(--color-text-muted);
-  flex-shrink: 0;
-}
-
-.admin-order-card-row .value {
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.admin-order-card .btn-block {
-  margin-top: 12px;
-}
-
-@media (max-width: 700px) {
-  .admin-orders-table-wrap {
-    display: none;
-  }
-
-  .admin-order-cards {
-    display: block;
-  }
-}
-
-@media (max-width: 640px) {
-  .admin-content {
-    padding: 18px;
-  }
-
-  .admin-form-card {
-    padding: 20px;
-  }
-
-  .admin-page-head h1 {
-    font-size: 1.3rem;
-  }
-}
-
-.admin-login-shell {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-primary-dark);
-  padding: 20px;
-}
-
-.admin-login-card {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: 40px;
-  width: 100%;
-  max-width: 400px;
-  box-shadow: var(--shadow-lg);
-}
-
-.admin-login-logo {
-  height: 72px;
-  width: auto;
-  display: block;
-}
-
-.thumb {
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  object-fit: cover;
-  background: var(--color-border);
-}
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  z-index: 1000;
-}
-
-.modal-card {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: 28px;
-  width: 100%;
-  max-width: 420px;
-  max-height: calc(100vh - 40px);
-  overflow-y: auto;
-  box-shadow: var(--shadow-lg);
-  position: relative;
-}
-
-.modal-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  background: none;
-  border: none;
-  font-size: 1.4rem;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--color-text-muted);
-}
-
-.modal-product-img {
-  width: 100%;
-  height: 180px;
-  object-fit: cover;
-  border-radius: var(--radius);
-  margin-bottom: 16px;
-  background: var(--color-border);
-}
-
-.modal-product-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 16px 0 20px;
-}
-
-.modal-product-meta div {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.9rem;
-}
-
-.modal-product-meta span {
-  color: var(--color-text-muted);
-}
-
-/* ---------- Admin mobile layout (<=768px): off-canvas drawer + sticky
-   compact topbar + bottom tab bar. Desktop (.admin-shell's default flex-row
-   sidebar+main) is completely untouched above this breakpoint -- every rule
-   in this block only ever applies at <=768px. ---------- */
-
-.admin-hamburger,
-.admin-drawer-close,
-.admin-drawer-overlay,
-.admin-bottom-nav,
-.admin-dev-toggle {
-  display: none;
-}
-
-@media (max-width: 768px) {
-  .admin-content { padding: 16px 16px calc(80px + env(safe-area-inset-bottom, 0px)); }
-
-  /* ----- Sticky compact topbar ----- */
-  .admin-topbar {
-    position: sticky;
-    top: 0;
-    z-index: 60;
-    height: 56px;
-    padding: 0 12px;
-    gap: 10px;
-  }
-  .admin-topbar strong {
-    flex: 1;
-    font-size: 1rem;
-    text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* The existing "Signed in as X" text is redundant with the drawer's own
-     footer (added below) at this width -- hidden here, not removed from
-     the DOM/desktop. */
-  .admin-topbar-username { display: none; }
-
-  .admin-hamburger {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    flex-shrink: 0;
-    border: none;
-    background: none;
-    border-radius: 10px;
-    color: var(--color-primary-dark);
-    cursor: pointer;
-  }
-  .admin-hamburger:active { background: var(--color-bg); }
-  .admin-hamburger svg { width: 22px; height: 22px; }
-
-  /* ----- Off-canvas drawer ----- */
-  .admin-drawer-overlay {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(16, 40, 31, 0.45);
-    z-index: 70;
-    animation: authOverlayFadeIn 0.2s ease forwards;
-  }
-
-  .admin-shell { flex-direction: column; }
-
-  .admin-sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: min(280px, 82vw);
-    height: 100dvh;
-    z-index: 80;
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-    transform: translateX(-100%);
-    transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
-    box-shadow: var(--shadow-lg);
-  }
-  .admin-sidebar.open { transform: translateX(0); }
-
-  .admin-sidebar .brand {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 16px 16px 20px;
-    margin-bottom: 0;
-  }
-
-  .admin-drawer-close {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    flex-shrink: 0;
-    border: none;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    color: #fff;
-    font-size: 1.3rem;
-    line-height: 1;
-    cursor: pointer;
-  }
-
-  .admin-nav {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    display: block;
-    padding-bottom: 8px;
-  }
-  .admin-nav a {
-    min-height: 44px;
-    border-left: none;
-    border-bottom: none;
-  }
-  .admin-nav a.active {
-    background: rgba(64, 145, 108, 0.25);
-    border-left: 3px solid var(--color-accent-light);
-  }
-
-  /* Collapsible Developer group */
-  .admin-dev-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    min-height: 44px;
-    padding: 8px 20px 8px 20px;
-    margin-top: 16px;
-    border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-    background: none;
-    color: rgba(255, 255, 255, 0.45);
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    cursor: pointer;
-  }
-  .admin-dev-toggle svg {
-    width: 16px;
-    height: 16px;
-    transition: transform 0.2s ease;
-  }
-  .admin-dev-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
-  .admin-dev-group { overflow: hidden; max-height: 0; transition: max-height 0.25s ease; }
-  .admin-dev-group.open { max-height: 600px; }
-  .admin-dev-toggle-label-desktop { display: none; }
-
-  /* Pinned footer: avatar + name + log out */
-  .admin-drawer-footer {
-    position: static;
-    margin-top: 0;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-    background: var(--color-primary-dark);
-  }
-
-  /* ----- Bottom tab bar ----- */
-  .admin-bottom-nav {
-    display: flex;
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 55;
-    background: #fff;
-    border-top: 1px solid var(--color-border);
-    box-shadow: 0 -4px 16px rgba(27, 67, 50, 0.08);
-    padding: 6px 2px calc(6px + env(safe-area-inset-bottom, 0px));
-    transform: translateZ(0);
-    will-change: transform;
-  }
-  .admin-bottom-nav button,
-  .admin-bottom-nav a {
-    flex: 1 1 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    min-height: 48px;
-    border: none;
-    background: none;
-    color: var(--color-text-muted);
-    font-size: 0.68rem;
-    font-weight: 600;
-    text-decoration: none;
-    cursor: pointer;
-  }
-  .admin-bottom-nav a.active { color: var(--color-primary); }
-  .admin-bottom-nav svg { width: 20px; height: 20px; }
-
-  /* ----- Dashboard: 2x2 stat grid, label-above-number ----- */
-  .stat-cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin-bottom: 20px;
-  }
-  .stat-card {
-    display: flex;
-    flex-direction: column;
-    padding: 14px;
-    border-radius: 12px;
-  }
-  .stat-card .label { order: 1; margin-top: 0; margin-bottom: 4px; font-size: 0.75rem; }
-  .stat-card .num { order: 2; font-size: 1.4rem; }
-
-  /* ----- Mobile list rows (replace a data table on narrow screens) -----
-     Scoped to .admin-dashboard-table-wrap specifically (NOT the generic
-     .admin-table-wrap used by every other admin list page) -- only the
-     Dashboard's Recent Inquiries table swaps to list rows on mobile;
-     every other page's table is untouched. */
-  .admin-dashboard-table-wrap { display: none; }
-  .admin-mobile-list { display: flex; flex-direction: column; gap: 1px; background: var(--color-border); border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
-  .admin-mobile-list-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px;
-    background: var(--color-surface);
-    min-height: 44px;
-  }
-  .admin-mobile-list-avatar {
-    flex-shrink: 0;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: #e3eee7;
-    color: var(--color-primary-dark);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 0.8rem;
-  }
-  .admin-mobile-list-body { flex: 1; min-width: 0; }
-  .admin-mobile-list-name { font-weight: 700; font-size: 0.88rem; color: var(--color-text); }
-  .admin-mobile-list-sub {
-    font-size: 0.78rem;
-    color: var(--color-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    margin-top: 1px;
-  }
-  .admin-mobile-list-pill {
-    flex-shrink: 0;
-    padding: 3px 10px;
-    border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    background: var(--color-border);
-    color: var(--color-text-muted);
-  }
-  .admin-mobile-list-pill.new { background: #fdf1e6; color: #8a5a1f; }
-  .admin-mobile-list-pill.replied { background: #e3f3e8; color: var(--color-primary); }
-}
-
-@media (min-width: 769px) {
-  /* Table/list pair above is mobile-only -- on desktop show the table and
-     never render the list markup's layout (it stays in the DOM but
-     collapsed, cheaper than conditional rendering in every page). */
-  .admin-mobile-list { display: none; }
-}
-
-/* ---------- Business Analytics Dashboard ---------- */
-
-.analytics-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.analytics-range-picker {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.analytics-range-picker .form-control {
-  width: auto;
-}
-
-/* Sticky pill row of in-page section links -- same visual language as
-   .admin-nav's pills, just horizontal, so the 26-section page is scannable
-   without turning into separate sub-routes/tabs (which would break
-   cross-filtering and force re-fetching per tab). */
-.analytics-jump-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: var(--color-bg);
-  padding: 10px 0;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.analytics-jump-nav a {
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-.analytics-jump-nav a:hover {
-  color: var(--color-primary);
-  border-color: var(--color-accent-light);
-}
-
-.analytics-section {
-  scroll-margin-top: 70px;
-  margin-bottom: 40px;
-}
-
-.analytics-drilldown-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(64, 145, 108, 0.1);
-  border: 1px solid var(--color-accent-light);
-  border-radius: var(--radius-sm);
-  padding: 10px 16px;
-  margin-bottom: 20px;
-  font-size: 0.88rem;
-  color: var(--color-primary-dark);
-}
-
-.analytics-toggle-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.analytics-kpi-trend {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 8px;
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.analytics-kpi-trend-up {
-  color: var(--color-accent);
-}
-
-.analytics-kpi-trend-down {
-  color: var(--color-danger);
-}
-
-.analytics-kpi-sublabel {
-  color: var(--color-text-muted);
-  font-size: 0.78rem;
-  margin-top: 6px;
-}
-
-/* Charts need a minimum pixel width to stay legible, so on narrow screens
-   they scroll horizontally inside their own container instead of squashing
-   -- same overflow-x:auto convention already used by .admin-table-wrap. */
-.analytics-chart-scroll {
-  overflow-x: auto;
-}
-
-.analytics-split-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  align-items: start;
-}
-
-.analytics-split-layout > div {
-  min-width: 0;
-}
-
-@media (max-width: 900px) {
-  .analytics-split-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-.analytics-color-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  margin-right: 8px;
-}
-
-.analytics-top-plants-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.analytics-top-plant-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 12px 16px;
-  box-shadow: var(--shadow);
-  text-align: left;
-  width: 100%;
-}
-
-.analytics-top-plant-rank {
-  font-size: 1.3rem;
-  width: 32px;
-  flex-shrink: 0;
-  text-align: center;
-}
-
-.analytics-top-plant-img {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  object-fit: cover;
-  background: var(--color-border);
-  flex-shrink: 0;
-}
-
-.analytics-top-plant-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
-.analytics-top-plant-meta {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-
-.analytics-top-plant-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  font-size: 0.82rem;
-  color: var(--color-text-muted);
-}
-
-.analytics-segment-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
-  margin-bottom: 8px;
-}
-
-.analytics-segment-card {
-  text-align: left;
-  cursor: pointer;
-}
-
-.analytics-yoy-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.analytics-alert-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.analytics-alert-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-  font-size: 0.88rem;
-}
-
-.analytics-alert-meta {
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
-}
-
-.analytics-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(16, 40, 31, 0.45);
-  z-index: 200;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.analytics-drawer {
-  background: var(--color-bg);
-  width: min(720px, 100%);
-  height: 100%;
-  overflow-y: auto;
-  padding: 24px;
-  box-shadow: var(--shadow-lg);
-}
-
-.analytics-export-menu {
-  position: relative;
-}
-
-.analytics-export-dropdown {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-lg);
-  z-index: 30;
-  min-width: 180px;
-  overflow: hidden;
-}
-
-.analytics-export-dropdown button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 10px 14px;
-  background: none;
-  border: none;
-  font-size: 0.85rem;
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-.analytics-export-dropdown button:hover {
-  background: var(--color-bg);
-  color: var(--color-primary);
-}
-
-/* ---------- Customer purchase timeline ---------- */
-
-.customer-timeline {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.customer-timeline-item {
-  display: flex;
-  gap: 16px;
-  padding: 12px 0;
-  border-left: 3px solid var(--color-accent-light);
-  padding-left: 16px;
-}
-
-.customer-timeline-date {
-  flex-shrink: 0;
-  width: 100px;
-  font-weight: 700;
-  color: var(--color-primary-dark);
-  font-size: 0.85rem;
-}
-
-.customer-timeline-body {
-  font-size: 0.88rem;
-}
-
-.customer-timeline-meta {
-  color: var(--color-text-muted);
-  font-size: 0.82rem;
-  margin-top: 4px;
-}
-
-@media (max-width: 480px) {
-  .customer-timeline-item {
-    flex-direction: column;
-    gap: 4px;
-  }
-  .customer-timeline-date {
-    width: auto;
-  }
-}
-
-/* ---------- Print / PDF export ---------- */
-/* printSection() in exportUtils.js hides every .analytics-section except the
-   one being printed, then calls window.print(); this stylesheet hides chrome
-   (sidebar, topbar, jump-nav, buttons) so the printed page is just the
-   report content. */
-
-@media print {
-  .admin-sidebar,
-  .admin-topbar,
-  .analytics-jump-nav,
-  .analytics-header-actions,
-  .analytics-export-menu,
-  .row-actions,
-  .no-print {
-    display: none !important;
-  }
-  .admin-content {
-    padding: 0 !important;
-  }
-}
-
-/* ---------- Ask AAIJI (Admin BI chat page) ---------- */
-/* Reuses the customer AI widget's bubble/typing/chip/error styles
-   (.ai-chat-msg, .ai-chat-chip, .ai-chat-error, .ai-chat-typing-dots,
-   .ai-chat-send-btn, .ai-chat-status-dot -- all in index.css, globally
-   available) inside a full-page layout instead of a floating widget. */
-
-.ask-aaiji-header-right {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.ask-aaiji-panel {
-  display: flex;
-  flex-direction: column;
-  height: min(640px, calc(100vh - 220px));
-  background: #fff;
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
-
-.ask-aaiji-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.ask-aaiji-msg {
-  max-width: 70%;
-}
-
-.ask-aaiji-empty {
-  margin: auto;
-  text-align: center;
-  max-width: 420px;
-  color: var(--color-text);
-}
-
-.ask-aaiji-empty-icon {
-  font-size: 2.2rem;
-  margin-bottom: 8px;
-}
-
-.ask-aaiji-empty p {
-  color: var(--color-text-muted);
-  font-size: 0.88rem;
-  margin: 6px 0 16px;
-}
-
-.ask-aaiji-suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-}
-
-.ask-aaiji-input-row textarea {
-  flex: 1;
-  min-width: 0;
-  max-height: 100px;
-  padding: 10px 14px;
-  border-radius: 18px;
-  border: 1.5px solid var(--color-border);
-  background: var(--color-bg, #f4f4f0);
-  font-family: inherit;
-  font-size: 0.9rem;
-  resize: none;
-}
-
-.ask-aaiji-input-row textarea:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  background: #fff;
-}
-
-@media (max-width: 768px) {
-  .ask-aaiji-panel {
-    height: calc(100vh - 260px);
-    border-radius: 12px;
-  }
-  .ask-aaiji-msg {
-    max-width: 88%;
-  }
-  .ask-aaiji-header-right {
-    width: 100%;
-    justify-content: space-between;
-  }
-}
-
-/* Phone: the chat fills the screen, controls sit in one tidy row, and the
-   composer stays a single line with its placeholder fully visible. */
-@media (max-width: 640px) {
-  .ask-aaiji-page .admin-page-head {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-  .ask-aaiji-page .admin-page-head h1 {
-    font-size: 1.35rem;
-    margin: 0;
-  }
-  .ask-aaiji-header-right {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .ask-aaiji-header-right .btn {
-    padding: 6px 12px;
-    font-size: 0.82rem;
-  }
-  .ask-aaiji-panel {
-    height: calc(100vh - 300px);
-    min-height: 420px;
-    border-radius: 14px;
-  }
-  .ask-aaiji-body {
-    padding: 14px;
-  }
-  .ask-aaiji-empty {
-    margin: 12px auto;
-  }
-  .ask-aaiji-empty-icon {
-    font-size: 1.8rem;
-  }
-  .ask-aaiji-suggestions {
-    gap: 6px;
-  }
-  /* Standalone "Voice on" hidden on phones; voice starts from the composer mic. */
-  .ask-aaiji-header-right .aaiji-speak-toggle {
-    display: none !important;
-  }
-  .ask-aaiji-input-row textarea::placeholder {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  /* One rounded composer: input, mic and send sit inside the same pill. */
-  .ask-aaiji-input-row {
-    margin: 10px;
-    padding: 6px 6px 6px 16px;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid var(--color-border);
-    border-top: 1px solid var(--color-border);
-    border-radius: 28px;
-    background: #fff;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  }
-  .ask-aaiji-input-row textarea {
-    border: none;
-    background: transparent;
-    border-radius: 0;
-    padding: 8px 0;
-    align-self: center;
-  }
-  .ask-aaiji-input-row textarea:focus {
-    border: none;
-    background: transparent;
-  }
-  .ask-aaiji-input-row .ai-chat-mic-btn,
-  .ask-aaiji-input-row .ai-chat-send-btn {
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
-  }
-  /* Grows with the text up to a few lines, then scrolls. 16px stops phones
-     zooming the page when the box is focused. */
-  .ask-aaiji-input-row textarea {
-    field-sizing: content;
-    height: auto;
-    min-height: 40px;
-    max-height: 120px;
-    padding: 9px 0;
-    font-size: 16px;
-    line-height: 1.35;
-    resize: none;
-    overflow-y: auto;
-  }
-}
-
-/* ---------- Ask AAIJI floating launcher (every admin page) ---------- */
-/* Same visual language as the customer site's .ai-chat-fab -- round, dark
-   green, leaf icon -- so it reads as "the same assistant" across both
-   sides of the product, just reached a different way here. */
-
-.admin-ai-fab {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  /* Below the mobile drawer overlay (70) so opening the drawer correctly
-     covers it instead of the fab poking through on top. */
-  z-index: 42;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.admin-ai-fab:hover {
-  transform: translateY(-2px) scale(1.04);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26);
-  color: #fff;
-}
-
-@media (max-width: 768px) {
-  .admin-ai-fab {
-    width: 50px;
-    height: 50px;
-    right: 16px;
-    /* Above the fixed admin bottom tab bar (its own height + safe-area). */
-    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
-  }
-}
-
-/* ---------- Ask AAIJI voice mode (full-screen overlay) ---------- */
-/* Covers the whole admin shell (sidebar is z-index 1000) while a voice
-   conversation is open. The orb is plain CSS; --level (0..1) is set from
-   JS: real mic volume while listening, word boundaries while speaking. */
-
-.aaiji-voice {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background:
-    radial-gradient(circle at 50% 40%, rgba(116, 198, 157, 0.2), rgba(116, 198, 157, 0) 46%),
-    #fbfcfa;
-  animation: aaijiVoiceIn 260ms ease-out both;
-}
-
-.aaiji-voice-stage {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 20px 0;
-  text-align: center;
-  min-height: 0;
-}
-
-.aaiji-orb {
-  --level: 0;
-  position: relative;
-  width: clamp(170px, 34vmin, 270px);
-  aspect-ratio: 1;
-  margin-bottom: 78px;
-}
-
-.aaiji-orb-core,
-.aaiji-orb-ring,
-.aaiji-orb-arc {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-}
-
-.aaiji-orb-core {
-  inset: 14%;
-  background: radial-gradient(circle at 34% 28%, #95d5b2 0%, #40916c 42%, #1b4332 100%);
-  box-shadow:
-    0 0 calc(34px + var(--level) * 70px) rgba(64, 145, 108, calc(0.3 + var(--level) * 0.25)),
-    inset 0 -10px 26px rgba(16, 40, 31, 0.35);
-  transform: scale(calc(1 + var(--level) * 0.1));
-  transition: transform 140ms ease-out, box-shadow 220ms ease-out, border-radius 400ms ease;
-  animation: aaijiBreathe 5.5s ease-in-out infinite;
-}
-
-.aaiji-orb-ring {
-  border: 1px solid rgba(45, 106, 79, 0.2);
-  transition: transform 180ms ease-out, opacity 400ms ease, border-color 400ms ease;
-}
-
-.aaiji-orb-ring.r1 { transform: scale(calc(0.92 + var(--level) * 0.16)); }
-.aaiji-orb-ring.r2 { transform: scale(calc(1.1 + var(--level) * 0.26)); opacity: 0.7; }
-.aaiji-orb-ring.r3 { transform: scale(calc(1.3 + var(--level) * 0.38)); opacity: 0.4; }
-
-.aaiji-orb-arc {
-  inset: 4%;
-  border: 2px solid transparent;
-  border-top-color: rgba(64, 145, 108, 0.75);
-  border-right-color: rgba(64, 145, 108, 0.2);
-  opacity: 0;
-  transition: opacity 400ms ease;
-}
-
-/* idle / muted: barely-there breathing only */
-.aaiji-voice[data-state="muted"] .aaiji-orb-core,
-.aaiji-voice[data-state="denied"] .aaiji-orb-core {
-  filter: saturate(0.45);
-  animation-duration: 8s;
-}
-
-/* thinking: calm pulse, one arc slowly orbiting */
-.aaiji-voice[data-state="thinking"] .aaiji-orb-core {
-  animation: aaijiThink 2.4s ease-in-out infinite;
-}
-.aaiji-voice[data-state="thinking"] .aaiji-orb-arc {
-  opacity: 1;
-  animation: aaijiOrbit 2.8s linear infinite;
-}
-
-/* speaking: rings ripple outward, core gently changes shape */
-.aaiji-voice[data-state="speaking"] .aaiji-orb-core {
-  animation: aaijiSpeak 1.5s ease-in-out infinite;
-}
-.aaiji-voice[data-state="speaking"] .aaiji-orb-ring {
-  border-color: rgba(64, 145, 108, 0.42);
-  animation: aaijiRipple 2.1s ease-out infinite;
-}
-.aaiji-voice[data-state="speaking"] .aaiji-orb-ring.r2 { animation-delay: 0.7s; }
-.aaiji-voice[data-state="speaking"] .aaiji-orb-ring.r3 { animation-delay: 1.4s; }
-
-.aaiji-voice-name {
-  font-family: var(--font-heading);
-  font-size: 1.7rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: #1b4332;
-}
-
-.aaiji-voice-sub {
-  font-size: 0.82rem;
-  color: #6b7770;
-  margin-top: 2px;
-}
-
-.aaiji-voice-status {
-  margin-top: 18px;
-  font-size: 1.05rem;
-  font-weight: 500;
-  color: #2d6a4f;
-  min-height: 1.6em;
-}
-
-.aaiji-voice-heard {
-  margin-top: 8px;
-  max-width: 520px;
-  min-height: 2.8em;
-  font-size: 0.92rem;
-  color: #55635b;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.aaiji-voice-controls {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 18px 20px calc(30px + env(safe-area-inset-bottom));
-}
-
-.aaiji-voice-mic {
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  border: 0;
-  background: #1b4332;
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 8px 22px rgba(27, 67, 50, 0.28);
-  transition: background 200ms ease, transform 160ms ease;
-}
-
-.aaiji-voice-mic:hover { transform: translateY(-1px); }
-.aaiji-voice-mic.muted { background: #8a968f; box-shadow: none; }
-
-.aaiji-voice-end {
-  height: 48px;
-  padding: 0 20px;
-  border-radius: 999px;
-  border: 1px solid #e3c9c5;
-  background: #fff;
-  color: #b3372b;
-  font: inherit;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: background 200ms ease;
-}
-
-.aaiji-voice-end:hover { background: #fdf1ef; }
-
-.aaiji-voice-mic:focus-visible,
-.aaiji-voice-end:focus-visible {
-  outline: 2px solid #40916c;
-  outline-offset: 3px;
-}
-
-@keyframes aaijiVoiceIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes aaijiBreathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.09); } }
-@keyframes aaijiThink { 0%, 100% { transform: scale(0.96); } 50% { transform: scale(1.03); } }
-@keyframes aaijiOrbit { to { transform: rotate(360deg); } }
-@keyframes aaijiSpeak {
-  0%, 100% { border-radius: 50%; transform: scale(calc(1 + var(--level) * 0.1)); }
-  33% { border-radius: 47% 53% 52% 48% / 52% 47% 53% 48%; transform: scale(calc(1.035 + var(--level) * 0.1)); }
-  66% { border-radius: 53% 47% 48% 52% / 48% 53% 47% 52%; transform: scale(calc(0.99 + var(--level) * 0.1)); }
-}
-@keyframes aaijiRipple {
-  0% { transform: scale(0.9); opacity: 0.55; }
-  100% { transform: scale(1.75); opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .aaiji-voice,
-  .aaiji-orb-core,
-  .aaiji-orb-ring,
-  .aaiji-orb-arc {
-    animation: none !important;
-  }
-}
-
-/* Voice Mode additions: close, secondary text, retry, composer mic */
-.aaiji-voice-close {
-  position: absolute;
-  top: calc(18px + env(safe-area-inset-top));
-  right: 20px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid #dfe7e1;
-  background: #fff;
-  color: #55635b;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.aaiji-voice-close:hover { background: #f2f6f3; }
-.aaiji-voice-close:focus-visible { outline: 2px solid #40916c; outline-offset: 2px; }
-
-.aaiji-voice-secondary {
-  min-height: 1.3em;
-  margin-top: 2px;
-  font-size: 0.84rem;
-  color: #7d8a83;
-}
-
-.aaiji-voice[data-state="speaking"] .aaiji-orb { cursor: pointer; }
-
-.aaiji-voice[data-state="denied"] .aaiji-orb-core {
-  background: radial-gradient(circle at 34% 28%, #f0a39b 0%, #c4493d 55%, #7e241c 100%);
-  box-shadow: 0 0 34px rgba(196, 73, 61, 0.28);
-  filter: none;
-}
-
-.aaiji-voice[data-state="denied"] .aaiji-voice-status { color: #b3372b; }
-
-.aaiji-voice-retry {
-  margin-top: 14px;
-  height: 42px;
-  padding: 0 24px;
-  border: 0;
-  border-radius: 999px;
-  background: #1b4332;
-  color: #fff;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.aaiji-voice-retry:focus-visible { outline: 2px solid #40916c; outline-offset: 3px; }
-
-.aaiji-composer-mic {
-  background: #1b4332;
-  border-color: #1b4332;
-  color: #fff;
-}
-
-.aaiji-composer-mic:hover:not(:disabled) {
-  background: #2d6a4f;
-  border-color: #2d6a4f;
-  color: #fff;
-}
-
-/* Plain statement of what the microphone is doing right now. */
-.aaiji-voice-micstate {
-  margin-top: 14px;
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-}
-.aaiji-voice[data-state="listening"] .aaiji-voice-micstate { color: var(--color-primary); font-weight: 600; }
-
-/* Ask AAIJI composer on tablet and desktop: the same single rounded pill as
-   on phones -- input, mic and send inside one control. */
-@media (min-width: 641px) {
-  .ask-aaiji-input-row {
-    margin: 12px 16px 16px;
-    padding: 6px 8px 6px 20px;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid var(--color-border);
-    border-radius: 30px;
-    background: #fff;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  }
-  .ask-aaiji-input-row textarea,
-  .ask-aaiji-input-row textarea:focus {
-    field-sizing: content;
-    height: auto;
-    min-height: 42px;
-    max-height: 140px;
-    padding: 10px 0;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    font-size: 16px;
-    line-height: 1.35;
-    overflow-y: auto;
-  }
-  .ask-aaiji-input-row .ai-chat-mic-btn,
-  .ask-aaiji-input-row .ai-chat-send-btn {
-    width: 42px;
-    height: 42px;
-    min-width: 42px;
-  }
-}
-
-/* Tall enough that the welcome state never needs its own scrollbar on short
-   laptop screens -- the page scrolls instead. */
-.ask-aaiji-panel {
-  min-height: 520px;
-}
-
-/* ---------- Sales / Purchase Order line items ----------
-   The form card is only ~660px wide inside, so each line is two tidy rows:
-   the plant picker across the top, then description / quantity / price /
-   remove underneath. Labels sit directly above their inputs and never wrap. */
-.line-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px 150px auto;
-  gap: 12px 14px;
-  align-items: end;
-  padding: 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: #fff;
-}
-.line-item-no-desc {
-  grid-template-columns: 150px 170px minmax(0, 1fr);
-}
-.line-item-plant {
-  grid-column: 1 / -1;
-}
-.line-item-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  margin: 0;
-}
-.line-item-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-primary-dark);
-  white-space: nowrap;
-}
-.line-item .form-control {
-  width: 100%;
-  min-width: 0;
-  height: 46px;
-  padding: 8px 12px;
-  margin: 0;
-}
-.plant-picker {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-.plant-picker .form-control {
-  flex: 1 1 auto;
-}
-.plant-picker .btn {
-  flex: 0 0 auto;
-  height: 46px;
-  white-space: nowrap;
-}
-.plant-picker-tray {
-  margin-top: 8px;
-}
-.line-item-remove {
-  height: 46px;
-  white-space: nowrap;
-  justify-self: end;
-}
-.line-item-total {
-  grid-column: 1 / -1;
-  color: var(--color-text-muted);
-}
-
-@media (max-width: 560px) {
-  .line-item,
-  .line-item-no-desc {
-    grid-template-columns: 1fr 1fr;
-  }
-  .line-item-desc {
-    grid-column: 1 / -1;
-  }
-  .plant-picker {
-    flex-wrap: wrap;
-  }
-  .plant-picker .form-control {
-    flex-basis: 100%;
-  }
-  .plant-picker .btn {
-    flex: 1 1 auto;
-  }
-  .line-item-remove {
-    grid-column: 1 / -1;
-    justify-self: stretch;
-  }
-}
-
-/* ---------- Searchable dropdown (contacts, plants) ---------- */
-.search-select {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.search-select-trigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  background: #fff;
-}
-.search-select-trigger > span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.search-select-placeholder {
-  color: var(--color-text-muted);
-}
-.search-select-caret {
-  flex-shrink: 0;
-  color: var(--color-text-muted);
-}
-.search-select.open .search-select-trigger {
-  border-color: var(--color-accent);
-}
-.search-select-panel {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  min-width: 240px;
-  background: #fff;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
-  padding: 8px;
-}
-.search-select-panel .search-select-search {
-  width: 100%;
-  height: 40px;
-  padding: 6px 12px;
-  margin: 0 0 6px;
-}
-/* Only the list scrolls, so the search box stays put above it. */
-.search-select-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 260px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-.search-select-option {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  padding: 9px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.92rem;
-}
-.search-select-option.active {
-  background: #eef5f0;
-}
-.search-select-option.selected {
-  font-weight: 700;
-  color: var(--color-primary-dark);
-}
-.search-select-option.clear {
-  color: var(--color-text-muted);
-}
-.search-select-hint {
-  flex-shrink: 0;
-  font-size: 0.78rem;
-  font-weight: 400;
-  color: var(--color-text-muted);
-}
-.search-select-empty {
-  padding: 12px 10px;
-  color: var(--color-text-muted);
-  font-size: 0.88rem;
-}
-
-/* ---- Delivery date alert (Sales Orders / Invoices lists) ---- */
-.dl-cell { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.dl-none { color: var(--color-text-muted); }
-.dl-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; padding: 2px 9px 2px 7px; border-radius: 999px; }
-.dl-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: currentColor; }
-.dl-red { color: #b3261e; background: #fdeceb; }
-.dl-orange { color: #a85d00; background: #fff1de; }
-.dl-green { color: #1f7a45; background: #e7f5ec; }
-.dl-red .dl-dot { animation: dlPulseRed 1.8s ease-in-out infinite; }
-.dl-orange .dl-dot { animation: dlPulseOrange 2.6s ease-in-out infinite; }
-@keyframes dlPulseRed {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 48, 37, 0.55); transform: scale(1); }
-  50% { box-shadow: 0 0 0 7px rgba(217, 48, 37, 0); transform: scale(1.12); }
-}
-@keyframes dlPulseOrange {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 140, 0, 0.45); }
-  50% { box-shadow: 0 0 0 6px rgba(240, 140, 0, 0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dl-red .dl-dot, .dl-orange .dl-dot { animation: none; }
-}
-
-/* ---- Stock & preparation (orders) ---- */
-.fulfil-line { padding: 12px 0; border-top: 1px solid var(--color-border); display: grid; gap: 8px; }
-.fulfil-line:first-of-type { border-top: 0; }
-.fulfil-numbers { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.9rem; color: var(--color-text-muted); }
-.fulfil-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.fulfil-qty { width: 110px; text-align: center; }
-.line-item-stock { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.85rem; color: var(--color-text-muted); }
-
-/* ---- Stock section (seeds, batches, ready plants) ---- */
-.stock-help { background: #f1f7f3; border: 1px solid #d5e6da; border-radius: 12px; margin-bottom: 18px; }
-.stock-help-head { width: 100%; text-align: left; background: transparent; border: 0; padding: 12px 16px; font: inherit; font-weight: 700; color: var(--color-primary); cursor: pointer; display: flex; gap: 8px; align-items: center; }
-.stock-help-toggle { margin-left: auto; font-weight: 600; font-size: 0.82rem; color: var(--color-text-muted); }
-.stock-help-body { padding: 0 20px 14px; }
-.stock-help-body ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
-.stock-help-note { margin: 10px 0 0; font-size: 0.88rem; color: var(--color-text-muted); }
-.stock-hint { margin: 10px 0 0; font-size: 0.86rem; color: var(--color-text-muted); }
-.stock-form-row, .stock-form-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
-.stock-form-grid { flex-direction: column; align-items: stretch; max-width: 640px; }
-.stock-form-row label, .stock-form-grid label, .stock-block { display: grid; gap: 6px; font-weight: 600; font-size: 0.9rem; flex: 1 1 200px; }
-.stock-block { max-width: 520px; margin: 4px 0 12px; }
-.stock-form-row small { font-weight: 400; color: var(--color-text-muted); }
-.stock-suggest { background: #fff8e8; border: 1px solid #f0dfb2; border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; font-size: 0.9rem; }
-.stock-check { display: flex; gap: 8px; align-items: center; font-weight: 400; }
-.stock-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 0 0 16px; }
-.stock-steps li { padding: 6px 14px; border-radius: 999px; background: #eef1ef; color: #5b6b63; font-weight: 600; font-size: 0.88rem; }
-.stock-steps li.done { background: #dff1e4; color: #1f7a45; }
-.stock-facts { display: flex; flex-wrap: wrap; gap: 18px 36px; }
-.stock-facts div { display: grid; gap: 2px; }
-.stock-facts span { font-size: 0.8rem; color: var(--color-text-muted); }
-.stock-facts strong { font-size: 1.1rem; }
-.stock-facts small { color: var(--color-text-muted); }
-.stock-sub { font-size: 1rem; margin: 14px 0 8px; }
-.stock-ok { color: #1f7a45; font-weight: 600; margin: 8px 0; }
-.stock-warn { color: #b3261e; font-weight: 600; margin: 8px 0; }
-.stock-kpis { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; }
-.stock-kpis div { background: #fff; border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 20px; display: grid; gap: 2px; min-width: 170px; }
-.stock-kpis span { font-size: 0.82rem; color: var(--color-text-muted); }
-.stock-kpis strong { font-size: 1.5rem; }
-.stock-kpis .alert-red strong { color: #b3261e; }
-.stock-advice { font-weight: 600; font-size: 0.9rem; }
-.stock-advice-red { color: #b3261e; }
-.stock-advice-orange { color: #a85d00; }
-.stock-advice-green { color: #1f7a45; }
-
-/* ---- Customer history (Stock Orders) ---- */
+.admin-shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+.admin-sidebar {
+  width: 240px;
+  background: var(--color-primary-dark);
+  color: rgba(255, 255, 255, 0.85);
+  flex-shrink: 0;
+  padding: 24px 0 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* Pinned user/log-out bar at the bottom of the sidebar (desktop). The
+   mobile drawer re-declares .admin-drawer-footer inside its media query. */
+.admin-drawer-footer {
+  position: sticky;
+  bottom: 0;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--color-primary-dark);
+}
+
+.admin-user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.admin-user-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.admin-user-name {
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user-role {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+}
+
+.admin-logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.admin-logout-btn:hover,
+.admin-logout-btn:focus-visible {
+  background: rgba(231, 76, 60, 0.18);
+  border-color: rgba(243, 166, 160, 0.6);
+  color: #fff;
+  outline: none;
+}
+
+.admin-sidebar .brand {
+  color: #fff;
+  padding: 0 20px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  margin-bottom: 16px;
+}
+
+.admin-logo-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #fff;
+  padding: 4px;
+  flex-shrink: 0;
+}
+
+.admin-logo-chip img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.admin-nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 20px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.75);
+  border-left: 3px solid transparent;
+}
+
+.admin-nav a:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.admin-nav a.active {
+  background: rgba(64, 145, 108, 0.2);
+  border-left-color: var(--color-accent-light);
+  color: #fff;
+}
+
+.admin-nav .logout-btn {
+  margin-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 16px;
+}
+
+.admin-nav-heading {
+  margin-top: 16px;
+  padding: 8px 20px 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.admin-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-topbar {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 18px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-content {
+  padding: 28px;
+}
+
+.admin-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* Compact variant of the base .form-control (which uses a large 12px/14px
+   padding meant for standalone form fields) -- used wherever a date input/
+   select/search box sits inline next to a .btn-sm action (Export, Search,
+   +New) across every Accounting list page's filter row (ExportButton,
+   SourceFilter, SearchBox), so they all line up at the same height instead
+   of the oversized field dwarfing the buttons beside it. */
+.admin-control-sm {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  height: 36px;
+}
+
+/* Single-row container for an Accounting list page's filters + actions
+   (source/status dropdowns, search box, date-range export, +New) -- sits
+   on the same line as the page's <h1> inside .admin-page-head, wrapping as
+   one unit only when the viewport is too narrow to fit everything. */
+.admin-page-head-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.admin-page-head h1 {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+/* ----- Status banner (used by Dashboard's "no new orders" state and the
+   "Ask AAIJI" shortcut card) -- base rule works on every width; the mobile
+   media query further down only tweaks spacing, it doesn't redefine this. */
+.admin-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: #eef7f0;
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+  transition: box-shadow 0.15s ease;
+}
+
+a.admin-status-banner:hover {
+  box-shadow: var(--shadow);
+}
+
+.admin-status-banner.alert {
+  background: #fdf1e6;
+  color: #8a5a1f;
+  border-color: #f3d9b8;
+}
+
+.admin-status-banner-icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+}
+
+.admin-status-banner.alert .admin-status-banner-icon {
+  background: #d98b2b;
+}
+
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 18px;
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.stat-card .num {
+  font-family: var(--font-heading);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.stat-card .label {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.admin-table-wrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  box-shadow: var(--shadow);
+}
+
+table.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+
+table.admin-table th,
+table.admin-table td {
+  text-align: left;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+
+table.admin-table th {
+  background: var(--color-bg);
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  white-space: nowrap;
+}
+
+table.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+table.admin-table .row-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.admin-form-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 28px;
+  max-width: 720px;
+  box-shadow: var(--shadow);
+}
+
+/* ---------- Tray options editor (admin Plants form) ---------- */
+/* Scoped to .variants-field / .variant-row, no other admin form fields affected. */
+
+.variants-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.variant-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.variant-row-inputs {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.variant-row-inputs label {
+  flex: 1;
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+}
+
+.variant-row-inputs input {
+  margin-top: 4px;
+}
+
+.variant-row-price {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  padding-bottom: 8px;
+}
+
+.variant-row-price strong {
+  color: var(--color-primary-dark);
+}
+
+@media (max-width: 480px) {
+  .variant-row {
+    flex-wrap: wrap;
+  }
+}
+
+.admin-order-detail-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+/* Grid columns default to a min-width based on their content's intrinsic
+   (min-content) size, which lets a wide descendant (e.g. the status tracker)
+   force the whole column — and everything below it — wider than the
+   viewport. min-width: 0 lets these columns actually shrink to fit. */
+.admin-order-detail-grid > div {
+  min-width: 0;
+}
+
+.admin-order-status-history {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.admin-order-status-history-item {
+  padding-left: 16px;
+  border-left: 3px solid var(--color-border);
+}
+
+.admin-order-status-history-item strong {
+  display: block;
+  color: var(--color-primary-dark);
+}
+
+.admin-order-status-history-item .meta {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.admin-order-item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin-order-item-row:last-of-type {
+  border-bottom: none;
+}
+
+.admin-order-item-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--color-border);
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .admin-order-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Admin orders: mobile ---------- */
+
+.admin-order-cards {
+  display: none;
+}
+
+.admin-order-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.admin-order-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.admin-order-card-id {
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+
+.admin-order-card-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.88rem;
+  padding: 6px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.admin-order-card-row:first-of-type {
+  border-top: none;
+}
+
+.admin-order-card-row .label {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.admin-order-card-row .value {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.admin-order-card .btn-block {
+  margin-top: 12px;
+}
+
+@media (max-width: 700px) {
+  .admin-orders-table-wrap {
+    display: none;
+  }
+
+  .admin-order-cards {
+    display: block;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-content {
+    padding: 18px;
+  }
+
+  .admin-form-card {
+    padding: 20px;
+  }
+
+  .admin-page-head h1 {
+    font-size: 1.3rem;
+  }
+}
+
+.admin-login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary-dark);
+  padding: 20px;
+}
+
+.admin-login-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: var(--shadow-lg);
+}
+
+.admin-login-logo {
+  height: 72px;
+  width: auto;
+  display: block;
+}
+
+.thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--color-border);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.modal-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.modal-product-img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  background: var(--color-border);
+}
+
+.modal-product-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0 20px;
+}
+
+.modal-product-meta div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.modal-product-meta span {
+  color: var(--color-text-muted);
+}
+
+/* ---------- Admin mobile layout (<=768px): off-canvas drawer + sticky
+   compact topbar + bottom tab bar. Desktop (.admin-shell's default flex-row
+   sidebar+main) is completely untouched above this breakpoint -- every rule
+   in this block only ever applies at <=768px. ---------- */
+
+.admin-hamburger,
+.admin-drawer-close,
+.admin-drawer-overlay,
+.admin-bottom-nav,
+.admin-dev-toggle {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .admin-content { padding: 16px 16px calc(80px + env(safe-area-inset-bottom, 0px)); }
+
+  /* ----- Sticky compact topbar ----- */
+  .admin-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    height: 56px;
+    padding: 0 12px;
+    gap: 10px;
+  }
+  .admin-topbar strong {
+    flex: 1;
+    font-size: 1rem;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* The existing "Signed in as X" text is redundant with the drawer's own
+     footer (added below) at this width -- hidden here, not removed from
+     the DOM/desktop. */
+  .admin-topbar-username { display: none; }
+
+  .admin-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    border-radius: 10px;
+    color: var(--color-primary-dark);
+    cursor: pointer;
+  }
+  .admin-hamburger:active { background: var(--color-bg); }
+  .admin-hamburger svg { width: 22px; height: 22px; }
+
+  /* ----- Off-canvas drawer ----- */
+  .admin-drawer-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(16, 40, 31, 0.45);
+    z-index: 70;
+    animation: authOverlayFadeIn 0.2s ease forwards;
+  }
+
+  .admin-shell { flex-direction: column; }
+
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: min(280px, 82vw);
+    height: 100dvh;
+    z-index: 80;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    transform: translateX(-100%);
+    transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: var(--shadow-lg);
+  }
+  .admin-sidebar.open { transform: translateX(0); }
+
+  .admin-sidebar .brand {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 16px 16px 20px;
+    margin-bottom: 0;
+  }
+
+  .admin-drawer-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    color: #fff;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .admin-nav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: block;
+    padding-bottom: 8px;
+  }
+  .admin-nav a {
+    min-height: 44px;
+    border-left: none;
+    border-bottom: none;
+  }
+  .admin-nav a.active {
+    background: rgba(64, 145, 108, 0.25);
+    border-left: 3px solid var(--color-accent-light);
+  }
+
+  /* Collapsible Developer group */
+  .admin-dev-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 20px 8px 20px;
+    margin-top: 16px;
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    background: none;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .admin-dev-toggle svg {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.2s ease;
+  }
+  .admin-dev-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .admin-dev-group { overflow: hidden; max-height: 0; transition: max-height 0.25s ease; }
+  .admin-dev-group.open { max-height: 600px; }
+  .admin-dev-toggle-label-desktop { display: none; }
+
+  /* Pinned footer: avatar + name + log out */
+  .admin-drawer-footer {
+    position: static;
+    margin-top: 0;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--color-primary-dark);
+  }
+
+  /* ----- Bottom tab bar ----- */
+  .admin-bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 55;
+    background: #fff;
+    border-top: 1px solid var(--color-border);
+    box-shadow: 0 -4px 16px rgba(27, 67, 50, 0.08);
+    padding: 6px 2px calc(6px + env(safe-area-inset-bottom, 0px));
+    transform: translateZ(0);
+    will-change: transform;
+  }
+  .admin-bottom-nav button,
+  .admin-bottom-nav a {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 48px;
+    border: none;
+    background: none;
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .admin-bottom-nav a.active { color: var(--color-primary); }
+  .admin-bottom-nav svg { width: 20px; height: 20px; }
+
+  /* ----- Dashboard: 2x2 stat grid, label-above-number ----- */
+  .stat-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
+    border-radius: 12px;
+  }
+  .stat-card .label { order: 1; margin-top: 0; margin-bottom: 4px; font-size: 0.75rem; }
+  .stat-card .num { order: 2; font-size: 1.4rem; }
+
+  /* ----- Mobile list rows (replace a data table on narrow screens) -----
+     Scoped to .admin-dashboard-table-wrap specifically (NOT the generic
+     .admin-table-wrap used by every other admin list page) -- only the
+     Dashboard's Recent Inquiries table swaps to list rows on mobile;
+     every other page's table is untouched. */
+  .admin-dashboard-table-wrap { display: none; }
+  .admin-mobile-list { display: flex; flex-direction: column; gap: 1px; background: var(--color-border); border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+  .admin-mobile-list-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background: var(--color-surface);
+    min-height: 44px;
+  }
+  .admin-mobile-list-avatar {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #e3eee7;
+    color: var(--color-primary-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+  }
+  .admin-mobile-list-body { flex: 1; min-width: 0; }
+  .admin-mobile-list-name { font-weight: 700; font-size: 0.88rem; color: var(--color-text); }
+  .admin-mobile-list-sub {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+  }
+  .admin-mobile-list-pill {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: var(--color-border);
+    color: var(--color-text-muted);
+  }
+  .admin-mobile-list-pill.new { background: #fdf1e6; color: #8a5a1f; }
+  .admin-mobile-list-pill.replied { background: #e3f3e8; color: var(--color-primary); }
+}
+
+@media (min-width: 769px) {
+  /* Table/list pair above is mobile-only -- on desktop show the table and
+     never render the list markup's layout (it stays in the DOM but
+     collapsed, cheaper than conditional rendering in every page). */
+  .admin-mobile-list { display: none; }
+}
+
+/* ---------- Business Analytics Dashboard ---------- */
+
+.analytics-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.analytics-range-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analytics-range-picker .form-control {
+  width: auto;
+}
+
+/* Sticky pill row of in-page section links -- same visual language as
+   .admin-nav's pills, just horizontal, so the 26-section page is scannable
+   without turning into separate sub-routes/tabs (which would break
+   cross-filtering and force re-fetching per tab). */
+.analytics-jump-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-bg);
+  padding: 10px 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.analytics-jump-nav a {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.analytics-jump-nav a:hover {
+  color: var(--color-primary);
+  border-color: var(--color-accent-light);
+}
+
+.analytics-section {
+  scroll-margin-top: 70px;
+  margin-bottom: 40px;
+}
+
+.analytics-drilldown-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(64, 145, 108, 0.1);
+  border: 1px solid var(--color-accent-light);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  font-size: 0.88rem;
+  color: var(--color-primary-dark);
+}
+
+.analytics-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.analytics-kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.analytics-kpi-trend-up {
+  color: var(--color-accent);
+}
+
+.analytics-kpi-trend-down {
+  color: var(--color-danger);
+}
+
+.analytics-kpi-sublabel {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  margin-top: 6px;
+}
+
+/* Charts need a minimum pixel width to stay legible, so on narrow screens
+   they scroll horizontally inside their own container instead of squashing
+   -- same overflow-x:auto convention already used by .admin-table-wrap. */
+.analytics-chart-scroll {
+  overflow-x: auto;
+}
+
+.analytics-split-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.analytics-split-layout > div {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .analytics-split-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.analytics-color-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.analytics-top-plants-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.analytics-top-plant-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  box-shadow: var(--shadow);
+  text-align: left;
+  width: 100%;
+}
+
+.analytics-top-plant-rank {
+  font-size: 1.3rem;
+  width: 32px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.analytics-top-plant-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--color-border);
+  flex-shrink: 0;
+}
+
+.analytics-top-plant-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.analytics-top-plant-meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.analytics-top-plant-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.analytics-segment-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.analytics-segment-card {
+  text-align: left;
+  cursor: pointer;
+}
+
+.analytics-yoy-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.analytics-alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.analytics-alert-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 0.88rem;
+}
+
+.analytics-alert-meta {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.analytics-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 40, 31, 0.45);
+  z-index: 200;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.analytics-drawer {
+  background: var(--color-bg);
+  width: min(720px, 100%);
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+}
+
+.analytics-export-menu {
+  position: relative;
+}
+
+.analytics-export-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 30;
+  min-width: 180px;
+  overflow: hidden;
+}
+
+.analytics-export-dropdown button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.analytics-export-dropdown button:hover {
+  background: var(--color-bg);
+  color: var(--color-primary);
+}
+
+/* ---------- Customer purchase timeline ---------- */
+
+.customer-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.customer-timeline-item {
+  display: flex;
+  gap: 16px;
+  padding: 12px 0;
+  border-left: 3px solid var(--color-accent-light);
+  padding-left: 16px;
+}
+
+.customer-timeline-date {
+  flex-shrink: 0;
+  width: 100px;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  font-size: 0.85rem;
+}
+
+.customer-timeline-body {
+  font-size: 0.88rem;
+}
+
+.customer-timeline-meta {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  margin-top: 4px;
+}
+
+@media (max-width: 480px) {
+  .customer-timeline-item {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .customer-timeline-date {
+    width: auto;
+  }
+}
+
+/* ---------- Print / PDF export ---------- */
+/* printSection() in exportUtils.js hides every .analytics-section except the
+   one being printed, then calls window.print(); this stylesheet hides chrome
+   (sidebar, topbar, jump-nav, buttons) so the printed page is just the
+   report content. */
+
+@media print {
+  .admin-sidebar,
+  .admin-topbar,
+  .analytics-jump-nav,
+  .analytics-header-actions,
+  .analytics-export-menu,
+  .row-actions,
+  .no-print {
+    display: none !important;
+  }
+  .admin-content {
+    padding: 0 !important;
+  }
+}
+
+/* ---------- Ask AAIJI (Admin BI chat page) ---------- */
+/* Reuses the customer AI widget's bubble/typing/chip/error styles
+   (.ai-chat-msg, .ai-chat-chip, .ai-chat-error, .ai-chat-typing-dots,
+   .ai-chat-send-btn, .ai-chat-status-dot -- all in index.css, globally
+   available) inside a full-page layout instead of a floating widget. */
+
+.ask-aaiji-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ask-aaiji-panel {
+  display: flex;
+  flex-direction: column;
+  height: min(640px, calc(100vh - 220px));
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.ask-aaiji-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ask-aaiji-msg {
+  max-width: 70%;
+}
+
+.ask-aaiji-empty {
+  margin: auto;
+  text-align: center;
+  max-width: 420px;
+  color: var(--color-text);
+}
+
+.ask-aaiji-empty-icon {
+  font-size: 2.2rem;
+  margin-bottom: 8px;
+}
+
+.ask-aaiji-empty p {
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+  margin: 6px 0 16px;
+}
+
+.ask-aaiji-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.ask-aaiji-input-row textarea {
+  flex: 1;
+  min-width: 0;
+  max-height: 100px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg, #f4f4f0);
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: none;
+}
+
+.ask-aaiji-input-row textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  background: #fff;
+}
+
+@media (max-width: 768px) {
+  .ask-aaiji-panel {
+    height: calc(100vh - 260px);
+    border-radius: 12px;
+  }
+  .ask-aaiji-msg {
+    max-width: 88%;
+  }
+  .ask-aaiji-header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* Phone: the chat fills the screen, controls sit in one tidy row, and the
+   composer stays a single line with its placeholder fully visible. */
+@media (max-width: 640px) {
+  .ask-aaiji-page .admin-page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .ask-aaiji-page .admin-page-head h1 {
+    font-size: 1.35rem;
+    margin: 0;
+  }
+  .ask-aaiji-header-right {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .ask-aaiji-header-right .btn {
+    padding: 6px 12px;
+    font-size: 0.82rem;
+  }
+  .ask-aaiji-panel {
+    height: calc(100vh - 300px);
+    min-height: 420px;
+    border-radius: 14px;
+  }
+  .ask-aaiji-body {
+    padding: 14px;
+  }
+  .ask-aaiji-empty {
+    margin: 12px auto;
+  }
+  .ask-aaiji-empty-icon {
+    font-size: 1.8rem;
+  }
+  .ask-aaiji-suggestions {
+    gap: 6px;
+  }
+  /* Standalone "Voice on" hidden on phones; voice starts from the composer mic. */
+  .ask-aaiji-header-right .aaiji-speak-toggle {
+    display: none !important;
+  }
+  .ask-aaiji-input-row textarea::placeholder {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* One rounded composer: input, mic and send sit inside the same pill. */
+  .ask-aaiji-input-row {
+    margin: 10px;
+    padding: 6px 6px 6px 16px;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
+    border-radius: 28px;
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  }
+  .ask-aaiji-input-row textarea {
+    border: none;
+    background: transparent;
+    border-radius: 0;
+    padding: 8px 0;
+    align-self: center;
+  }
+  .ask-aaiji-input-row textarea:focus {
+    border: none;
+    background: transparent;
+  }
+  .ask-aaiji-input-row .ai-chat-mic-btn,
+  .ask-aaiji-input-row .ai-chat-send-btn {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+  }
+  /* Grows with the text up to a few lines, then scrolls. 16px stops phones
+     zooming the page when the box is focused. */
+  .ask-aaiji-input-row textarea {
+    field-sizing: content;
+    height: auto;
+    min-height: 40px;
+    max-height: 120px;
+    padding: 9px 0;
+    font-size: 16px;
+    line-height: 1.35;
+    resize: none;
+    overflow-y: auto;
+  }
+}
+
+/* ---------- Ask AAIJI floating launcher (every admin page) ---------- */
+/* Same visual language as the customer site's .ai-chat-fab -- round, dark
+   green, leaf icon -- so it reads as "the same assistant" across both
+   sides of the product, just reached a different way here. */
+
+.admin-ai-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  /* Below the mobile drawer overlay (70) so opening the drawer correctly
+     covers it instead of the fab poking through on top. */
+  z-index: 42;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-ai-fab:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26);
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .admin-ai-fab {
+    width: 50px;
+    height: 50px;
+    right: 16px;
+    /* Above the fixed admin bottom tab bar (its own height + safe-area). */
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------- Ask AAIJI voice mode (full-screen overlay) ---------- */
+/* Covers the whole admin shell (sidebar is z-index 1000) while a voice
+   conversation is open. The orb is plain CSS; --level (0..1) is set from
+   JS: real mic volume while listening, word boundaries while speaking. */
+
+.aaiji-voice {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(116, 198, 157, 0.2), rgba(116, 198, 157, 0) 46%),
+    #fbfcfa;
+  animation: aaijiVoiceIn 260ms ease-out both;
+}
+
+.aaiji-voice-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px 0;
+  text-align: center;
+  min-height: 0;
+}
+
+.aaiji-orb {
+  --level: 0;
+  position: relative;
+  width: clamp(170px, 34vmin, 270px);
+  aspect-ratio: 1;
+  margin-bottom: 78px;
+}
+
+.aaiji-orb-core,
+.aaiji-orb-ring,
+.aaiji-orb-arc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.aaiji-orb-core {
+  inset: 14%;
+  background: radial-gradient(circle at 34% 28%, #95d5b2 0%, #40916c 42%, #1b4332 100%);
+  box-shadow:
+    0 0 calc(34px + var(--level) * 70px) rgba(64, 145, 108, calc(0.3 + var(--level) * 0.25)),
+    inset 0 -10px 26px rgba(16, 40, 31, 0.35);
+  transform: scale(calc(1 + var(--level) * 0.1));
+  transition: transform 140ms ease-out, box-shadow 220ms ease-out, border-radius 400ms ease;
+  animation: aaijiBreathe 5.5s ease-in-out infinite;
+}
+
+.aaiji-orb-ring {
+  border: 1px solid rgba(45, 106, 79, 0.2);
+  transition: transform 180ms ease-out, opacity 400ms ease, border-color 400ms ease;
+}
+
+.aaiji-orb-ring.r1 { transform: scale(calc(0.92 + var(--level) * 0.16)); }
+.aaiji-orb-ring.r2 { transform: scale(calc(1.1 + var(--level) * 0.26)); opacity: 0.7; }
+.aaiji-orb-ring.r3 { transform: scale(calc(1.3 + var(--level) * 0.38)); opacity: 0.4; }
+
+.aaiji-orb-arc {
+  inset: 4%;
+  border: 2px solid transparent;
+  border-top-color: rgba(64, 145, 108, 0.75);
+  border-right-color: rgba(64, 145, 108, 0.2);
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+
+/* idle / muted: barely-there breathing only */
+.aaiji-voice[data-state="muted"] .aaiji-orb-core,
+.aaiji-voice[data-state="denied"] .aaiji-orb-core {
+  filter: saturate(0.45);
+  animation-duration: 8s;
+}
+
+/* thinking: calm pulse, one arc slowly orbiting */
+.aaiji-voice[data-state="thinking"] .aaiji-orb-core {
+  animation: aaijiThink 2.4s ease-in-out infinite;
+}
+.aaiji-voice[data-state="thinking"] .aaiji-orb-arc {
+  opacity: 1;
+  animation: aaijiOrbit 2.8s linear infinite;
+}
+
+/* speaking: rings ripple outward, core gently changes shape */
+.aaiji-voice[data-state="speaking"] .aaiji-orb-core {
+  animation: aaijiSpeak 1.5s ease-in-out infinite;
+}
+.aaiji-voice[data-state="speaking"] .aaiji-orb-ring {
+  border-color: rgba(64, 145, 108, 0.42);
+  animation: aaijiRipple 2.1s ease-out infinite;
+}
+.aaiji-voice[data-state="speaking"] .aaiji-orb-ring.r2 { animation-delay: 0.7s; }
+.aaiji-voice[data-state="speaking"] .aaiji-orb-ring.r3 { animation-delay: 1.4s; }
+
+.aaiji-voice-name {
+  font-family: var(--font-heading);
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #1b4332;
+}
+
+.aaiji-voice-sub {
+  font-size: 0.82rem;
+  color: #6b7770;
+  margin-top: 2px;
+}
+
+.aaiji-voice-status {
+  margin-top: 18px;
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: #2d6a4f;
+  min-height: 1.6em;
+}
+
+.aaiji-voice-heard {
+  margin-top: 8px;
+  max-width: 520px;
+  min-height: 2.8em;
+  font-size: 0.92rem;
+  color: #55635b;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.aaiji-voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px calc(30px + env(safe-area-inset-bottom));
+}
+
+.aaiji-voice-mic {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 0;
+  background: #1b4332;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(27, 67, 50, 0.28);
+  transition: background 200ms ease, transform 160ms ease;
+}
+
+.aaiji-voice-mic:hover { transform: translateY(-1px); }
+.aaiji-voice-mic.muted { background: #8a968f; box-shadow: none; }
+
+.aaiji-voice-end {
+  height: 48px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1px solid #e3c9c5;
+  background: #fff;
+  color: #b3372b;
+  font: inherit;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 200ms ease;
+}
+
+.aaiji-voice-end:hover { background: #fdf1ef; }
+
+.aaiji-voice-mic:focus-visible,
+.aaiji-voice-end:focus-visible {
+  outline: 2px solid #40916c;
+  outline-offset: 3px;
+}
+
+@keyframes aaijiVoiceIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes aaijiBreathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.09); } }
+@keyframes aaijiThink { 0%, 100% { transform: scale(0.96); } 50% { transform: scale(1.03); } }
+@keyframes aaijiOrbit { to { transform: rotate(360deg); } }
+@keyframes aaijiSpeak {
+  0%, 100% { border-radius: 50%; transform: scale(calc(1 + var(--level) * 0.1)); }
+  33% { border-radius: 47% 53% 52% 48% / 52% 47% 53% 48%; transform: scale(calc(1.035 + var(--level) * 0.1)); }
+  66% { border-radius: 53% 47% 48% 52% / 48% 53% 47% 52%; transform: scale(calc(0.99 + var(--level) * 0.1)); }
+}
+@keyframes aaijiRipple {
+  0% { transform: scale(0.9); opacity: 0.55; }
+  100% { transform: scale(1.75); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aaiji-voice,
+  .aaiji-orb-core,
+  .aaiji-orb-ring,
+  .aaiji-orb-arc {
+    animation: none !important;
+  }
+}
+
+/* Voice Mode additions: close, secondary text, retry, composer mic */
+.aaiji-voice-close {
+  position: absolute;
+  top: calc(18px + env(safe-area-inset-top));
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid #dfe7e1;
+  background: #fff;
+  color: #55635b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.aaiji-voice-close:hover { background: #f2f6f3; }
+.aaiji-voice-close:focus-visible { outline: 2px solid #40916c; outline-offset: 2px; }
+
+.aaiji-voice-secondary {
+  min-height: 1.3em;
+  margin-top: 2px;
+  font-size: 0.84rem;
+  color: #7d8a83;
+}
+
+.aaiji-voice[data-state="speaking"] .aaiji-orb { cursor: pointer; }
+
+.aaiji-voice[data-state="denied"] .aaiji-orb-core {
+  background: radial-gradient(circle at 34% 28%, #f0a39b 0%, #c4493d 55%, #7e241c 100%);
+  box-shadow: 0 0 34px rgba(196, 73, 61, 0.28);
+  filter: none;
+}
+
+.aaiji-voice[data-state="denied"] .aaiji-voice-status { color: #b3372b; }
+
+.aaiji-voice-retry {
+  margin-top: 14px;
+  height: 42px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: #1b4332;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.aaiji-voice-retry:focus-visible { outline: 2px solid #40916c; outline-offset: 3px; }
+
+.aaiji-composer-mic {
+  background: #1b4332;
+  border-color: #1b4332;
+  color: #fff;
+}
+
+.aaiji-composer-mic:hover:not(:disabled) {
+  background: #2d6a4f;
+  border-color: #2d6a4f;
+  color: #fff;
+}
+
+/* Plain statement of what the microphone is doing right now. */
+.aaiji-voice-micstate {
+  margin-top: 14px;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.aaiji-voice[data-state="listening"] .aaiji-voice-micstate { color: var(--color-primary); font-weight: 600; }
+
+/* Ask AAIJI composer on tablet and desktop: the same single rounded pill as
+   on phones -- input, mic and send inside one control. */
+@media (min-width: 641px) {
+  .ask-aaiji-input-row {
+    margin: 12px 16px 16px;
+    padding: 6px 8px 6px 20px;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 30px;
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  }
+  .ask-aaiji-input-row textarea,
+  .ask-aaiji-input-row textarea:focus {
+    field-sizing: content;
+    height: auto;
+    min-height: 42px;
+    max-height: 140px;
+    padding: 10px 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    font-size: 16px;
+    line-height: 1.35;
+    overflow-y: auto;
+  }
+  .ask-aaiji-input-row .ai-chat-mic-btn,
+  .ask-aaiji-input-row .ai-chat-send-btn {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+  }
+}
+
+/* Tall enough that the welcome state never needs its own scrollbar on short
+   laptop screens -- the page scrolls instead. */
+.ask-aaiji-panel {
+  min-height: 520px;
+}
+
+/* ---------- Sales / Purchase Order line items ----------
+   The form card is only ~660px wide inside, so each line is two tidy rows:
+   the plant picker across the top, then description / quantity / price /
+   remove underneath. Labels sit directly above their inputs and never wrap. */
+.line-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 150px auto;
+  gap: 12px 14px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+.line-item-no-desc {
+  grid-template-columns: 150px 170px minmax(0, 1fr);
+}
+.line-item-plant {
+  grid-column: 1 / -1;
+}
+.line-item-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+.line-item-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+  white-space: nowrap;
+}
+.line-item .form-control {
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  padding: 8px 12px;
+  margin: 0;
+}
+.plant-picker {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.plant-picker .form-control {
+  flex: 1 1 auto;
+}
+.plant-picker .btn {
+  flex: 0 0 auto;
+  height: 46px;
+  white-space: nowrap;
+}
+.plant-picker-tray {
+  margin-top: 8px;
+}
+.line-item-remove {
+  height: 46px;
+  white-space: nowrap;
+  justify-self: end;
+}
+.line-item-total {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 560px) {
+  .line-item,
+  .line-item-no-desc {
+    grid-template-columns: 1fr 1fr;
+  }
+  .line-item-desc {
+    grid-column: 1 / -1;
+  }
+  .plant-picker {
+    flex-wrap: wrap;
+  }
+  .plant-picker .form-control {
+    flex-basis: 100%;
+  }
+  .plant-picker .btn {
+    flex: 1 1 auto;
+  }
+  .line-item-remove {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+}
+
+/* ---------- Searchable dropdown (contacts, plants) ---------- */
+.search-select {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.search-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  background: #fff;
+}
+.search-select-trigger > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-select-placeholder {
+  color: var(--color-text-muted);
+}
+.search-select-caret {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+.search-select.open .search-select-trigger {
+  border-color: var(--color-accent);
+}
+.search-select-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 240px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+  padding: 8px;
+}
+.search-select-panel .search-select-search {
+  width: 100%;
+  height: 40px;
+  padding: 6px 12px;
+  margin: 0 0 6px;
+}
+/* Only the list scrolls, so the search box stays put above it. */
+.search-select-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.search-select-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+.search-select-option.active {
+  background: #eef5f0;
+}
+.search-select-option.selected {
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+.search-select-option.clear {
+  color: var(--color-text-muted);
+}
+.search-select-hint {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+.search-select-empty {
+  padding: 12px 10px;
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+}
+
+/* ---- Delivery date alert (Sales Orders / Invoices lists) ---- */
+.dl-cell { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dl-none { color: var(--color-text-muted); }
+.dl-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; padding: 2px 9px 2px 7px; border-radius: 999px; }
+.dl-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: currentColor; }
+.dl-red { color: #b3261e; background: #fdeceb; }
+.dl-orange { color: #a85d00; background: #fff1de; }
+.dl-green { color: #1f7a45; background: #e7f5ec; }
+.dl-red .dl-dot { animation: dlPulseRed 1.8s ease-in-out infinite; }
+.dl-orange .dl-dot { animation: dlPulseOrange 2.6s ease-in-out infinite; }
+@keyframes dlPulseRed {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 48, 37, 0.55); transform: scale(1); }
+  50% { box-shadow: 0 0 0 7px rgba(217, 48, 37, 0); transform: scale(1.12); }
+}
+@keyframes dlPulseOrange {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 140, 0, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(240, 140, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dl-red .dl-dot, .dl-orange .dl-dot { animation: none; }
+}
+
+/* ---- Stock & preparation (orders) ---- */
+.fulfil-line { padding: 12px 0; border-top: 1px solid var(--color-border); display: grid; gap: 8px; }
+.fulfil-line:first-of-type { border-top: 0; }
+.fulfil-numbers { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.9rem; color: var(--color-text-muted); }
+.fulfil-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fulfil-qty { width: 110px; text-align: center; }
+.line-item-stock { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.85rem; color: var(--color-text-muted); }
+
+/* ---- Stock section (seeds, batches, ready plants) ---- */
+.stock-help { background: #f1f7f3; border: 1px solid #d5e6da; border-radius: 12px; margin-bottom: 18px; }
+.stock-help-head { width: 100%; text-align: left; background: transparent; border: 0; padding: 12px 16px; font: inherit; font-weight: 700; color: var(--color-primary); cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.stock-help-toggle { margin-left: auto; font-weight: 600; font-size: 0.82rem; color: var(--color-text-muted); }
+.stock-help-body { padding: 0 20px 14px; }
+.stock-help-body ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.stock-help-note { margin: 10px 0 0; font-size: 0.88rem; color: var(--color-text-muted); }
+.stock-hint { margin: 10px 0 0; font-size: 0.86rem; color: var(--color-text-muted); }
+.stock-form-row, .stock-form-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.stock-form-grid { flex-direction: column; align-items: stretch; max-width: 640px; }
+.stock-form-row label, .stock-form-grid label, .stock-block { display: grid; gap: 6px; font-weight: 600; font-size: 0.9rem; flex: 1 1 200px; }
+.stock-block { max-width: 520px; margin: 4px 0 12px; }
+.stock-form-row small { font-weight: 400; color: var(--color-text-muted); }
+.stock-suggest { background: #fff8e8; border: 1px solid #f0dfb2; border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; font-size: 0.9rem; }
+.stock-check { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+.stock-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 0 0 16px; }
+.stock-steps li { padding: 6px 14px; border-radius: 999px; background: #eef1ef; color: #5b6b63; font-weight: 600; font-size: 0.88rem; }
+.stock-steps li.done { background: #dff1e4; color: #1f7a45; }
+.stock-facts { display: flex; flex-wrap: wrap; gap: 18px 36px; }
+.stock-facts div { display: grid; gap: 2px; }
+.stock-facts span { font-size: 0.8rem; color: var(--color-text-muted); }
+.stock-facts strong { font-size: 1.1rem; }
+.stock-facts small { color: var(--color-text-muted); }
+.stock-sub { font-size: 1rem; margin: 14px 0 8px; }
+.stock-ok { color: #1f7a45; font-weight: 600; margin: 8px 0; }
+.stock-warn { color: #b3261e; font-weight: 600; margin: 8px 0; }
+.stock-kpis { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; }
+.stock-kpis div { background: #fff; border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 20px; display: grid; gap: 2px; min-width: 170px; }
+.stock-kpis span { font-size: 0.82rem; color: var(--color-text-muted); }
+.stock-kpis strong { font-size: 1.5rem; }
+.stock-kpis .alert-red strong { color: #b3261e; }
+.stock-advice { font-weight: 600; font-size: 0.9rem; }
+.stock-advice-red { color: #b3261e; }
+.stock-advice-orange { color: #a85d00; }
+.stock-advice-green { color: #1f7a45; }
+
+/* ---- Customer history (Stock Orders) ---- */
 .cust-history { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
-.cust-history-item { min-width: 0; }
-.cust-history-item { background: #fff; border: 1px solid var(--color-border); border-radius: 12px; }
-.cust-history-item > summary { cursor: pointer; padding: 12px 16px; list-style: none; }
-.cust-history-item > summary::-webkit-details-marker { display: none; }
-.cust-history-item > summary::before { content: "▸ "; color: var(--color-text-muted); }
-.cust-history-item[open] > summary::before { content: "▾ "; }
-.cust-history-item[open] > summary { border-bottom: 1px solid var(--color-border); }
-.cust-history-meta { color: var(--color-text-muted); font-size: 0.88rem; }
+.cust-history-item { min-width: 0; }
+.cust-history-item { background: #fff; border: 1px solid var(--color-border); border-radius: 12px; }
+.cust-history-item > summary { cursor: pointer; padding: 12px 16px; list-style: none; }
+.cust-history-item > summary::-webkit-details-marker { display: none; }
+.cust-history-item > summary::before { content: "▸ "; color: var(--color-text-muted); }
+.cust-history-item[open] > summary::before { content: "▾ "; }
+.cust-history-item[open] > summary { border-bottom: 1px solid var(--color-border); }
+.cust-history-meta { color: var(--color-text-muted); font-size: 0.88rem; }
 .cust-history-item .admin-table-wrap { padding: 0 8px 8px; }
+
+/* ---- Customer seeds (Stock page) ---- */
+.seed-card { margin-top: 28px; background: #fff; border: 1px solid var(--color-border); border-radius: 14px; padding: 18px; }
+.seed-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.seed-head h2 { font-size: 1.15rem; margin: 0 0 2px; }
+.seed-head p { margin: 0; color: var(--color-text-muted); font-size: 0.88rem; }
+.seed-form { background: var(--color-bg, #f7f8f5); border: 1px solid var(--color-border); border-radius: 12px; padding: 16px; margin-bottom: 16px; max-width: 640px; }
+.seed-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.seed-kpis div { border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; font-size: 0.8rem; color: var(--color-text-muted); }
+.seed-kpis span { display: block; font-size: 1.35rem; font-weight: 700; color: var(--color-text, #1c2b22); }
+.seed-card .admin-table td, .seed-card .admin-table th { vertical-align: middle; }

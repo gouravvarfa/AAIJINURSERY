@@ -57,13 +57,8 @@ import AdminChatbotControl from "./admin/pages/developer/AdminChatbotControl";
 import AdminMessagingBilling from "./admin/pages/developer/MessagingBilling";
 import AdminStockDemand from "./admin/pages/StockDemand";
 import AdminStockOrders from "./admin/pages/StockOrders";
-import AdminSeedStock from "./admin/pages/stock/SeedStock";
-import AdminProductionBatches from "./admin/pages/stock/ProductionBatches";
-import AdminBatchDetail from "./admin/pages/stock/BatchDetail";
-import AdminReadyPlants from "./admin/pages/stock/ReadyPlants";
-import AdminStockMovements from "./admin/pages/stock/StockMovements";
 import AdminStockAllocations from "./admin/pages/stock/StockAllocations";
-import AdminYieldReport from "./admin/pages/stock/YieldReport";
+import AdminAddPlants from "./admin/pages/stock/AddPlants";
 import AdminSessions from "./admin/pages/Sessions";
 import AdminLoginAttempts from "./admin/pages/LoginAttempts";
 import AdminRolesPermissions from "./admin/pages/RolesPermissions";
@@ -195,13 +190,8 @@ export default function App() {
           <Route path="developer/messaging-bill" element={<AdminMessagingBilling />} />
           <Route path="stock-demand" element={<AdminStockDemand />} />
           <Route path="stock-orders" element={<AdminStockOrders />} />
-          <Route path="stock/seeds" element={<AdminSeedStock />} />
-          <Route path="stock/batches" element={<AdminProductionBatches />} />
-          <Route path="stock/batches/:id" element={<AdminBatchDetail />} />
-          <Route path="stock/ready" element={<AdminReadyPlants />} />
+          <Route path="stock/add" element={<AdminAddPlants />} />
           <Route path="stock/allocations" element={<AdminStockAllocations />} />
-          <Route path="stock/movements" element={<AdminStockMovements />} />
-          <Route path="stock/yield" element={<AdminYieldReport />} />
           <Route path="developer/sessions" element={<AdminSessions />} />
           <Route path="developer/login-attempts" element={<AdminLoginAttempts />} />
           <Route path="developer/roles-permissions" element={<AdminRolesPermissions />} />

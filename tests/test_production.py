@@ -250,3 +250,35 @@ def test_counting_ready_plants_writes_the_difference_and_reason_to_the_ledger():
     assert admin.post(f"{S}/ready/adjust", json={"plant_id": tray["id"], "variant_id": tray["variants"][0]["id"], "new_quantity": 9, "reason": "count"}).status_code == 200
     mv = [m for m in admin.get(f"{S}/movements?kind=stock&plant_id={plant['id']}").json()["items"] if m["type"] == "MANUAL_ADJUSTMENT"]
     assert mv and mv[0]["notes"] == "Physical count: 8 plants dried" and mv[0]["quantity"] == 8
+
+
+def test_add_plants_one_step_adds_good_plants_and_is_safe_to_double_click():
+    import uuid
+    rnd = random.Random()
+    good, bad, seeds = rnd.randint(300, 900), rnd.randint(5, 80), None
+    seeds = good + bad + rnd.randint(10, 100)
+    admin = _admin()
+    plant = _plant(admin, stock=rnd.randint(0, 50))
+    before = _ready(plant["id"])
+    rid = f"req-{uuid.uuid4().hex}"
+    body = {"plant_id": plant["id"], "good_plants": good, "rejected_plants": bad, "seeds_used": seeds, "request_id": rid}
+    r1 = admin.post(f"{S}/add-plants", json=body).json()
+    r2 = admin.post(f"{S}/add-plants", json=body).json()          # a double click
+    assert (r1["already_added"], r2["already_added"]) == (False, True)
+    assert _ready(plant["id"]) == before + good and r1["new_ready"] == before + good
+    rep = [b for b in admin.get(f"{S}/reports/yield").json()["batches"] if b["plant_id"] == plant["id"]]
+    assert len(rep) == 1 and rep[0]["yield_pct"] == round(100 * good / seeds, 1)
+    assert admin.post(f"{S}/add-plants", json={**body, "request_id": f"req-{uuid.uuid4().hex}", "seeds_used": good - 1}).status_code == 400   # more plants than seeds
+    assert admin.post(f"{S}/add-plants", json={**body, "request_id": "short"}).status_code == 422
+
+
+def test_add_plants_for_a_tray_product_needs_a_tray_and_a_full_tray():
+    import uuid
+    admin = _admin()
+    plant = _plant(admin, stock=2, tray=125)
+    v = plant["variants"][0]
+    rid = lambda: f"req-{uuid.uuid4().hex}"
+    assert admin.post(f"{S}/add-plants", json={"plant_id": plant["id"], "good_plants": 500, "request_id": rid()}).status_code == 400          # tray size missing
+    assert admin.post(f"{S}/add-plants", json={"plant_id": plant["id"], "variant_id": v["id"], "good_plants": 100, "request_id": rid()}).status_code == 400   # less than a tray
+    ok = admin.post(f"{S}/add-plants", json={"plant_id": plant["id"], "variant_id": v["id"], "good_plants": 1062, "request_id": rid()}).json()
+    assert (ok["added_units"], ok["loose_plants"], ok["new_ready"]) == (8, 62, 10) and _ready(plant["id"], v["id"]) == 10

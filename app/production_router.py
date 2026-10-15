@@ -472,3 +472,60 @@ def adjust_ready_stock(payload: ReadyAdjustIn, admin: str = Depends(get_current_
     db.commit()
     record_admin_audit(admin, "ready_stock_adjusted", {"plant": plant.id, "delta": delta})
     return {"changed_by": delta, "new_quantity": payload.new_quantity}
+
+
+class AddPlantsIn(BaseModel):
+    plant_id: int
+    variant_id: Optional[int] = None
+    good_plants: int = Qty
+    rejected_plants: int = Field(default=0, ge=0)
+    seeds_used: Optional[int] = Field(default=None, ge=0)
+    notes: str = ""
+    request_id: str = Field(min_length=8, max_length=60)
+
+
+@router.post("/add-plants", dependencies=[EDIT])
+def add_plants(payload: AddPlantsIn, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """The simple way to record plants that were made: how many came out good (and bad), optionally
+    how many seeds were used. The good plants go straight into ready stock through the ledger, and a
+    finished batch record is kept for the yield numbers. `request_id` makes a double click harmless."""
+    ref = f"ADDPLANTS:{payload.request_id}"
+    plant = db.query(Plant).filter(Plant.id == payload.plant_id).first()
+    if not plant:
+        raise HTTPException(status_code=400, detail="Unknown plant")
+    variant = None
+    if payload.variant_id:
+        variant = db.query(PlantVariant).filter(PlantVariant.id == payload.variant_id, PlantVariant.plant_id == plant.id).first()
+        if not variant:
+            raise HTTPException(status_code=400, detail="That tray option does not belong to this plant")
+    elif db.query(PlantVariant.id).filter(PlantVariant.plant_id == plant.id).first():
+        raise HTTPException(status_code=400, detail="This plant is sold in trays: choose the tray size")
+    if payload.seeds_used is not None and payload.good_plants + payload.rejected_plants > payload.seeds_used:
+        raise HTTPException(status_code=400, detail="Good + bad plants can't be more than the seeds used")
+    tray = variant.tray_size if variant else None
+    units, loose = (payload.good_plants // tray, payload.good_plants % tray) if tray else (payload.good_plants, 0)
+    if tray and units == 0:
+        raise HTTPException(status_code=400, detail=f"{payload.good_plants} plants are less than one full tray ({tray})")
+    target = variant if variant else plant
+
+    done = db.query(InventoryTransaction).filter(InventoryTransaction.reference == ref).first()
+    if done:
+        return {"already_added": True, "added_units": done.quantity, "unit": "trays" if variant else "plants", "loose_plants": 0, "new_ready": target.stock_quantity}
+
+    now = datetime.utcnow()
+    b = ProductionBatch(plant_id=plant.id, variant_id=variant.id if variant else None, tray_size=tray, planned_quantity=payload.good_plants, status="Completed",
+                        seeds_consumed=payload.seeds_used or 0, healthy_plants=payload.good_plants, rejected_plants=payload.rejected_plants, accepted_plants=payload.good_plants,
+                        accepted_units=units, loose_plants=loose, notes=payload.notes.strip(), created_by=admin, started_at=now, completed_at=now, completed_by=admin)
+    db.add(b)
+    db.flush()
+    b.batch_number = f"BATCH-{b.id}"
+    try:
+        adjust_stock(db, plant_id=plant.id, variant_id=b.variant_id, quantity_delta=units, transaction_type="PRODUCTION_RECEIVED", source_type="PRODUCTION_BATCH", source_id=b.id,
+                     reference=ref, created_by=admin, notes=f"{b.batch_number}: {payload.good_plants} good plants" + (f", {loose} loose plants kept aside" if loose else ""))
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return {"already_added": True, "added_units": units, "unit": "trays" if variant else "plants", "loose_plants": 0, "new_ready": target.stock_quantity}
+    record_admin_audit(admin, "plants_added", {"batch": b.id, "good": payload.good_plants})
+    db.refresh(target)
+    return {"already_added": False, "batch_number": b.batch_number, "added_units": units, "unit": "trays" if variant else "plants", "loose_plants": loose, "new_ready": target.stock_quantity}

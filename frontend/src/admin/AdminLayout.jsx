@@ -39,14 +39,10 @@ const NAV = [
 ];
 
 const STOCK_NAV = [
-  { to: "/admin/stock-demand", label: "Stock Overview", module: "products" },
+  { to: "/admin/stock-demand", label: "Stock", module: "products", end: true },
+  { to: "/admin/stock/add", label: "Add Plants", module: "products" },
+  { to: "/admin/stock/allocations", label: "Orders Waiting", module: "products" },
   { to: "/admin/stock-orders", label: "Stock Orders", module: "inventory" },
-  { to: "/admin/stock/seeds", label: "Seeds (beej)", module: "products" },
-  { to: "/admin/stock/batches", label: "Production Batches", module: "products" },
-  { to: "/admin/stock/ready", label: "Ready Plants", module: "products" },
-  { to: "/admin/stock/allocations", label: "Orders & Allocations", module: "products" },
-  { to: "/admin/stock/movements", label: "Stock Movements", module: "products" },
-  { to: "/admin/stock/yield", label: "Yield & Wastage", module: "products" },
 ];
 
 const DEVELOPER_NAV = [

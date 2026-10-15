@@ -3,25 +3,29 @@ import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 import { StockHelp, num } from "../stock/stockUi";
+import { sanitizeQuantityText } from "../../utils/quantity";
 
-// Stock Overview: ready plants vs. what customers have ordered, in plain words,
-// with one clear "what to do" per plant. Website orders and offline Sales
-// Orders are counted once (never the mirror Sales Order of a website order).
+// Stock: how many plants are ready, how many orders are waiting, and what to do.
 function advice(r) {
-  if (r.to_produce > 0)
-    return { text: `Make ${num(r.to_produce)} more ${r.unit}`, to: `/admin/stock/batches?plant=${r.plant_id}&variant=${r.variant_id || ""}`, action: "Start a batch", tone: "red" };
-  if (r.undecided > 0 && r.available_stock > 0)
-    return { text: "Ready plants can go to waiting orders", to: "/admin/stock/allocations", action: "See the orders", tone: "orange" };
-  if (r.in_production > 0) return { text: "A batch is already making them", to: "/admin/stock/batches", action: "See batches", tone: "orange" };
-  if (r.outstanding_demand > 0) return { text: "Orders are being prepared by the nursery", tone: "orange" };
+  const make = r.to_produce > 0 ? { to: `/admin/stock/add?plant=${r.plant_id}&variant=${r.variant_id || ""}`, action: "Add plants" } : null;
+  if (r.outstanding_demand > 0 && r.available_stock > 0) {
+    return { text: r.to_produce > 0 ? `Give the ready plants to the waiting orders, then make ${num(r.to_produce)} more ${r.unit}` : "Give the ready plants to the waiting orders", tone: r.to_produce > 0 ? "red" : "orange", to: "/admin/stock/allocations", action: "Give to orders", make };
+  }
+  if (r.to_produce > 0) return { text: `Make ${num(r.to_produce)} more ${r.unit}`, tone: "red", ...make, make: null };
+  if (r.outstanding_demand > 0) return { text: "Orders are waiting for the nursery", tone: "orange" };
   return { text: "All good", tone: "green" };
 }
 
 export default function StockDemand() {
   const [data, setData] = useState(null);
-  const [onlyAction, setOnlyAction] = useState(false);
   const [q, setQ] = useState("");
+  const [onlyAction, setOnlyAction] = useState(false);
   const [error, setError] = useState("");
+  const [msg, setMsg] = useState("");
+  const [fix, setFix] = useState(null);
+  const [count, setCount] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
 
   function load() {
     setError("");
@@ -29,70 +33,96 @@ export default function StockDemand() {
   }
   useEffect(load, []);
 
+  async function saveCount(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api.post("/admin/stock/ready/adjust", { plant_id: fix.plant_id, variant_id: fix.variant_id, new_quantity: Number(count), reason });
+      setMsg(r.changed_by === 0 ? "The count was already correct." : `Done. Ready stock changed by ${r.changed_by > 0 ? "+" : ""}${r.changed_by}.`);
+      setFix(null);
+      load();
+    } catch (err) {
+      setError(err.message || "Could not save the count.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const rows = (data?.items || []).filter((r) => (!onlyAction || advice(r).tone !== "green") && (!q || r.name.toLowerCase().includes(q.toLowerCase())));
   return (
     <div>
       <div className="admin-page-head">
-        <h1>Stock Overview</h1>
+        <h1>Stock</h1>
         <div className="admin-page-head-controls">
           <input className="form-control admin-control-sm" placeholder="Search a plant..." value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search plants" />
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={onlyAction} onChange={(e) => setOnlyAction(e.target.checked)} />
             Only plants that need action
           </label>
-          <button type="button" className="btn btn-outline dark" onClick={load}>Refresh</button>
         </div>
       </div>
       <StockHelp
-        id="overview"
-        title="How to read this page"
+        id="stock-simple"
+        title="How this works (3 easy steps)"
         steps={[
-          "\"Ready now\" = plants you can sell today. \"Waiting orders need\" = what customers ordered and still has not been given.",
-          "\"Being made\" = plants in a batch that is not finished. They are NOT counted as ready.",
-          "\"Still to make\" = Waiting orders need − Ready now − Being made. This is the number to put in a new batch.",
-          "The last column tells you what to do. Follow it from top to bottom.",
+          "Look at this page: \"Ready now\" is what you can sell today. \"Orders waiting\" is what customers asked for.",
+          "Plants made? Press \"Add plants\" and write how many came out good. They go into Ready now.",
+          "Then open \"Orders Waiting\" and press \"Give from stock\" for each order.",
         ]}
-        note="Seeds are on the Seeds page. Ready plants come only from finished batches or purchases."
+        note={'If your count is different from the real plants in the nursery, press "Correct count" and write why.'}
       />
       {error && <div className="alert alert-error">{error}</div>}
+      {msg && <div className="alert alert-success" role="status">{msg}</div>}
+      <div className="stock-actions-row">
+        <Link className="btn btn-primary" to="/admin/stock/add">+ Add plants I made</Link>
+        <Link className="btn btn-outline dark" to="/admin/stock/allocations">Orders waiting for plants</Link>
+      </div>
       {!data && !error ? <Loading /> : data ? (
-        <>
-          <div className="stock-kpis">
-            <div><span>Waiting orders need</span><strong>{num(data.totals.outstanding_demand)}</strong></div>
-            <div><span>Being made now</span><strong>{num(data.totals.in_production)}</strong></div>
-            <div className={data.totals.to_produce ? "alert-red" : ""}><span>Still to make</span><strong>{num(data.totals.to_produce)}</strong></div>
+        rows.length === 0 ? <Empty>{onlyAction ? "Nothing needs action right now." : "No plants found."}</Empty> : (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead><tr><th>Plant</th><th>Ready now</th><th>Orders waiting</th><th>Still to make</th><th>What to do</th><th /></tr></thead>
+              <tbody>
+                {rows.map((r) => {
+                  const a = advice(r);
+                  return (
+                    <tr key={`${r.plant_id}-${r.variant_id || 0}`}>
+                      <td><strong>{r.name}</strong></td>
+                      <td><strong>{num(r.available_stock)}</strong> {r.unit}</td>
+                      <td>{num(r.outstanding_demand)}</td>
+                      <td>{r.to_produce > 0 ? <span className="dl-pill dl-red"><span className="dl-label">{num(r.to_produce)}</span></span> : "-"}</td>
+                      <td>
+                        <span className={`stock-advice stock-advice-${a.tone}`}>{a.text}</span>
+                        {a.to && <> <Link className="btn btn-sm btn-outline dark" to={a.to}>{a.action}</Link></>}
+                        {a.make && <> <Link className="btn btn-sm btn-outline dark" to={a.make.to}>{a.make.action}</Link></>}
+                      </td>
+                      <td><button type="button" className="btn btn-sm btn-outline dark" onClick={() => { setFix(r); setCount(String(r.available_stock)); setReason(""); setMsg(""); }}>Correct count</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          {rows.length === 0 ? <Empty>{onlyAction ? "Nothing needs action right now." : "No plants found."}</Empty> : (
-            <div className="admin-table-wrap">
-              <table className="admin-table">
-                <thead>
-                  <tr><th>Plant</th><th>Ready now</th><th>Given to orders</th><th>Waiting orders need</th><th>Being made</th><th>Still to make</th><th>What to do</th></tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => {
-                    const a = advice(r);
-                    return (
-                      <tr key={`${r.plant_id}-${r.variant_id || 0}`}>
-                        <td><strong>{r.name}</strong></td>
-                        <td>{num(r.available_stock)}</td>
-                        <td>{num(r.reserved_stock)}</td>
-                        <td>{num(r.outstanding_demand)}</td>
-                        <td>{num(r.in_production)}</td>
-                        <td>{r.to_produce > 0 ? <span className="dl-pill dl-red"><span className="dl-label">{num(r.to_produce)}</span></span> : "-"}</td>
-                        <td>
-                          <span className={`stock-advice stock-advice-${a.tone}`}>{a.text}</span>
-                          {a.to && <> <Link className="btn btn-sm btn-outline dark" to={a.to}>{a.action}</Link></>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <p className="stock-hint">{data.note}</p>
-        </>
+        )
       ) : null}
+      {fix && (
+        <div className="admin-form-card" style={{ maxWidth: 560, marginTop: 20 }}>
+          <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Correct count: {fix.name}</h2>
+          <form onSubmit={saveCount}>
+            <div className="form-group">
+              <label htmlFor="fix-count">How many are ready now, after you counted? (the system says {num(fix.available_stock)})</label>
+              <input id="fix-count" className="form-control" required inputMode="numeric" value={count} onChange={(e) => setCount(sanitizeQuantityText(e.target.value, 100000000))} autoFocus />
+            </div>
+            <div className="form-group">
+              <label htmlFor="fix-reason">Why is it different? (required)</label>
+              <input id="fix-reason" className="form-control" required minLength={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. 8 plants dried" />
+            </div>
+            <button className="btn btn-primary" disabled={busy || count === "" || reason.trim().length < 3}>{busy ? "Saving..." : "Save"}</button>{" "}
+            <button type="button" className="btn btn-outline dark" onClick={() => setFix(null)}>Cancel</button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

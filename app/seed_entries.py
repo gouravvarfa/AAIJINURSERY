@@ -25,7 +25,7 @@ from app.accounting.models import Contact
 from app.audit import record_admin_audit
 from app.database import get_db
 from app.deps import get_current_admin
-from app.inventory import MAX_ORDER_QUANTITY, adjust_stock
+from app.inventory import MAX_ORDER_QUANTITY, InsufficientStockError, adjust_stock
 from app.models import AdminUser, Plant, PlantVariant
 from app.permissions import check_permission
 from app.production_models import SeedEntry, SeedEntryUpdate
@@ -178,13 +178,41 @@ def list_entries(status: str = Query("open", pattern="^(open|all)$"), q: str = Q
     }
 
 
+@router.get("/history", dependencies=[VIEW])
+def history(q: str = Query("", max_length=60), db: Session = Depends(get_db)):
+    """Every seed entry (open and completed), grouped by customer, with its full update log."""
+    query = db.query(SeedEntry)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        query = query.filter(SeedEntry.customer_name.ilike(like) | SeedEntry.entry_number.ilike(like) | SeedEntry.reference.ilike(like))
+    items = query.order_by(SeedEntry.entry_date.desc(), SeedEntry.id.desc()).limit(1000).all()
+    rows = _with_plant(db, items)
+    logs = {}
+    for u in db.query(SeedEntryUpdate).filter(SeedEntryUpdate.entry_id.in_({i.id for i in items} or {0})).order_by(SeedEntryUpdate.id):
+        logs.setdefault(u.entry_id, []).append({"id": u.id, "at": u.created_at.isoformat() + "Z", "prepared": u.prepared_add, "extra": u.extra_add, "rejected": u.rejected_add,
+                                                "finished": u.finished, "notes": u.notes or "", "by": u.created_by})
+    phones = {c.id: c.phone or "" for c in db.query(Contact.id, Contact.phone).filter(Contact.id.in_({i.contact_id for i in items} or {0}))}
+    groups: dict = {}
+    for r in rows:
+        r["log"] = logs.get(r["id"], [])
+        g = groups.setdefault(r["contact_id"], {"contact_id": r["contact_id"], "name": r["customer_name"], "phone": phones.get(r["contact_id"], ""), "entries": [],
+                                                "seeds": 0, "good": 0, "extra": 0, "rejected": 0, "remaining": 0})
+        g["entries"].append(r)
+        g["seeds"] += r["seeds_given"]
+        g["good"] += r["prepared_plants"]
+        g["extra"] += r["extra_plants"]
+        g["rejected"] += r["rejected_plants"]
+        g["remaining"] += r["remaining"]
+    return {"customers": sorted(groups.values(), key=lambda g: g["entries"][0]["entry_date"] or "", reverse=True)}
+
+
 @router.get("/{entry_id}", dependencies=[VIEW])
 def entry_detail(entry_id: int, db: Session = Depends(get_db)):
     e = db.query(SeedEntry).filter(SeedEntry.id == entry_id).first()
     if not e:
         raise HTTPException(status_code=404, detail="Seed entry not found")
     out = _with_plant(db, [e])[0]
-    out["updates"] = [{"at": u.created_at.isoformat() + "Z", "prepared": u.prepared_add, "extra": u.extra_add, "rejected": u.rejected_add, "finished": u.finished, "notes": u.notes, "by": u.created_by}
+    out["updates"] = [{"id": u.id, "at": u.created_at.isoformat() + "Z", "prepared": u.prepared_add, "extra": u.extra_add, "rejected": u.rejected_add, "finished": u.finished, "notes": u.notes, "by": u.created_by}
                       for u in db.query(SeedEntryUpdate).filter(SeedEntryUpdate.entry_id == e.id).order_by(SeedEntryUpdate.id)]
     return out
 
@@ -244,3 +272,149 @@ def update_entry(entry_id: int, payload: SeedEntryUpdateIn, admin: str = Depends
     record_admin_audit(admin, "seed_entry_updated", {"entry": e.id})
     db.refresh(e)
     return {**_with_plant(db, [e])[0], "already_saved": False}
+
+
+# ------------------------------------------------------------------ edit / correct / remove
+def _new_tag() -> str:
+    import uuid
+
+    return uuid.uuid4().hex
+
+
+def _recalc(db: Session, e: SeedEntry, admin: str) -> None:
+    """Totals always come from the update log; extra plants follow into ready stock by the difference."""
+    ups = db.query(SeedEntryUpdate).filter(SeedEntryUpdate.entry_id == e.id).all()
+    prepared, extra, rejected = sum(u.prepared_add for u in ups), sum(u.extra_add for u in ups), sum(u.rejected_add for u in ups)
+    if prepared + extra + rejected > e.seeds_given:
+        raise HTTPException(status_code=400, detail=f"That adds up to {prepared + extra + rejected} plants, but only {e.seeds_given} seeds were given")
+    units = (extra // e.tray_size) if e.tray_size else extra
+    delta = units - e.extra_units_added
+    if delta != 0:
+        try:
+            adjust_stock(db, plant_id=e.plant_id, variant_id=e.variant_id, quantity_delta=delta, transaction_type="ADJUSTMENT", source_type="SEED_ENTRY", source_id=e.id,
+                         reference=f"SEEDENTRY:{e.id}:CORR:{_new_tag()}", created_by=admin, notes=f"{e.entry_number}: correction of extra plants ({'+' if delta > 0 else ''}{delta})")
+        except InsufficientStockError:
+            raise HTTPException(status_code=400, detail="Those extra plants are already sold or given, so they cannot be taken back from stock")
+    e.prepared_plants, e.extra_plants, e.rejected_plants, e.extra_units_added = prepared, extra, rejected, units
+    remaining = e.seeds_given - prepared - extra - rejected
+    e.status = "Completed" if (ups and remaining == 0) else ("In Progress" if ups else "Pending")
+    e.completed_at = datetime.utcnow() if e.status == "Completed" else None
+    e.updated_at = datetime.utcnow()
+
+
+def _entry(db: Session, entry_id: int) -> SeedEntry:
+    e = db.query(SeedEntry).filter(SeedEntry.id == entry_id).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Seed entry not found")
+    return e
+
+
+class EntryEdit(BaseModel):
+    contact_id: Optional[int] = None
+    plant_id: Optional[int] = None
+    variant_id: Optional[int] = None
+    seeds_given: Optional[int] = Field(default=None, ge=1, le=BIG)
+    entry_date: Optional[date] = None
+    reference: Optional[str] = Field(default=None, max_length=80)
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+@router.put("/{entry_id}", dependencies=[EDIT])
+def edit_entry(entry_id: int, payload: EntryEdit, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+    e = _entry(db, entry_id)
+    has_updates = db.query(SeedEntryUpdate.id).filter(SeedEntryUpdate.entry_id == e.id).first() is not None
+    if payload.contact_id is not None and payload.contact_id != e.contact_id:
+        c = db.query(Contact).filter(Contact.id == payload.contact_id).first()
+        if not c:
+            raise HTTPException(status_code=400, detail="Unknown customer")
+        e.contact_id, e.customer_name = c.id, c.name
+    if payload.plant_id is not None and (payload.plant_id != e.plant_id or (payload.variant_id or None) != e.variant_id):
+        if has_updates:
+            raise HTTPException(status_code=400, detail="The plant cannot be changed after plants were recorded. Remove the updates first, or make a new entry.")
+        plant = db.query(Plant).filter(Plant.id == payload.plant_id).first()
+        if not plant:
+            raise HTTPException(status_code=400, detail="Unknown plant")
+        variant = None
+        if payload.variant_id:
+            variant = db.query(PlantVariant).filter(PlantVariant.id == payload.variant_id, PlantVariant.plant_id == plant.id).first()
+            if not variant:
+                raise HTTPException(status_code=400, detail="That tray option does not belong to this plant")
+        elif db.query(PlantVariant.id).filter(PlantVariant.plant_id == plant.id).first():
+            raise HTTPException(status_code=400, detail="This plant is sold in trays: choose the tray size")
+        e.plant_id, e.variant_id, e.tray_size = plant.id, (variant.id if variant else None), (variant.tray_size if variant else None)
+    if payload.seeds_given is not None:
+        used = e.prepared_plants + e.extra_plants + e.rejected_plants
+        if payload.seeds_given < used:
+            raise HTTPException(status_code=400, detail=f"{used} plants are already recorded, so seeds cannot be less than {used}")
+        e.seeds_given = payload.seeds_given
+    if payload.entry_date is not None:
+        e.entry_date = datetime.combine(payload.entry_date, datetime.min.time())
+    if payload.reference is not None:
+        e.reference = payload.reference.strip()
+    if payload.notes is not None:
+        e.notes = payload.notes.strip()
+    try:
+        _recalc(db, e, admin)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    record_admin_audit(admin, "seed_entry_edited", {"entry": e.id})
+    db.refresh(e)
+    return _with_plant(db, [e])[0]
+
+
+class UpdateEdit(BaseModel):
+    prepared_plants: int = Field(ge=0, le=BIG)
+    extra_plants: int = Field(ge=0, le=BIG)
+    rejected_plants: int = Field(ge=0, le=BIG)
+    notes: str = Field(default="", max_length=1000)
+
+
+@router.put("/{entry_id}/updates/{update_id}", dependencies=[EDIT])
+def edit_update(entry_id: int, update_id: int, payload: UpdateEdit, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+    e = _entry(db, entry_id)
+    u = db.query(SeedEntryUpdate).filter(SeedEntryUpdate.id == update_id, SeedEntryUpdate.entry_id == e.id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="Update not found")
+    u.prepared_add, u.extra_add, u.rejected_add, u.notes = payload.prepared_plants, payload.extra_plants, payload.rejected_plants, payload.notes.strip()
+    try:
+        db.flush()
+        _recalc(db, e, admin)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    record_admin_audit(admin, "seed_entry_update_edited", {"entry": e.id, "update": update_id})
+    db.refresh(e)
+    return _with_plant(db, [e])[0]
+
+
+@router.delete("/{entry_id}/updates/{update_id}", dependencies=[EDIT])
+def delete_update(entry_id: int, update_id: int, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+    e = _entry(db, entry_id)
+    u = db.query(SeedEntryUpdate).filter(SeedEntryUpdate.id == update_id, SeedEntryUpdate.entry_id == e.id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="Update not found")
+    try:
+        db.delete(u)
+        db.flush()
+        _recalc(db, e, admin)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    record_admin_audit(admin, "seed_entry_update_removed", {"entry": e.id, "update": update_id})
+    db.refresh(e)
+    return _with_plant(db, [e])[0]
+
+
+@router.delete("/{entry_id}", dependencies=[EDIT])
+def delete_entry(entry_id: int, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+    e = _entry(db, entry_id)
+    if db.query(SeedEntryUpdate.id).filter(SeedEntryUpdate.entry_id == e.id).first():
+        raise HTTPException(status_code=400, detail="Plants were already recorded on this entry. Remove those updates first.")
+    db.delete(e)
+    db.commit()
+    record_admin_audit(admin, "seed_entry_deleted", {"entry": entry_id})
+    return {"ok": True}

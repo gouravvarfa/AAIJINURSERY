@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../../../api";
 import { sanitizeQuantityText } from "../../../utils/quantity";
 import { num } from "../../stock/stockUi";
+import SeedHistory from "./SeedHistory";
 
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -20,13 +20,14 @@ export default function SeedEntries({ plants, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
-  const [showAll, setShowAll] = useState(false);
+  const [version, setVersion] = useState(0);
   const formId = useRef(newId());
 
   function load() {
-    api.get(`/admin/stock/seed-entries?status=${showAll ? "all" : "open"}`).then(setData).catch((e) => setError(e.message || "Could not load seed entries."));
+    api.get("/admin/stock/seed-entries?status=open").then(setData).catch((e) => setError(e.message || "Could not load seed entries."));
+    setVersion((v) => v + 1);
   }
-  useEffect(load, [showAll]);
+  useEffect(load, []);
   useEffect(() => {
     if (open) api.get("/admin/stock/seed-entries/customers").then(setCustomers).catch(() => {});
   }, [open]);
@@ -57,22 +58,6 @@ export default function SeedEntries({ plants, onChanged }) {
       onChanged?.();
     } catch (err) {
       setError(err.message || "Could not save the entry.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function closeEntry(r) {
-    if (busy || !window.confirm(`Close ${r.entry_number}? The ${num(r.remaining)} seeds that are left will be counted as not grown.`)) return;
-    setBusy(true);
-    setError("");
-    try {
-      await api.post(`/admin/stock/seed-entries/${r.id}/update`, { finish: true, request_id: newId() });
-      setMsg(`${r.entry_number} closed.`);
-      load();
-      onChanged?.();
-    } catch (err) {
-      setError(err.message || "Could not close the entry.");
     } finally {
       setBusy(false);
     }
@@ -144,34 +129,7 @@ export default function SeedEntries({ plants, onChanged }) {
           <div><span>{num(t.extra)}</span>Extra plants</div>
         </div>
       )}
-      {data && data.items.length === 0 ? <p className="stock-hint">No seed entries yet.</p> : data && (
-        <div className="admin-table-wrap">
-          <table className="admin-table">
-            <thead><tr><th>Customer</th><th>Plant</th><th>Seeds</th><th>Ready</th><th>Left</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-              {data.items.map((r) => (
-                <tr key={r.id}>
-                  <td><strong>{r.customer_name}</strong><div className="stock-hint">{r.entry_number} · {r.entry_date}{r.reference ? ` · ${r.reference}` : ""}</div></td>
-                  <td>{r.plant_name}</td>
-                  <td>{num(r.seeds_given)}</td>
-                  <td>{num(r.prepared_plants)}{r.extra_plants > 0 ? <div className="stock-hint">+{num(r.extra_plants)} extra</div> : null}</td>
-                  <td>{num(r.remaining)}</td>
-                  <td><span className={`badge ${BADGE[r.status] || "badge-muted"}`}>{r.status_label}</span></td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    {r.status !== "Completed" && <>
-                      <Link className="btn btn-sm btn-primary" to={`/admin/stock/add?seed=${r.id}`}>Add plants</Link>{" "}
-                      <button type="button" className="btn btn-sm btn-outline dark" disabled={busy} onClick={() => closeEntry(r)}>Close</button>
-                    </>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0" }}>
-        <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show completed entries too
-      </label>
+      <SeedHistory plants={plants} version={version} onChanged={() => { load(); onChanged?.(); }} />
     </section>
   );
 }

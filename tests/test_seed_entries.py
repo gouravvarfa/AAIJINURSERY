@@ -94,3 +94,53 @@ def test_requires_login():
     from fastapi.testclient import TestClient
     from app.main import app
     assert TestClient(app).get(E).status_code in (401, 403)
+
+
+def test_history_groups_by_customer_with_log():
+    admin = _admin()
+    plant = _plant(admin)
+    c = admin.post(E, json={"new_customer": {"name": "Hist Cust", "phone": "9877700011"}, "plant_id": plant["id"], "seeds_given": 300, "request_id": _rid()}).json()
+    admin.post(E, json={"contact_id": c["contact_id"], "plant_id": plant["id"], "seeds_given": 100, "request_id": _rid()})
+    admin.post(f"{E}/{c['id']}/update", json={"prepared_plants": 200, "extra_plants": 30, "rejected_plants": 20, "request_id": _rid()})
+    g = [x for x in admin.get(f"{E}/history").json()["customers"] if x["contact_id"] == c["contact_id"]][0]
+    assert len(g["entries"]) == 2 and g["seeds"] == 400 and g["good"] == 200 and g["extra"] == 30 and g["rejected"] == 20 and g["remaining"] == 150
+    assert any(len(e["log"]) == 1 for e in g["entries"])
+
+
+def test_edit_entry_and_update_keep_stock_in_step():
+    admin = _admin()
+    plant = _plant(admin, stock=0)
+    e = _create(admin, plant, 500).json()
+    admin.post(f"{E}/{e['id']}/update", json={"prepared_plants": 100, "extra_plants": 50, "rejected_plants": 10, "request_id": _rid()})
+    assert _ready(plant["id"]) == 50
+    log = admin.get(f"{E}/{e['id']}").json()["updates"][0]
+    # correct the line: extra 50 -> 80
+    r = admin.put(f"{E}/{e['id']}/updates/{log['id']}", json={"prepared_plants": 100, "extra_plants": 80, "rejected_plants": 10})
+    assert r.status_code == 200 and r.json()["extra_plants"] == 80 and _ready(plant["id"]) == 80
+    # too many plants for the seeds is refused and nothing changes
+    assert admin.put(f"{E}/{e['id']}/updates/{log['id']}", json={"prepared_plants": 900, "extra_plants": 80, "rejected_plants": 10}).status_code == 400
+    assert _ready(plant["id"]) == 80
+    # seeds cannot go below what is recorded; edit date/notes/seeds
+    assert admin.put(f"{E}/{e['id']}", json={"seeds_given": 150}).status_code == 400
+    ok = admin.put(f"{E}/{e['id']}", json={"seeds_given": 400, "reference": "R1", "notes": "n", "entry_date": "2026-01-05"})
+    assert ok.status_code == 200 and ok.json()["seeds_given"] == 400 and ok.json()["entry_date"] == "2026-01-05"
+    # plant cannot change once plants were recorded
+    other = _plant(admin)
+    assert admin.put(f"{E}/{e['id']}", json={"plant_id": other["id"]}).status_code == 400
+    # entry cannot be deleted with updates; removing the update takes the extra plants back
+    assert admin.delete(f"{E}/{e['id']}").status_code == 400
+    d = admin.delete(f"{E}/{e['id']}/updates/{log['id']}")
+    assert d.status_code == 200 and d.json()["status"] == "Pending" and _ready(plant["id"]) == 0
+    assert admin.delete(f"{E}/{e['id']}").status_code == 200
+    assert admin.get(f"{E}/{e['id']}").status_code == 404
+
+
+def test_cannot_take_back_extra_plants_already_used():
+    admin = _admin()
+    plant = _plant(admin, stock=0)
+    e = _create(admin, plant, 100).json()
+    admin.post(f"{E}/{e['id']}/update", json={"extra_plants": 40, "request_id": _rid()})
+    admin.post(f"{S}/ready/adjust", json={"plant_id": plant["id"], "new_quantity": 5, "reason": "sold some"})
+    log = admin.get(f"{E}/{e['id']}").json()["updates"][0]
+    assert admin.delete(f"{E}/{e['id']}/updates/{log['id']}").status_code == 400
+    assert _ready(plant["id"]) == 5

@@ -109,9 +109,9 @@ export default function StockDemand() {
     return !q || r.name.toLowerCase().includes(q.toLowerCase());
   });
   const cards = [
-    ["seeds", "Total Seeds Given", st ? num(st.seeds_given) : "-", "tone-green", "Open customer seed entries"],
-    ["ready", "Plants Ready", st ? num(st.prepared) : "-", "tone-green", "Prepared for customers"],
-    ["extra", "Extra Plants", st ? num(st.extra) : "-", "tone-amber", "Extra usable plants"],
+    ["seeds", "Total Seeds Given", st ? num(st.seeds_given) : "-", "tone-green", "All customer seed entries"],
+    ["ready", "Plants Ready", st ? num(st.prepared) : "-", "tone-green", "Ready for customers, all entries"],
+    ["extra", "Extra Plants", st ? num(st.extra) : "-", "tone-amber", "Extra plants, all entries"],
     ["prod", "In Production", st ? num(st.remaining) : "-", "tone-blue", "Seeds still growing"],
     ["avail", "Available Stock", num(plantsReady), "tone-green", traysReady > 0 ? `plants + ${num(traysReady)} trays` : "plants ready now"],
     ["low", "Low Stock", num(counts.low), "tone-amber", `${LOW_LIMIT} or fewer ready`],

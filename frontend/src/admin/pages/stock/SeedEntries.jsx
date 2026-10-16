@@ -120,10 +120,10 @@ export default function SeedEntries({ plants, onChanged, startOpen = false }) {
       {t && (
         <div className="seed-kpis" data-testid="seed-totals">
           <div><span>{num(t.open_entries)}</span>Open entries</div>
-          <div><span>{num(t.seeds_given)}</span>Seeds given</div>
+          <div><span>{num(t.seeds_given)}</span>Seeds given (all)</div>
           <div><span>{num(t.remaining)}</span>Still to grow</div>
-          <div><span>{num(t.prepared)}</span>Ready for customers</div>
-          <div><span>{num(t.extra)}</span>Extra plants</div>
+          <div><span>{num(t.prepared)}</span>Ready for customers (all)</div>
+          <div><span>{num(t.extra)}</span>Extra plants (all)</div>
         </div>
       )}
       <SeedHistory plants={plants} version={version} onChanged={() => { load(); onChanged?.(); }} />

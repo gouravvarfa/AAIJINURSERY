@@ -169,11 +169,16 @@ def list_entries(status: str = Query("open", pattern="^(open|all)$"), q: str = Q
     items = query.order_by(SeedEntry.entry_date.desc(), SeedEntry.id.desc()).limit(300).all()
     rows = _with_plant(db, items)
     openrows = [r for r in rows if r["status"] != "Completed"]
+    # Seeds given / good / extra / bad are totals over EVERY entry (a closed entry is still seeds we were given);
+    # "still to grow" and "open entries" are about the entries not finished yet.
+    every = db.query(func.coalesce(func.sum(SeedEntry.seeds_given), 0), func.coalesce(func.sum(SeedEntry.prepared_plants), 0), func.coalesce(func.sum(SeedEntry.extra_plants), 0),
+                     func.coalesce(func.sum(SeedEntry.rejected_plants), 0)).one()
+    open_all = [_out(e) for e in db.query(SeedEntry).filter(SeedEntry.status != "Completed").all()]
     return {
         "items": rows,
         "totals": {
-            "open_entries": len(openrows), "seeds_given": sum(r["seeds_given"] for r in openrows), "remaining": sum(r["remaining"] for r in openrows),
-            "prepared": sum(r["prepared_plants"] for r in openrows), "extra": sum(r["extra_plants"] for r in openrows),
+            "open_entries": len(open_all), "seeds_given": int(every[0]), "remaining": sum(r["remaining"] for r in open_all),
+            "prepared": int(every[1]), "extra": int(every[2]), "rejected": int(every[3]),
         },
     }
 

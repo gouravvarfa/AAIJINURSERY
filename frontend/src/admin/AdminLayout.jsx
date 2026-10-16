@@ -43,6 +43,7 @@ const STOCK_NAV = [
   { to: "/admin/stock/add", label: "Add Plants", module: "products" },
   { to: "/admin/stock/allocations", label: "Orders Waiting", module: "products" },
   { to: "/admin/stock/seeds", label: "Customer Seeds", module: "products" },
+  { to: "/admin/stock/packets", label: "Seed Packet Entry", module: "products" },
   { to: "/admin/stock-orders", label: "Stock Orders", module: "inventory" },
 ];
 

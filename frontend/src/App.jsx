@@ -59,6 +59,7 @@ import AdminStockDemand from "./admin/pages/StockDemand";
 import AdminStockOrders from "./admin/pages/StockOrders";
 import AdminStockAllocations from "./admin/pages/stock/StockAllocations";
 import AdminCustomerSeeds from "./admin/pages/stock/CustomerSeeds";
+import AdminSeedPackets from "./admin/pages/stock/SeedPackets";
 import AdminAddPlants from "./admin/pages/stock/AddPlants";
 import AdminSessions from "./admin/pages/Sessions";
 import AdminLoginAttempts from "./admin/pages/LoginAttempts";
@@ -194,6 +195,7 @@ export default function App() {
           <Route path="stock/add" element={<AdminAddPlants />} />
           <Route path="stock/allocations" element={<AdminStockAllocations />} />
           <Route path="stock/seeds" element={<AdminCustomerSeeds />} />
+          <Route path="stock/packets" element={<AdminSeedPackets />} />
           <Route path="developer/sessions" element={<AdminSessions />} />
           <Route path="developer/login-attempts" element={<AdminLoginAttempts />} />
           <Route path="developer/roles-permissions" element={<AdminRolesPermissions />} />

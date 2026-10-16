@@ -31,6 +31,7 @@ from app.communications.billing_router import router as messaging_billing_router
 from app.inventory_router import router as inventory_demand_router
 from app.stock_orders import router as stock_orders_router
 import app.production_models  # noqa: F401  (registers the seed / production tables)
+import app.seed_packet_models  # noqa: F401  (registers the seed packet tables)
 from app.production_router import router as production_router
 from app.communications.router import router as communications_router
 from app.communications.inbox_router import router as communications_inbox_router
@@ -560,6 +561,8 @@ app.include_router(messaging_billing_router)  # developer-only (checks inside)
 app.include_router(production_router)  # seeds, production batches, ledger, yield (permissions checked inside)
 from app.seed_entries import router as seed_entries_router
 app.include_router(seed_entries_router)  # walk-in seed entries (permissions checked inside)
+from app.seed_packets import router as seed_packets_router
+app.include_router(seed_packets_router)  # seed packet purchases, batches, expiry alerts (permissions checked inside)
 app.include_router(inventory_demand_router)  # stock vs demand + per-line stock/prepare decision (permissions checked inside)
 app.include_router(stock_orders_router)  # stock team's order list + prepare/ready (permissions checked inside)
 app.include_router(accounting_router, dependencies=[Depends(require_permission("accounting", "VIEW"))])

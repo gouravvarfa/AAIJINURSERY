@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 import { StockHelp, num } from "../stock/stockUi";
 import { sanitizeQuantityText } from "../../utils/quantity";
+import { SeedPacketAlerts } from "./stock/SeedPackets";
 
 // Stock: how many plants are ready, how many orders are waiting, and what to do.
 function advice(r) {
@@ -45,6 +46,7 @@ function Menu({ children }) {
 }
 
 export default function StockDemand() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [seeds, setSeeds] = useState(null);
   const [q, setQ] = useState("");
@@ -148,6 +150,7 @@ export default function StockDemand() {
       />
       {error && <div className="alert alert-error">{error}</div>}
       {msg && <div className="alert alert-success" role="status">{msg}</div>}
+      <SeedPacketAlerts compact onOpen={() => navigate("/admin/stock/packets")} />
       <div className="sm-filters" role="tablist" aria-label="Filter plants">
         {FILTERS.map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={filter === key} className={`sm-chip${filter === key ? " active" : ""}`} onClick={() => setFilter(key)}>

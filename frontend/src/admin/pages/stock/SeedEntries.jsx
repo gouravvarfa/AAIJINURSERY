@@ -67,10 +67,7 @@ export default function SeedEntries({ plants, onChanged, startOpen = false }) {
   return (
     <section className="seed-card" aria-label="Seed entries">
       <div className="seed-head">
-        <div>
-          <h2>Customer seeds</h2>
-          <p>Customer gave seeds? Save them here. When the plants are ready, press "Add plants" on that row.</p>
-        </div>
+        <p>Customer gave seeds? Save them here. When the plants are ready, press "Add plants" on that customer's entry.</p>
         <button type="button" className="btn btn-primary" onClick={() => { setOpen(!open); setMsg(""); setError(""); }}>{open ? "Close" : "+ New Seed Entry"}</button>
       </div>
       {msg && <div className="alert alert-success" role="status">{msg}</div>}

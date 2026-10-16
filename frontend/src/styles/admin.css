@@ -2187,3 +2187,43 @@ table.admin-table .row-actions {
 .sm-table td.num, .sm-table th.num { white-space: nowrap; }
 .sm-table td:last-child { width: 1%; }
 @media (max-width: 1100px) { .sm-plant { min-width: 180px; } }
+
+/* ---- Smoother type + polish for the Stock pages ---- */
+.sm, .seed-card, .seed-hist {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.003em;
+}
+.sm strong, .seed-card strong, .seed-hist strong, .seed-hist b { font-weight: 600; }
+.sm h1 { font-weight: 600; letter-spacing: -0.015em; }
+.sm h2, .seed-hist h3 { font-weight: 600; letter-spacing: -0.01em; }
+.sm-table td, .sm-table th, .seed-log td, .seed-log th, .seed-ent-nums span, .seed-kpis span, .sm-card strong, .seed-cust-nums b { font-variant-numeric: tabular-nums; }
+.sm-table th, .seed-log th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6b7d72; font-weight: 600; background: #f7faf8; }
+.sm-table td, .seed-log td { font-size: 0.92rem; color: #24352b; }
+.sm-badge, .seed-card .badge { letter-spacing: 0.02em; font-weight: 600; }
+.seed-card .badge { text-transform: none; font-size: 0.76rem; padding: 4px 12px; border-radius: 999px; }
+.seed-card .btn-sm, .sm .btn-sm { padding: 7px 16px; font-size: 0.84rem; font-weight: 600; border-width: 1px; border-radius: 999px; box-shadow: none; line-height: 1.2; }
+.seed-card .btn-sm.btn-primary { box-shadow: 0 2px 6px rgba(31, 107, 69, 0.2); }
+.seed-card .btn-outline.dark, .sm .btn-outline.dark { border: 1px solid #cfdcd3; background: #fff; color: #1f3d2c; }
+.seed-card .btn-outline.dark:hover, .sm .btn-outline.dark:hover { background: #f1f7f3; border-color: #a9c4b3; }
+.seeds-page .sm-head { margin-bottom: 20px; }
+.seed-card { background: transparent; border: 0; padding: 0; margin-top: 0; box-shadow: none; }
+.seed-head { align-items: center; }
+.seed-head p { color: #5f7066; font-size: 0.9rem; }
+.seed-kpis { gap: 12px; }
+.seed-kpis div { background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(20, 50, 30, 0.05); font-size: 0.78rem; transition: box-shadow .2s, transform .2s; }
+.seed-kpis div:hover { box-shadow: 0 8px 20px rgba(20, 50, 30, 0.09); transform: translateY(-1px); }
+.seed-kpis span { font-size: 1.5rem; font-weight: 600; margin-bottom: 2px; }
+.seed-hist-head h3 { font-size: 1.1rem; }
+.seed-cust { border-radius: 14px; box-shadow: 0 1px 3px rgba(20, 50, 30, 0.05); transition: box-shadow .2s; }
+.seed-cust:hover { box-shadow: 0 6px 18px rgba(20, 50, 30, 0.08); }
+.seed-cust > summary { padding: 14px 18px; }
+.seed-cust-name strong { font-size: 1.02rem; }
+.seed-cust-body { background: #fafcfb; border-radius: 0 0 14px 14px; padding: 12px 18px 16px; }
+.seed-ent { background: #fff; border-radius: 12px; padding: 14px; }
+.seed-ent-top strong { font-size: 1rem; }
+.seed-ent-nums div { background: #f4f8f5; border-radius: 10px; padding: 10px 12px; }
+.seed-ent-nums span { font-size: 1.2rem; font-weight: 600; }
+.seed-form { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(20, 50, 30, 0.05); }
+@media (prefers-reduced-motion: reduce) { .seed-kpis div, .seed-cust { transition: none; } }

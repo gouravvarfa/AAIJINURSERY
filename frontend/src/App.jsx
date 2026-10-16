@@ -79,6 +79,7 @@ import AccountingParties from "./admin/pages/accounting/Parties";
 import AccountingPartyProfile from "./admin/pages/accounting/PartyProfile";
 import AccountingChartOfAccounts from "./admin/pages/accounting/ChartOfAccounts";
 import AccountingTaxRates from "./admin/pages/accounting/TaxRates";
+import AccountingInvoiceSettings from "./admin/pages/accounting/InvoiceSettings";
 import AccountingPurchaseOrders from "./admin/pages/accounting/PurchaseOrders";
 import AccountingPurchaseOrderDetail from "./admin/pages/accounting/PurchaseOrderDetail";
 import AccountingBills from "./admin/pages/accounting/Bills";
@@ -214,6 +215,7 @@ export default function App() {
           <Route path="accounting/parties/:id" element={<ErrorBoundary moduleName="Accounting"><AccountingPartyProfile /></ErrorBoundary>} />
           <Route path="accounting/chart-of-accounts" element={<ErrorBoundary moduleName="Accounting"><AccountingChartOfAccounts /></ErrorBoundary>} />
           <Route path="accounting/tax-rates" element={<ErrorBoundary moduleName="Accounting"><AccountingTaxRates /></ErrorBoundary>} />
+          <Route path="accounting/invoice-settings" element={<ErrorBoundary moduleName="Accounting"><AccountingInvoiceSettings /></ErrorBoundary>} />
           <Route path="accounting/purchase-orders" element={<ErrorBoundary moduleName="Accounting"><AccountingPurchaseOrders /></ErrorBoundary>} />
           <Route path="accounting/purchase-orders/:id" element={<ErrorBoundary moduleName="Accounting"><AccountingPurchaseOrderDetail /></ErrorBoundary>} />
           <Route path="accounting/bills" element={<ErrorBoundary moduleName="Accounting"><AccountingBills /></ErrorBoundary>} />

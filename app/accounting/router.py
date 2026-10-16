@@ -7,6 +7,7 @@ from app.accounting.router_contacts import router as contacts_router
 from app.accounting.router_employees import router as employees_router
 from app.accounting.router_export import router as export_router
 from app.accounting.router_expenses import router as expenses_router
+from app.accounting.router_invoice_settings import router as invoice_settings_router
 from app.accounting.router_overview import router as overview_router
 from app.accounting.router_parties import router as parties_router
 from app.accounting.router_payments_out import router as payments_out_router
@@ -25,6 +26,7 @@ router.include_router(contacts_router)
 router.include_router(parties_router)
 router.include_router(sales_router)
 router.include_router(receipts_router)
+router.include_router(invoice_settings_router)
 router.include_router(purchase_orders_router)
 router.include_router(bills_router)
 router.include_router(expenses_router)

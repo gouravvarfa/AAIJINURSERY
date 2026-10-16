@@ -77,6 +77,7 @@ const ACCOUNTING_NAV = [
   { to: "/admin/accounting/reports", label: "Reports", module: "accounting" },
   { to: "/admin/accounting/chart-of-accounts", label: "Chart of Accounts", module: "accounting" },
   { to: "/admin/accounting/tax-rates", label: "Tax Rates", module: "accounting" },
+  { to: "/admin/accounting/invoice-settings", label: "Invoice Settings", module: "accounting" },
 ];
 
 const WORKFORCE_NAV = [

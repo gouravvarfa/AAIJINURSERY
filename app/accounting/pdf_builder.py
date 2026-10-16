@@ -83,6 +83,20 @@ def _delivery_lines(invoice) -> list:
 
 
 def build_invoice_pdf_bytes(invoice, settings: dict) -> bytes:
+    """The redesigned tax invoice. If anything in the new renderer fails, the previous plain layout is
+    produced instead, so a customer's invoice link never breaks."""
+    try:
+        from app.accounting.invoice_pdf import build_invoice_pdf
+
+        return build_invoice_pdf(invoice, settings)
+    except Exception:
+        import logging
+
+        logging.getLogger("accounting.pdf").exception("new invoice PDF failed for invoice %s; using the plain layout", getattr(invoice, "id", "?"))
+        return _build_invoice_pdf_plain(invoice, settings)
+
+
+def _build_invoice_pdf_plain(invoice, settings: dict) -> bytes:
     styles = getSampleStyleSheet()
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20 * mm, bottomMargin=20 * mm)

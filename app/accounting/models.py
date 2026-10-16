@@ -325,6 +325,18 @@ class ContactLink(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class InvoiceSetting(Base):
+    """Details printed on the invoice PDF (bank, terms, signature ...). Deliberately NOT in site_settings:
+    that table is served to the public website, bank details must never be."""
+
+    __tablename__ = "accounting_invoice_settings"
+
+    key = Column(String(60), primary_key=True)
+    value = Column(Text, default="")
+    updated_by = Column(String(80), default="")
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
 class PurchaseOrder(Base):
     """Supplier-side mirror of SalesOrder. Purchase Orders always originate
     offline -- there is no website concept of a supplier placing an order --

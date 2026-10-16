@@ -87,7 +87,14 @@ export default function StockDemand() {
 
   const info = Object.fromEntries(plants.map((p) => [p.id, p]));
   const growing = {}; // seeds still growing, per plant (open seed entries)
-  (seeds?.items || []).forEach((i) => { growing[i.plant_id] = (growing[i.plant_id] || 0) + i.remaining; });
+  const held = {}; // plants made from customers' seeds and waiting for them, per plant row (never part of Ready now)
+  (seeds?.items || []).forEach((i) => {
+    growing[i.plant_id] = (growing[i.plant_id] || 0) + i.remaining;
+    const key = `${i.plant_id}-${i.variant_id || 0}`;
+    held[key] = held[key] || { ready: 0, left: 0, tray: i.tray_size };
+    held[key].ready += i.prepared_plants;
+    held[key].left += i.remaining;
+  });
   const all = data?.items || [];
   const inProd = (r) => r.in_production > 0 || (growing[r.plant_id] || 0) > 0;
   const counts = {
@@ -196,7 +203,16 @@ export default function StockDemand() {
                         <td>
                           <div className="sm-plant">
                             {p?.image_url ? <img src={p.image_url} alt="" loading="lazy" /> : <span className="sm-thumb-empty"><Icon name="ready" /></span>}
-                            <div><strong>{r.name}</strong>{growing[r.plant_id] > 0 && <small>{num(growing[r.plant_id])} seeds growing</small>}{a.tone !== "green" && <span className={`sm-advice stock-advice-${a.tone}`}>{a.text}</span>}</div>
+                            <div><strong>{r.name}</strong>{(() => {
+                              const h = held[`${r.plant_id}-${r.variant_id || 0}`];
+                              if (!h || (h.ready <= 0 && h.left <= 0)) return null;
+                              return (
+                                <span className="sm-held">
+                                  {h.ready > 0 && <small className="sm-held-ready">{num(h.ready)} plants{h.tray ? ` (${num(Math.floor(h.ready / h.tray))} trays)` : ""} ready for customers: not counted in Ready now</small>}
+                                  {h.left > 0 && <small>{num(h.left)} customer seeds still growing</small>}
+                                </span>
+                              );
+                            })()}{a.tone !== "green" && <span className={`sm-advice stock-advice-${a.tone}`}>{a.text}</span>}</div>
                           </div>
                         </td>
                         <td className="num"><strong>{num(r.available_stock)}</strong> <small>{r.unit}</small>{r.reserved_stock > 0 && <small className="sm-alloc-note">{num(r.reserved_stock)} allocated</small>}</td>

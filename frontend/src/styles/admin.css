@@ -2227,3 +2227,15 @@ table.admin-table .row-actions {
 .seed-ent-nums span { font-size: 1.2rem; font-weight: 600; }
 .seed-form { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(20, 50, 30, 0.05); }
 @media (prefers-reduced-motion: reduce) { .seed-kpis div, .seed-cust { transition: none; } }
+
+/* Stock table: keep every column visible on narrower / zoomed screens */
+.sm-table th { white-space: normal; line-height: 1.25; }
+.sm-table th, .sm-table td { padding-left: 8px; padding-right: 8px; }
+.sm-alloc-note { display: none; font-size: 0.72rem; color: var(--color-text-muted); }
+@media (max-width: 1500px) {
+  .sm-col-alloc { display: none; }
+  .sm-alloc-note { display: block; }
+  .sm-plant { min-width: 150px; gap: 10px; }
+  .sm-plant img, .sm-thumb-empty { width: 38px; height: 38px; }
+}
+@media (max-width: 1280px) { .sm-table th { font-size: 0.66rem; letter-spacing: 0.02em; } .sm-table td { font-size: 0.86rem; } .sm-actions .btn-sm { padding: 6px 12px; } }

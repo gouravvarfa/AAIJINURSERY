@@ -182,7 +182,7 @@ export default function StockDemand() {
           rows.length === 0 ? <Empty>{filter === "all" && statusSel === "all" && !q ? "No plants found." : "No plants match these filters."}</Empty> : (
             <div className="admin-table-wrap sm-table-wrap">
               <table className="admin-table sm-table">
-                <thead><tr><th>Plant</th><th className="num">Ready now</th><th className="num">Allocated</th><th className="num">Orders waiting</th><th className="num">Still to make</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Plant</th><th className="num">Ready now</th><th className="num sm-col-alloc">Allocated</th><th className="num">Orders waiting</th><th className="num">Still to make</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                   {rows.map((r) => {
                     const a = advice(r);
@@ -196,8 +196,8 @@ export default function StockDemand() {
                             <div><strong>{r.name}</strong>{growing[r.plant_id] > 0 && <small>{num(growing[r.plant_id])} seeds growing</small>}{a.tone !== "green" && <span className={`sm-advice stock-advice-${a.tone}`}>{a.text}</span>}</div>
                           </div>
                         </td>
-                        <td className="num"><strong>{num(r.available_stock)}</strong> <small>{r.unit}</small></td>
-                        <td className="num">{num(r.reserved_stock)}</td>
+                        <td className="num"><strong>{num(r.available_stock)}</strong> <small>{r.unit}</small>{r.reserved_stock > 0 && <small className="sm-alloc-note">{num(r.reserved_stock)} allocated</small>}</td>
+                        <td className="num sm-col-alloc">{num(r.reserved_stock)}</td>
                         <td className="num">{num(r.outstanding_demand)}</td>
                         <td className="num">{r.to_produce > 0 ? <span className="dl-pill dl-red"><span className="dl-label">{num(r.to_produce)}</span></span> : "-"}</td>
                         <td><span className={`sm-badge sm-badge-${s}`}>{STATUS_TEXT[s]}</span></td>

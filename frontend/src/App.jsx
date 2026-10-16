@@ -58,6 +58,7 @@ import AdminMessagingBilling from "./admin/pages/developer/MessagingBilling";
 import AdminStockDemand from "./admin/pages/StockDemand";
 import AdminStockOrders from "./admin/pages/StockOrders";
 import AdminStockAllocations from "./admin/pages/stock/StockAllocations";
+import AdminCustomerSeeds from "./admin/pages/stock/CustomerSeeds";
 import AdminAddPlants from "./admin/pages/stock/AddPlants";
 import AdminSessions from "./admin/pages/Sessions";
 import AdminLoginAttempts from "./admin/pages/LoginAttempts";
@@ -192,6 +193,7 @@ export default function App() {
           <Route path="stock-orders" element={<AdminStockOrders />} />
           <Route path="stock/add" element={<AdminAddPlants />} />
           <Route path="stock/allocations" element={<AdminStockAllocations />} />
+          <Route path="stock/seeds" element={<AdminCustomerSeeds />} />
           <Route path="developer/sessions" element={<AdminSessions />} />
           <Route path="developer/login-attempts" element={<AdminLoginAttempts />} />
           <Route path="developer/roles-permissions" element={<AdminRolesPermissions />} />

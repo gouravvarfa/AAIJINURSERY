@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { Loading, Empty } from "../../components/Loading";
 import { StockHelp, num } from "../stock/stockUi";
-import SeedEntries from "./stock/SeedEntries";
 import { sanitizeQuantityText } from "../../utils/quantity";
 
 // Stock: how many plants are ready, how many orders are waiting, and what to do.
@@ -156,7 +155,7 @@ export default function StockDemand() {
           </button>
         ))}
         <Link className="sm-chip sm-chip-link" to="/admin/stock/allocations">Orders Waiting</Link>
-        <a className="sm-chip sm-chip-link" href="#seed-entries" onClick={(e) => { e.preventDefault(); document.getElementById("seed-entries")?.scrollIntoView({ behavior: "smooth" }); }}>+ New Seed Entry</a>
+        <Link className="sm-chip sm-chip-link" to="/admin/stock/seeds?new=1">+ New Seed Entry</Link>
       </div>
       <div className="sm-cards">
         {cards.map(([icon, label, value, tone, sub]) => (
@@ -239,7 +238,6 @@ export default function StockDemand() {
           </form>
         </div>
       )}
-      <div id="seed-entries"><SeedEntries plants={plants} onChanged={load} /></div>
     </div>
   );
 }

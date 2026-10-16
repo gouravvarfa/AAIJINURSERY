@@ -11,10 +11,10 @@ const EMPTY = { customer_id: "", new_name: "", new_phone: "", plant_id: "", vari
 
 // Seeds a walk-in customer hands over. Lives on the Stock page (no separate page).
 // The plants that come out are recorded on the "Add Plants" page by choosing the customer there.
-export default function SeedEntries({ plants, onChanged }) {
+export default function SeedEntries({ plants, onChanged, startOpen = false }) {
   const [data, setData] = useState(null);
   const [customers, setCustomers] = useState([]);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const [form, setForm] = useState(EMPTY);
   const [addNew, setAddNew] = useState(false);
   const [busy, setBusy] = useState(false);

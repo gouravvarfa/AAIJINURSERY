@@ -78,6 +78,12 @@ class ContactOut(BaseModel):
     online_transaction_count: int = 0
     offline_transaction_count: int = 0
     channels: List[str] = []  # ["online"] | ["offline"] | ["online", "offline"] | []
+    # Customer position (see app/accounting/balances.py): outstanding is the NET balance of this
+    # customer and every Confirmed-linked contact (negative = advance credit).
+    due: float = 0
+    advance: float = 0
+    own_outstanding: float = 0
+    linked_contact_ids: List[int] = []
 
 
 class ContactIn(BaseModel):
@@ -197,14 +203,24 @@ class InvoiceOut(BaseModel):
     source: str
     source_id: Optional[str] = None
     created_at: datetime
+    previous_balance: Optional[float] = None
+    received_at_issue: Optional[float] = None
+    advance_applied_at_issue: Optional[float] = None
+    snapshot_at: Optional[datetime] = None
+    void_disposition: Optional[str] = None
     contact: Optional[ContactOut] = None
     items: List[InvoiceItemOut] = []
     sales_order: Optional[SalesOrderOut] = None
 
 
 class InvoiceConvertIn(BaseModel):
-    """Manually convert an (offline) Sales Order into an Invoice."""
+    """Manually convert an (offline) Sales Order into an Invoice. Optionally records money received
+    at billing and/or uses the customer's earlier advance, so a walk-in customer can be billed at once."""
     due_date: Optional[datetime] = None
+    received_amount: float = 0
+    received_method: str = "Cash"
+    received_reference: str = ""
+    use_advance: bool = False
 
 
 # ---------- Payments In ----------
@@ -231,6 +247,7 @@ class PaymentInOut(BaseModel):
     source: str
     source_id: Optional[str] = None
     created_at: datetime
+    advance_created: float = 0  # part of an overpayment that went to the customer's advance
 
 
 # ---------- Purchase Orders ----------
@@ -561,10 +578,12 @@ class ContactOutstandingRow(BaseModel):
     total: float = 0
     paid: float = 0
     outstanding: float = 0
+    advance: float = 0
 
 
 class CustomerOutstandingOut(BaseModel):
     total_outstanding: float = 0
+    total_advance: float = 0
     rows: List[ContactOutstandingRow] = []
 
 

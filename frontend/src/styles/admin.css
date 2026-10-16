@@ -2291,3 +2291,33 @@ table.admin-table .row-actions {
 @media (max-width: 560px) { .sp-grid { grid-template-columns: minmax(0, 1fr); } .sp-alert-grid { grid-template-columns: minmax(0, 1fr); } }
 
 .sp-filters select.form-control { padding-top: 0; padding-bottom: 0; line-height: normal; }
+
+/* ---- Customer balance / advance (Accounting) ---- */
+.cust-balance { border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 14px; margin-top: 10px; background: #fff; display: grid; gap: 6px; }
+.cust-balance.owes { background: #fff8ee; border-color: #f0dfb2; }
+.cust-balance.credit { background: #f1f8f4; border-color: #cfe5d6; }
+.cust-balance-main small { display: block; color: var(--color-text-muted); font-size: 0.78rem; }
+.cust-balance-main strong { font-size: 1.4rem; font-weight: 600; }
+.cust-balance.owes .cust-balance-main strong { color: #a85d00; }
+.cust-balance.credit .cust-balance-main strong { color: #1c7a43; }
+.cust-balance-split { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: 0.82rem; color: var(--color-text-muted); }
+.cust-balance-split b { color: var(--color-text, #1c2b22); }
+.cust-balance-note { color: var(--color-text-muted); font-size: 0.78rem; }
+.cust-balance-warn { color: #b3261e; font-size: 0.8rem; font-weight: 600; }
+.invoice-frozen { margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--color-border); }
+.invoice-frozen h3 { font-size: 0.85rem; margin: 0 0 6px; color: var(--color-text-muted); font-weight: 600; }
+.acct-panel { margin: 0 0 24px; display: grid; gap: 14px; }
+.acct-panel h2 { margin: 0; font-size: 1.15rem; }
+.acct-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.acct-card { background: #fff; border: 1px solid var(--color-border); border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.acct-card h3, .acct-card h4 { margin: 0; font-size: 1rem; }
+.acct-card label { display: grid; gap: 4px; font-weight: 600; font-size: 0.84rem; }
+.acct-warn { background: #fff7f6; border: 1px solid #f3cdca; border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; }
+.acct-warn p { margin: 0; font-size: 0.86rem; }
+.acct-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 0.9rem; }
+.acct-row small, .acct-sub { display: block; color: var(--color-text-muted); font-size: 0.76rem; }
+.acct-receipt { border-top: 1px solid var(--color-border); padding-top: 8px; display: grid; gap: 4px; }
+.acct-receipt.reversed { opacity: 0.55; }
+.acct-left { font-weight: 600; color: #1c7a43; }
+.acct-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.acct-refund { border-top: 1px solid var(--color-border); padding-top: 10px; display: grid; gap: 8px; }

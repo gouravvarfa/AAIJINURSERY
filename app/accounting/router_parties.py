@@ -18,6 +18,8 @@ from sqlalchemy.orm import Session
 
 from app.accounting.models import (
     Contact,
+    CustomerReceipt,
+    CustomerRefund,
     Expense,
     Invoice,
     PaymentIn,
@@ -217,7 +219,7 @@ def party_statement(
 
     raw_rows = []
     if not is_supplier_only:
-        inv_q = db.query(Invoice).filter(Invoice.contact_id == contact.id, Invoice.status != "Voided")
+        inv_q = db.query(Invoice).filter(Invoice.contact_id == contact.id, Invoice.status.notin_(("Voided", "Cancelled")))
         if source:
             inv_q = inv_q.filter(Invoice.source == source)
         if date_from:
@@ -227,15 +229,39 @@ def party_statement(
         for inv in inv_q.all():
             raw_rows.append((inv.invoice_date, f"Invoice {inv.invoice_number}", inv.invoice_number, inv.source, inv.total_amount, 0))
 
-        pay_q = db.query(PaymentIn).filter(PaymentIn.contact_id == contact.id)
+        # Payments on live invoices, plus payments on a voided invoice that nobody has decided
+        # about yet (held as credit). Decided ones appear below as an advance (and a refund).
+        pay_q = (
+            db.query(PaymentIn, Invoice)
+            .join(Invoice, Invoice.id == PaymentIn.invoice_id)
+            .filter(PaymentIn.contact_id == contact.id)
+            .filter(Invoice.status.notin_(("Voided", "Cancelled")) | Invoice.void_disposition.is_(None))
+        )
         if source:
             pay_q = pay_q.filter(PaymentIn.source == source)
         if date_from:
             pay_q = pay_q.filter(PaymentIn.payment_date >= date_from)
         if date_to:
             pay_q = pay_q.filter(PaymentIn.payment_date <= date_to)
-        for p in pay_q.all():
-            raw_rows.append((p.payment_date, "Payment Received", p.reference or f"PAY-IN-{p.id}", p.source, 0, p.amount))
+        for p, inv in pay_q.all():
+            label = "Payment Received" if inv.status not in ("Voided", "Cancelled") else f"Payment on voided {inv.invoice_number} (held as credit)"
+            raw_rows.append((p.payment_date, label, p.reference or f"PAY-IN-{p.id}", p.source, 0, p.amount))
+        if not source or source == "offline":
+            rc_q = db.query(CustomerReceipt).filter(CustomerReceipt.contact_id == contact.id, CustomerReceipt.status == "Active")
+            if date_from:
+                rc_q = rc_q.filter(CustomerReceipt.payment_date >= date_from)
+            if date_to:
+                rc_q = rc_q.filter(CustomerReceipt.payment_date <= date_to)
+            names = {"advance": "Advance Received", "overpayment": "Extra Payment (kept as advance)", "void_transfer": "Voided invoice payment (kept as advance)"}
+            for r in rc_q.all():
+                raw_rows.append((r.payment_date, names.get(r.kind, "Advance Received"), r.reference or f"ADV-{r.id}", "offline", 0, r.amount))
+            rf_q = db.query(CustomerRefund).join(CustomerReceipt, CustomerReceipt.id == CustomerRefund.receipt_id).filter(CustomerRefund.contact_id == contact.id, CustomerReceipt.status == "Active")
+            if date_from:
+                rf_q = rf_q.filter(CustomerRefund.refund_date >= date_from)
+            if date_to:
+                rf_q = rf_q.filter(CustomerRefund.refund_date <= date_to)
+            for f in rf_q.all():
+                raw_rows.append((f.refund_date, "Refund to customer", f"REFUND-{f.id}", "offline", f.amount, 0))
     else:
         bill_q = db.query(Purchase).filter(Purchase.contact_id == contact.id)
         if source:

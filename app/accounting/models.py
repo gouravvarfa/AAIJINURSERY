@@ -193,6 +193,16 @@ class Invoice(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     voided_by = Column(String(80), default="")
     voided_at = Column(DateTime, nullable=True)
+    # Frozen when the invoice is generated (NULL on invoices made before this feature:
+    # their PDF keeps the old layout). They never change afterwards, so a regenerated
+    # PDF always shows the same Previous Balance / Received / Current Balance.
+    previous_balance = Column(Float, nullable=True)  # customer's net balance just before this invoice (negative = advance credit)
+    received_at_issue = Column(Float, nullable=True)  # new money received when billing
+    advance_applied_at_issue = Column(Float, nullable=True)  # earlier advance used on this invoice when billing
+    snapshot_at = Column(DateTime, nullable=True)
+    # What the admin decided for payments on this invoice when it was voided:
+    # NULL = nothing decided yet (or no payments), "advance" or "refund".
+    void_disposition = Column(String(12), nullable=True)
 
     sales_order = relationship("SalesOrder", back_populates="invoices")
     contact = relationship("Contact")
@@ -240,6 +250,79 @@ class PaymentIn(Base):
 
     invoice = relationship("Invoice", back_populates="payments")
     contact = relationship("Contact")
+
+
+class CustomerReceipt(Base):
+    """Money received from a customer that is not tied to one invoice (an advance, an
+    overpayment, or a voided invoice's payment kept as advance). Remaining credit =
+    amount - refunds - allocations to live invoices."""
+
+    __tablename__ = "accounting_customer_receipts"
+    __table_args__ = (UniqueConstraint("request_id", name="uq_receipt_request"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    contact_id = Column(Integer, ForeignKey("accounting_contacts.id"), nullable=False, index=True)
+    amount = Column(Float, nullable=False, default=0)
+    method = Column(String(20), nullable=False, default="Cash")
+    payment_date = Column(DateTime, default=datetime.utcnow, index=True)
+    reference = Column(String(120), default="")
+    notes = Column(Text, default="")
+    # advance | overpayment | void_transfer
+    kind = Column(String(20), nullable=False, default="advance")
+    invoice_id = Column(Integer, ForeignKey("accounting_invoices.id"), nullable=True, index=True)  # the invoice it came from, if any
+    status = Column(String(10), nullable=False, default="Active", index=True)  # Active | Reversed
+    request_id = Column(String(60), nullable=True)
+    recorded_by = Column(String(80), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    contact = relationship("Contact")
+
+
+class ReceiptAllocation(Base):
+    """Part of an advance receipt applied to an invoice. Moves credit onto the invoice;
+    never changes the customer's net balance."""
+
+    __tablename__ = "accounting_receipt_allocations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    receipt_id = Column(Integer, ForeignKey("accounting_customer_receipts.id"), nullable=False, index=True)
+    invoice_id = Column(Integer, ForeignKey("accounting_invoices.id"), nullable=False, index=True)
+    amount = Column(Float, nullable=False, default=0)
+    created_by = Column(String(80), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CustomerRefund(Base):
+    """Money handed back to a customer out of an advance receipt."""
+
+    __tablename__ = "accounting_customer_refunds"
+
+    id = Column(Integer, primary_key=True, index=True)
+    receipt_id = Column(Integer, ForeignKey("accounting_customer_receipts.id"), nullable=False, index=True)
+    contact_id = Column(Integer, ForeignKey("accounting_contacts.id"), nullable=False, index=True)
+    amount = Column(Float, nullable=False, default=0)
+    method = Column(String(20), nullable=False, default="Cash")
+    refund_date = Column(DateTime, default=datetime.utcnow)
+    reason = Column(Text, default="")
+    created_by = Column(String(80), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ContactLink(Base):
+    """Two contacts that are really one customer (e.g. website + phone orders). Never merges
+    records; once Confirmed their balances are added together."""
+
+    __tablename__ = "accounting_contact_links"
+    __table_args__ = (UniqueConstraint("contact_a_id", "contact_b_id", name="uq_contact_link_pair"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    contact_a_id = Column(Integer, ForeignKey("accounting_contacts.id"), nullable=False, index=True)  # always the smaller id
+    contact_b_id = Column(Integer, ForeignKey("accounting_contacts.id"), nullable=False, index=True)
+    status = Column(String(10), nullable=False, default="Suggested", index=True)  # Suggested | Confirmed | Rejected
+    created_by = Column(String(80), default="")
+    reviewed_by = Column(String(80), default="")
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class PurchaseOrder(Base):

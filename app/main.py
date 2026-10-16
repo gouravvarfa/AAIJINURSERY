@@ -299,6 +299,11 @@ with engine.connect() as conn:
         ("accounting_payments_out", "recorded_by", "VARCHAR(80) DEFAULT ''"),
         ("accounting_invoices", "voided_by", "VARCHAR(80) DEFAULT ''"),
         ("accounting_invoices", "voided_at", "DATETIME"),
+        ("accounting_invoices", "previous_balance", "FLOAT"),
+        ("accounting_invoices", "received_at_issue", "FLOAT"),
+        ("accounting_invoices", "advance_applied_at_issue", "FLOAT"),
+        ("accounting_invoices", "snapshot_at", "DATETIME"),
+        ("accounting_invoices", "void_disposition", "VARCHAR(12)"),
         ("accounting_contacts", "created_by", "VARCHAR(80) DEFAULT ''"),
     ]:
         _cols = {row[1] for row in conn.execute(text(f"PRAGMA table_info({_table})"))}

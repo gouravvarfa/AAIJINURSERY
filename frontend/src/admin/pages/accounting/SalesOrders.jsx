@@ -1,3 +1,4 @@
+import CustomerBalanceCard from "../../accounting/CustomerBalanceCard";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../../api";
@@ -199,6 +200,7 @@ export default function SalesOrders() {
                   + New Contact
                 </button>
               </div>
+              <CustomerBalanceCard contactId={form.contact_id} />
             </div>
 
             {showContactModal && (

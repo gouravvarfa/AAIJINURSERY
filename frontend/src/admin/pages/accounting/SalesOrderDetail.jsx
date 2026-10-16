@@ -6,6 +6,7 @@ import { salesOrderBadgeClass, sourceBadgeClass } from "../../accounting/account
 import AuditTrail from "../../accounting/AuditTrail";
 import DeliveryPanel from "../../accounting/DeliveryPanel";
 import FulfilmentPanel from "../../inventory/FulfilmentPanel";
+import CustomerBalanceCard from "../../accounting/CustomerBalanceCard";
 
 export default function SalesOrderDetail() {
   const { id } = useParams();
@@ -14,6 +15,10 @@ export default function SalesOrderDetail() {
   const [error, setError] = useState("");
   const [converting, setConverting] = useState(false);
   const [dueDate, setDueDate] = useState("");
+  const [received, setReceived] = useState("");
+  const [method, setMethod] = useState("Cash");
+  const [useAdvance, setUseAdvance] = useState(false);
+  const [position, setPosition] = useState(null);
 
   function load() {
     setOrder(null);
@@ -32,6 +37,9 @@ export default function SalesOrderDetail() {
     try {
       const invoice = await api.post(`/admin/accounting/sales-orders/${id}/convert-to-invoice`, {
         due_date: dueDate || null,
+        received_amount: Number(received || 0),
+        received_method: method,
+        use_advance: useAdvance,
       });
       navigate(`/admin/accounting/invoices/${invoice.id}`);
     } catch (err) {
@@ -176,6 +184,23 @@ export default function SalesOrderDetail() {
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
                 />
+              </div>
+              <CustomerBalanceCard contactId={order.contact_id} onLoaded={setPosition} />
+              {position?.advance > 0 && (
+                <label className="sp-check" style={{ margin: "8px 0" }}>
+                  <input type="checkbox" checked={useAdvance} onChange={(e) => setUseAdvance(e.target.checked)} />
+                  Use the customer's advance (₹{position.advance.toLocaleString("en-IN")}) on this bill
+                </label>
+              )}
+              <div className="form-group">
+                <label htmlFor="received_now">Money received now (optional)</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input id="received_now" className="form-control" inputMode="decimal" placeholder="0" value={received} onChange={(e) => setReceived(e.target.value.replace(/[^0-9.]/g, ""))} />
+                  <select className="form-control" style={{ maxWidth: 120 }} value={method} onChange={(e) => setMethod(e.target.value)} aria-label="Payment method">
+                    {["Cash", "Bank", "UPI", "Card", "Online", "Other"].map((m) => <option key={m}>{m}</option>)}
+                  </select>
+                </div>
+                <small className="stock-hint">Shown on the invoice as Received and fixed there. If it is more than the bill, the extra is kept as the customer's advance.</small>
               </div>
               <button
                 type="button"

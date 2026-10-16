@@ -82,7 +82,7 @@ def test_whole_story_with_random_numbers():
     issued = demand + extra_seeds                      # more seeds than the order needs
     consumed = issued - rnd.randint(10, 60)            # a few seeds go back unused
     returned = issued - consumed
-    healthy = demand + rnd.randint(40, 250)            # more healthy plants than the order needs
+    healthy = min(demand + rnd.randint(40, 250), consumed)  # more healthy plants than the order needs, never more than the seeds used
     rejected = consumed - healthy if consumed > healthy else 0
     rejected = min(rejected, consumed - healthy) if consumed > healthy else 0
     surplus = healthy - demand

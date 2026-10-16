@@ -6,6 +6,7 @@ import { invoiceBadgeClass, salesOrderBadgeClass, sourceBadgeClass } from "../..
 import AuditTrail from "../../accounting/AuditTrail";
 import WhatsAppActivity from "../../communications/WhatsAppActivity";
 import { printWholePage } from "../../analytics/exportUtils";
+import CustomerBalanceCard from "../../accounting/CustomerBalanceCard";
 
 function todayDateInput() {
   return new Date().toISOString().slice(0, 10);
@@ -20,6 +21,10 @@ export default function InvoiceDetail() {
   const [paymentForm, setPaymentForm] = useState({ amount: 0, method: "Cash", payment_date: todayDateInput(), reference: "", notes: "" });
   const [saving, setSaving] = useState(false);
   const [voiding, setVoiding] = useState(false);
+  const [voidModal, setVoidModal] = useState(null); // { action, method, notes, paid }
+  const [position, setPosition] = useState(null);
+  const [balanceKey, setBalanceKey] = useState(0);
+  const [info, setInfo] = useState("");
 
   function load() {
     setInvoice(null);
@@ -69,11 +74,12 @@ export default function InvoiceDetail() {
     }
   }
 
-  async function handleVoid() {
-    if (!confirm("Void this invoice? It will be kept on record, marked Voided, and can no longer be edited.")) return;
+  async function handleVoid(payload) {
     setVoiding(true);
     try {
-      await api.post(`/admin/accounting/invoices/${id}/void`);
+      await api.post(`/admin/accounting/invoices/${id}/void`, payload || {});
+      setVoidModal(null);
+      setBalanceKey((k) => k + 1);
       load();
     } catch (err) {
       setError(err.message || "Unable to void this invoice.");
@@ -86,6 +92,27 @@ export default function InvoiceDetail() {
     return <div className="alert alert-error">{error}</div>;
   }
   if (!invoice) return <Loading />;
+
+  function startVoid() {
+    const paid = (payments || []).reduce((n, p) => n + p.amount, 0);
+    if (paid > 0) {
+      setVoidModal({ action: "advance", method: "Cash", notes: "", paid });
+      return;
+    }
+    if (confirm("Void this invoice? It will be kept on record, marked Voided, and can no longer be edited.")) handleVoid();
+  }
+
+  async function useAdvance() {
+    setError("");
+    try {
+      const r = await api.post(`/admin/accounting/invoices/${id}/apply-advance`, {});
+      setInfo(`Rs ${r.applied.toLocaleString("en-IN")} of the customer's advance was used on this invoice.`);
+      setBalanceKey((k) => k + 1);
+      load();
+    } catch (err) {
+      setError(err.message || "Unable to use the advance.");
+    }
+  }
 
   const canRecordPayment = invoice.balance_due > 0 && invoice.status !== "Voided" && invoice.status !== "Cancelled";
   const canVoid = invoice.source === "offline" && invoice.status !== "Voided" && invoice.status !== "Cancelled";
@@ -157,6 +184,19 @@ export default function InvoiceDetail() {
               <span>Balance Due</span>
               <span>&#8377;{invoice.balance_due}</span>
             </div>
+            {invoice.previous_balance != null && (
+              <div className="invoice-frozen" aria-label="Balances fixed when this invoice was generated">
+                <h3>Fixed when this invoice was generated</h3>
+                <div className="cart-summary-row"><span>Previous {invoice.previous_balance < 0 ? "advance credit" : "balance"}</span><span>&#8377;{Math.abs(invoice.previous_balance).toLocaleString("en-IN")}</span></div>
+                <div className="cart-summary-row"><span>Received at billing</span><span>&#8377;{(invoice.received_at_issue || 0).toLocaleString("en-IN")}</span></div>
+                {invoice.advance_applied_at_issue > 0 && <div className="cart-summary-row"><span>Advance adjusted</span><span>&#8377;{invoice.advance_applied_at_issue.toLocaleString("en-IN")}</span></div>}
+                {(() => {
+                  const cur = invoice.previous_balance + invoice.total_amount - (invoice.received_at_issue || 0);
+                  return <div className="cart-summary-row cart-summary-total"><span>Current {cur < 0 ? "advance credit" : "balance"}</span><span>&#8377;{Math.abs(cur).toLocaleString("en-IN")}</span></div>;
+                })()}
+                <small className="stock-hint">Money received after billing changes the customer's balance below, not these fixed numbers.</small>
+              </div>
+            )}
           </div>
 
           <div className="admin-form-card" style={{ maxWidth: "none" }}>
@@ -194,6 +234,15 @@ export default function InvoiceDetail() {
           </div>
 
           <div className="admin-form-card no-print" style={{ maxWidth: "none", marginBottom: 20 }}>
+            <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Customer balance today</h2>
+            <CustomerBalanceCard contactId={invoice.contact_id} refreshKey={balanceKey + (invoice.amount_paid || 0)} onLoaded={setPosition} />
+            {info && <div className="alert alert-success" role="status" style={{ marginTop: 10 }}>{info}</div>}
+            {canRecordPayment && position?.advance > 0 && (
+              <button type="button" className="btn btn-sm btn-outline dark" style={{ marginTop: 10 }} onClick={useAdvance}>Use customer's advance on this invoice</button>
+            )}
+          </div>
+
+          <div className="admin-form-card no-print" style={{ maxWidth: "none", marginBottom: 20 }}>
             <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Related Documents</h2>
             {invoice.sales_order && (
               <p>
@@ -226,13 +275,36 @@ export default function InvoiceDetail() {
 
           {canVoid && (
             <div className="admin-form-card no-print" style={{ maxWidth: "none" }}>
-              <button type="button" className="btn btn-danger btn-block" disabled={voiding} onClick={handleVoid}>
+              <button type="button" className="btn btn-danger btn-block" disabled={voiding} onClick={startVoid}>
                 {voiding ? "Voiding..." : "Void Invoice"}
               </button>
             </div>
           )}
         </div>
       </div>
+
+      {voidModal && (
+        <div className="modal-overlay" onClick={() => !voiding && setVoidModal(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Void this invoice</h3>
+            <p>Rs {voidModal.paid.toLocaleString("en-IN")} was already paid on this invoice. The money is never deleted. Choose what happened to it:</p>
+            <label className="sp-check" style={{ display: "flex", margin: "8px 0" }}>
+              <input type="radio" name="void-action" checked={voidModal.action === "advance"} onChange={() => setVoidModal({ ...voidModal, action: "advance" })} />
+              Keep it as the customer's advance (they can use it on a later bill)
+            </label>
+            <label className="sp-check" style={{ display: "flex", margin: "8px 0" }}>
+              <input type="radio" name="void-action" checked={voidModal.action === "refund"} onChange={() => setVoidModal({ ...voidModal, action: "refund" })} />
+              Refund it to the customer (it was handed back)
+            </label>
+            <div className="form-group">
+              <label htmlFor="void_notes">Note (optional)</label>
+              <input id="void_notes" className="form-control" value={voidModal.notes} onChange={(e) => setVoidModal({ ...voidModal, notes: e.target.value })} />
+            </div>
+            <button type="button" className="btn btn-danger" disabled={voiding} onClick={() => handleVoid({ payment_action: voidModal.action, method: voidModal.method, notes: voidModal.notes })}>{voiding ? "Voiding..." : "Void invoice"}</button>{" "}
+            <button type="button" className="btn btn-outline dark" disabled={voiding} onClick={() => setVoidModal(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {showPaymentModal && (
         <div className="modal-overlay" onClick={() => !saving && setShowPaymentModal(false)}>
@@ -250,6 +322,9 @@ export default function InvoiceDetail() {
             <h3 style={{ marginTop: 0 }}>Record Payment</h3>
             {error && <div className="alert alert-error">{error}</div>}
             <form onSubmit={handleRecordPayment}>
+              {Number(paymentForm.amount) > invoice.balance_due && (
+                <div className="alert alert-warning">The invoice needs only Rs {invoice.balance_due}. The extra Rs {(Number(paymentForm.amount) - invoice.balance_due).toLocaleString("en-IN")} will be kept as the customer's advance.</div>
+              )}
               <div className="form-group">
                 <label htmlFor="amount">Amount (₹)</label>
                 <input

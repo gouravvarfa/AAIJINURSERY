@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.accounting.audit import record_change
+from app.accounting.balances import contact_position, position
 from app.accounting.models import (
     Contact,
     Expense,
@@ -31,18 +32,11 @@ def _get_or_404(db: Session, item_id: int) -> Contact:
 
 
 def _with_summary(db: Session, contact: Contact) -> ContactOut:
-    total_sales = (
-        db.query(func.coalesce(func.sum(Invoice.total_amount), 0))
-        .filter(Invoice.contact_id == contact.id, Invoice.status != "Voided")
-        .scalar()
-        or 0
-    )
-    total_paid = (
-        db.query(func.coalesce(func.sum(PaymentIn.amount), 0))
-        .filter(PaymentIn.contact_id == contact.id)
-        .scalar()
-        or 0
-    )
+    # One definition of "what the customer owes" for the whole app (see balances.py).
+    pos = contact_position(db, contact.id)
+    own = position(db, [contact.id])
+    total_sales = own["invoiced"]
+    total_paid = own["invoiced"] - own["net"]  # money that actually reduced this contact's balance
     total_purchases = (
         db.query(func.coalesce(func.sum(Purchase.total_cost), 0))
         .filter(Purchase.contact_id == contact.id)
@@ -59,7 +53,11 @@ def _with_summary(db: Session, contact: Contact) -> ContactOut:
     out = ContactOut.model_validate(contact)
     out.total_sales = round(total_sales, 2)
     out.total_paid = round(total_paid, 2)
-    out.outstanding = round(total_sales - total_paid, 2)
+    out.outstanding = pos["net"]  # this customer + every Confirmed-linked contact; negative = advance credit
+    out.due = pos["due"]
+    out.advance = pos["advance"]
+    out.own_outstanding = own["net"]
+    out.linked_contact_ids = [i for i in pos["contact_ids"] if i != contact.id]
     out.total_purchases = round(total_purchases, 2)
     out.total_paid_out = round(total_paid_out, 2)
     out.payable = round(total_purchases - total_paid_out, 2)

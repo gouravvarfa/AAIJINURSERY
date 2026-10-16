@@ -214,3 +214,130 @@ def test_inventory_filters_and_totals():
 
 def test_requires_login():
     assert TestClient(app).get(P).status_code in (401, 403)
+
+
+# ---------------------------------------------------------------- audit of the Accounting integration
+def _expenses_for(c, batch_number):
+    return [e for e in c.get(f"{A}/expenses?q=Seed Packets").json() if f"batch {batch_number}" in e["description"]]
+
+
+def _seed_expense_count(c):
+    return len([e for e in c.get(f"{A}/expenses?q=Seed Packets").json()])
+
+
+def test_each_purchase_is_one_expense_and_merge_never_duplicates():
+    c = _admin()
+    plant = _plant(c)
+    first = _make(c, plant, packets=10, unit_price=100, company="Merge Co", variety="V", batch_number="MRG-1")
+    assert len(_expenses_for(c, "MRG-1")) == 1
+    again = _body(plant, packets=5, unit_price=100, company="Merge Co", variety="V", batch_number="MRG-1", expiry_date=first["expiry_date"], merge_into_existing=True)
+    assert c.post(P, json=again).status_code == 201
+    assert c.post(P, json=again).json()["already_saved"] is True  # double click on the merge: no third expense
+    ex = _expenses_for(c, "MRG-1")
+    assert sorted(e["total_amount"] for e in ex) == [500, 1000]  # one per real purchase, nothing doubled
+    assert c.get(f"{P}/{first['id']}").json()["received"] == 15
+
+
+def test_use_adjust_correct_writeoff_never_touch_accounting():
+    c = _admin()
+    plant = _plant(c)
+    b = _make(c, plant, packets=20, unit_price=50, batch_number="NOACC-1")
+    before = _seed_expense_count(c)
+    contacts = len(c.get(f"{A}/contacts").json())
+    c.post(f"{P}/{b['id']}/use", json={"quantity": 2, "request_id": uuid.uuid4().hex})
+    c.post(f"{P}/{b['id']}/adjust", json={"new_remaining": 10, "reason": "count", "request_id": uuid.uuid4().hex})
+    c.post(f"{P}/{b['id']}/correct", json={"storage_location": "Shelf 9", "reason": "moved", "request_id": uuid.uuid4().hex})
+    c.post(f"{P}/{b['id']}/write-off", json={"reason": "discard", "request_id": uuid.uuid4().hex})
+    assert _seed_expense_count(c) == before and len(c.get(f"{A}/contacts").json()) == contacts
+    assert len(_expenses_for(c, "NOACC-1")) == 1 and _expenses_for(c, "NOACC-1")[0]["total_amount"] == 1000
+
+
+def test_unpaid_stays_unpaid_and_paid_has_exactly_one_payment():
+    c = _admin()
+    plant = _plant(c)
+    _make(c, plant, packets=4, unit_price=250, batch_number="UNP-1")
+    e = _expenses_for(c, "UNP-1")[0]
+    assert e["status"] == "Unpaid" and e["amount_paid"] == 0 and e["balance_due"] == 1000
+    assert [p for p in c.get(f"{A}/payments-out").json() if p.get("expense_id") == e["id"]] == []
+    body = _body(plant, packets=4, unit_price=250, batch_number="PAID-1", paid_now=True, paid_method="Bank")
+    c.post(P, json=body)
+    c.post(P, json=body)
+    pe = _expenses_for(c, "PAID-1")[0]
+    pays = [p for p in c.get(f"{A}/payments-out").json() if p.get("expense_id") == pe["id"]]
+    assert len(pays) == 1 and pays[0]["amount"] == 1000 and pays[0]["method"] == "Bank" and pe["status"] == "Paid"
+
+
+def test_supplier_contact_is_reused_not_duplicated():
+    c = _admin()
+    plant = _plant(c)
+    name = f"Reuse Agro {uuid.uuid4().hex[:5]}"
+    _make(c, plant, supplier=name, unit_price=10, batch_number="SUP-1")
+    _make(c, plant, supplier=name.upper(), unit_price=10, batch_number="SUP-2")
+    _make(c, plant, supplier=f"  {name}  ", unit_price=10, batch_number="SUP-3")
+    same = [x for x in c.get(f"{A}/contacts").json() if x["name"].lower() == name.lower()]
+    assert len(same) == 1 and same[0]["contact_type"] == "supplier"
+
+
+def test_failure_while_booking_expense_saves_nothing(monkeypatch):
+    import app.seed_packets as sp
+    c = _admin()
+    plant = _plant(c)
+    body = _body(plant, packets=3, unit_price=10, batch_number="ATOMIC-1")
+    monkeypatch.setattr(sp, "_supplier_contact", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    try:
+        c.post(P, json=body)
+    except Exception:
+        pass
+    monkeypatch.undo()
+    assert c.get(f"{P}?batch=ATOMIC-1").json()["items"] == []  # no half-saved batch
+    assert _expenses_for(c, "ATOMIC-1") == []
+    assert c.post(P, json=body).status_code == 201  # and the same form can be sent again
+
+
+def test_correcting_a_batch_number_cannot_collide_with_another_batch():
+    c = _admin()
+    plant = _plant(c)
+    a = _make(c, plant, company="Col Co", variety="V", batch_number="COL-1")
+    b = _make(c, plant, company="Col Co", variety="V", batch_number="COL-2")
+    r = c.post(f"{P}/{b['id']}/correct", json={"batch_number": "COL-1", "reason": "typo", "request_id": uuid.uuid4().hex})
+    assert r.status_code == 409
+    assert c.get(f"{P}/{b['id']}").json()["batch_number"] == "COL-2" and a["id"] != b["id"]
+
+
+def test_stock_can_never_go_negative_even_if_two_requests_race():
+    c = _admin()
+    plant = _plant(c)
+    b = _make(c, plant, packets=5, batch_number="RACE-1")
+    import app.seed_packets as sp
+    # simulate the second request having read "5 left" before the first one saved
+    real = sp._remaining
+    calls = {"n": 0}
+
+    def stale(db, batch_id):
+        calls["n"] += 1
+        return 5 if calls["n"] == 1 else real(db, batch_id)
+
+    c.post(f"{P}/{b['id']}/use", json={"quantity": 4, "request_id": uuid.uuid4().hex})
+    sp._remaining = stale
+    try:
+        r = c.post(f"{P}/{b['id']}/use", json={"quantity": 4, "request_id": uuid.uuid4().hex})
+    finally:
+        sp._remaining = real
+    assert r.status_code == 400
+    assert c.get(f"{P}/{b['id']}").json()["remaining"] == 1
+
+
+def test_packets_never_change_plant_stock_orders_or_customer_balances():
+    c = _admin()
+    plant = _plant(c, stock=33)
+    b = _make(c, plant, packets=9, unit_price=100, batch_number="ISO-1")
+    c.post(f"{P}/{b['id']}/use", json={"quantity": 3, "request_id": uuid.uuid4().hex})
+    db = SessionLocal()
+    try:
+        assert db.query(Plant.stock_quantity).filter(Plant.id == plant["id"]).scalar() == 33
+        from app.models import InventoryTransaction
+        assert db.query(InventoryTransaction).filter(InventoryTransaction.plant_id == plant["id"]).count() <= 1  # only the plant's own opening entry
+    finally:
+        db.close()
+    rep = c.get(f"{A}/reports/customer-outstanding").json()
+    assert all("Seed Packets" not in r["name"] for r in rep["rows"])

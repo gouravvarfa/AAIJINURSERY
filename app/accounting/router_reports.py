@@ -470,22 +470,23 @@ def payables_aging_report(admin: str = Depends(get_current_admin), db: Session =
 
 @router.get("/customer-outstanding", response_model=CustomerOutstandingOut)
 def customer_outstanding_report(admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
-    contacts = db.query(Contact).filter(Contact.contact_type.in_(["customer", "both"])).all()
+    from app.accounting.balances import group_ids, position
+
+    contacts = db.query(Contact).filter(Contact.contact_type.in_(["customer", "both"])).order_by(Contact.id).all()
     rows = []
+    total_advance = 0.0
+    seen = set()
     for c in contacts:
-        total_sales = money(
-            db.query(func.coalesce(func.sum(Invoice.total_amount), 0))
-            .filter(Invoice.contact_id == c.id, Invoice.status != "Voided")
-            .scalar()
-        )
-        total_paid = money(
-            db.query(func.coalesce(func.sum(PaymentIn.amount), 0)).filter(PaymentIn.contact_id == c.id).scalar()
-        )
-        outstanding = money(total_sales - total_paid)
-        if outstanding > 0:
-            rows.append(ContactOutstandingRow(contact_id=c.id, name=c.name, total=total_sales, paid=total_paid, outstanding=outstanding))
+        if c.id in seen:
+            continue
+        ids = group_ids(db, c.id)  # linked contacts are one customer: counted once, under the first of them
+        seen.update(ids)
+        pos = position(db, ids)
+        total_advance += max(-pos["net"], 0)
+        if pos["net"] > 0:
+            rows.append(ContactOutstandingRow(contact_id=c.id, name=c.name, total=pos["invoiced"], paid=money(pos["invoiced"] - pos["net"]), outstanding=pos["net"]))
     rows.sort(key=lambda r: r.outstanding, reverse=True)
-    return CustomerOutstandingOut(total_outstanding=money(sum(r.outstanding for r in rows)), rows=rows)
+    return CustomerOutstandingOut(total_outstanding=money(sum(r.outstanding for r in rows)), total_advance=money(total_advance), rows=rows)
 
 
 @router.get("/supplier-outstanding", response_model=SupplierOutstandingOut)

@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../../../api";
 import { Loading, Empty } from "../../../components/Loading";
 import ExportButton from "../../accounting/ExportButton";
+import CustomerAccountPanel from "../../accounting/CustomerAccountPanel";
 import {
   invoiceBadgeClass,
   salesOrderBadgeClass,
@@ -145,7 +146,7 @@ export default function PartyProfile() {
         <div className="stat-card"><div className="num">{money(party.total_purchases)}</div><div className="label">Total Purchases</div></div>
         <div className="stat-card"><div className="num">{money(party.total_paid)}</div><div className="label">Total Received</div></div>
         <div className="stat-card"><div className="num">{money(party.total_paid_out)}</div><div className="label">Total Paid Out</div></div>
-        <div className="stat-card"><div className="num">{money(party.outstanding)}</div><div className="label">Receivable</div></div>
+        <div className="stat-card"><div className="num">{money(Math.abs(party.outstanding))}</div><div className="label">{party.outstanding < 0 ? "Advance credit" : "Receivable"}</div></div>
         <div className="stat-card"><div className="num">{money(party.payable)}</div><div className="label">Payable</div></div>
         <div className="stat-card"><div className="num">{money(party.online_sales)}</div><div className="label">Online Sales</div></div>
         <div className="stat-card"><div className="num">{money(party.offline_sales)}</div><div className="label">Offline Sales</div></div>
@@ -159,6 +160,8 @@ export default function PartyProfile() {
           <div className="label">Last Transaction</div>
         </div>
       </div>
+
+      {party.contact_type !== "supplier" && <CustomerAccountPanel contactId={id} />}
 
       <nav className="analytics-jump-nav" style={{ marginBottom: 16 }}>
         {TABS.map((t) => (

@@ -195,15 +195,11 @@ def _sync_payment(db, order, invoice, contact):
         db.flush()
         record_change(db, "accounting_payments_in", payment.id, "create", changed_by="system")
 
-    total_paid = sum(
-        p.amount
-        for p in db.query(PaymentIn).filter(PaymentIn.invoice_id == invoice.id).all()
-    )
+    from app.accounting.balances import recompute_invoice
+
     old_status = invoice.status
-    invoice.amount_paid = total_paid
-    invoice.balance_due = max(invoice.total_amount - total_paid, 0)
+    recompute_invoice(db, invoice)
     if invoice.status not in ("Cancelled", "Voided"):
-        invoice.status = "Paid" if invoice.balance_due <= 0 else "PartiallyPaid"
         if invoice.status != old_status:
             record_change(
                 db,

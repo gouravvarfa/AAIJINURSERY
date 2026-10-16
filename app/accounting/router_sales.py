@@ -1,14 +1,17 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.accounting.audit import record_change
+from app.accounting.balances import DEAD, apply_advance, contact_position, money, recompute_invoice
 from app.accounting.notifications import queue_invoice_created, queue_payment_received, queue_sales_order_created
 from app.accounting.models import (
     Contact,
+    CustomerReceipt,
     Invoice,
     InvoiceItem,
     PaymentIn,
@@ -16,6 +19,7 @@ from app.accounting.models import (
     SalesOrderItem,
 )
 from app.accounting.permissions import SALES_WRITE_ROLES, require_accounting_action
+from app.accounting.router_receipts import resolve_void_payments
 from app.models import Plant, PlantVariant
 from app.accounting.schemas import (
     InvoiceConvertIn,
@@ -32,6 +36,12 @@ from app.models import InventoryTransaction
 from app.stock_orders import queue_stock_team_new_order
 
 router = APIRouter(tags=["accounting-sales"])
+
+
+class VoidInvoiceIn(BaseModel):
+    payment_action: Optional[Literal["advance", "refund"]] = None
+    method: str = "Cash"
+    notes: str = ""
 
 
 def _attach_delivery_status(db: Session, sales_orders) -> None:
@@ -264,6 +274,14 @@ def convert_to_invoice(
     if existing:
         raise HTTPException(status_code=400, detail="This sales order already has an invoice")
 
+    if payload.received_amount < 0 or payload.received_amount > 1_000_000_000:
+        raise HTTPException(status_code=400, detail="Received amount is not valid")
+    if payload.received_method not in ("Cash", "Bank", "UPI", "Card", "Online", "Other"):
+        raise HTTPException(status_code=400, detail="Unknown payment method")
+    # What the customer (and anyone linked to them) owed or had paid in advance BEFORE this bill.
+    # Frozen on the invoice below; it never changes afterwards.
+    previous_balance = contact_position(db, order.contact_id)["net"]
+
     invoice = Invoice(
         sales_order_id=order.id,
         contact_id=order.contact_id,
@@ -315,6 +333,29 @@ def convert_to_invoice(
                     reference=_sale_reference(order.id, "SALE", line),
                     created_by=admin,
                 )
+
+    # Money handled when the bill is made (walk-in customer): use the earlier advance and/or
+    # take payment now. These are real, separate records (allocation / payment / advance).
+    advance_used = 0.0
+    if payload.use_advance:
+        advance_used = apply_advance(db, invoice, invoice.total_amount, admin)
+    received = money(payload.received_amount)
+    if received > 0:
+        need = max(invoice.total_amount - advance_used, 0)
+        applied_part = money(min(received, need))
+        if applied_part > 0:
+            db.add(PaymentIn(invoice_id=invoice.id, contact_id=invoice.contact_id, amount=applied_part, method=payload.received_method, payment_date=datetime.utcnow(),
+                             reference=payload.received_reference, notes="Received when billing", source="offline", recorded_by=admin))
+        if received - applied_part > 0.004:
+            db.add(CustomerReceipt(contact_id=invoice.contact_id, amount=money(received - applied_part), method=payload.received_method, payment_date=datetime.utcnow(),
+                                   reference=f"Extra with {invoice.invoice_number}", notes="Paid more than the bill: kept as advance", kind="overpayment", invoice_id=invoice.id,
+                                   request_id=f"overpay:issue:{invoice.id}", recorded_by=admin))
+        db.flush()
+    recompute_invoice(db, invoice)
+    invoice.previous_balance = previous_balance
+    invoice.received_at_issue = received
+    invoice.advance_applied_at_issue = advance_used
+    invoice.snapshot_at = datetime.utcnow()
 
     old_status = order.status
     order.status = "Invoiced"
@@ -383,6 +424,7 @@ def get_invoice(
 @router.post("/invoices/{item_id}/void", response_model=InvoiceOut)
 def void_invoice(
     item_id: int,
+    payload: Optional[VoidInvoiceIn] = None,
     admin: str = Depends(get_current_admin),
     _role: str = Depends(require_accounting_action("CANCEL", SALES_WRITE_ROLES)),
     db: Session = Depends(get_db),
@@ -404,6 +446,15 @@ def void_invoice(
         )
     old_status = item.status
     already_voided = old_status == "Voided"
+    # If money was already paid on this invoice the admin must say what happens to it. Nothing
+    # is decided silently: "advance" keeps it as the customer's advance, "refund" records that
+    # it was handed back. Both leave a dated record.
+    paid_on_invoice = money(db.query(func.coalesce(func.sum(PaymentIn.amount), 0)).filter(PaymentIn.invoice_id == item.id).scalar())
+    if not already_voided and paid_on_invoice > 0 and not (payload and payload.payment_action):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Rs {paid_on_invoice:,.2f} was already paid on this invoice. Choose what to do with it: keep it as the customer's advance, or record a refund.",
+        )
     item.status = "Voided"
     if not already_voided:
         item.voided_by = admin
@@ -437,6 +488,8 @@ def void_invoice(
                 )
                 line.allocated_quantity = 0
 
+    if not already_voided and paid_on_invoice > 0:
+        resolve_void_payments(db, item, payload.payment_action, admin, payload.method, payload.notes)
     db.commit()
     record_change(
         db,
@@ -485,10 +538,17 @@ def create_payment_in(
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
+    # A payment can never be more than the invoice still needs. Anything extra is kept, as a
+    # separate dated advance for this customer (never a hidden negative balance).
+    recompute_invoice(db, invoice)
+    if invoice.balance_due <= 0:
+        raise HTTPException(status_code=400, detail="This invoice is already fully paid. Record the money as an advance for the customer instead.")
+    applied = money(min(payload.amount, invoice.balance_due))
+    excess = money(payload.amount - applied)
     payment = PaymentIn(
         invoice_id=invoice.id,
         contact_id=invoice.contact_id,
-        amount=payload.amount,
+        amount=applied,
         method=payload.method,
         payment_date=payload.payment_date,
         reference=payload.reference,
@@ -498,20 +558,16 @@ def create_payment_in(
     )
     db.add(payment)
     db.flush()
-
-    total_paid = (
-        db.query(func.coalesce(func.sum(PaymentIn.amount), 0))
-        .filter(PaymentIn.invoice_id == invoice.id)
-        .scalar()
-        or 0
-    )
-    invoice.amount_paid = round(total_paid, 2)
-    invoice.balance_due = round(max(invoice.total_amount - total_paid, 0), 2)
+    if excess > 0.004:
+        db.add(CustomerReceipt(contact_id=invoice.contact_id, amount=excess, method=payload.method if payload.method in ("Cash", "Bank", "UPI", "Card", "Online", "Other") else "Other",
+                               payment_date=payload.payment_date, reference=f"Extra with payment on {invoice.invoice_number}", notes="Paid more than the invoice balance: kept as advance",
+                               kind="overpayment", invoice_id=invoice.id, request_id=f"overpay:pay:{payment.id}", recorded_by=admin))
     old_status = invoice.status
-    invoice.status = "Paid" if invoice.balance_due <= 0 else "PartiallyPaid"
+    recompute_invoice(db, invoice)
 
     db.commit()
     db.refresh(payment)
+    payment.advance_created = excess
     record_change(db, "accounting_payments_in", payment.id, "create", changed_by=admin)
     if invoice.status != old_status:
         record_change(

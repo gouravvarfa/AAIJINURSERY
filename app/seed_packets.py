@@ -379,9 +379,17 @@ def _seen(db: Session, request_id: str) -> Optional[SeedPacketMovement]:
 
 
 def _add_move(db: Session, **kw) -> Optional[SeedPacketMovement]:
+    """Saves one movement. Returns None for a repeated request_id. If, once saved, the batch would hold
+    fewer than 0 packets (two people took the last packets at the same moment), nothing is kept and a
+    400 is raised: the count can never go negative."""
     m = SeedPacketMovement(**kw)
     db.add(m)
     try:
+        db.flush()
+        left = _remaining(db, kw["batch_id"])
+        if left < 0:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="Someone else just used these packets. Refresh and check how many are left.")
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -471,6 +479,12 @@ def correct_batch(batch_id: int, p: CorrectIn, admin: str = Depends(get_current_
         b.storage_location = p.storage_location.strip()
     if not changes:
         raise HTTPException(status_code=400, detail="Nothing was changed")
+    if p.batch_number is not None:
+        clash = [o for o in db.query(SeedPacketBatch).filter(SeedPacketBatch.id != b.id, SeedPacketBatch.plant_id == b.plant_id, func.lower(SeedPacketBatch.batch_number) == b.batch_number.lower())
+                 if (o.company or "").strip().lower() == (b.company or "").strip().lower() and (o.variety or "").strip().lower() == (b.variety or "").strip().lower()]
+        if clash:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=f"Batch {b.batch_number} of this packet already exists ({clash[0].record_no}). Two batches cannot share a batch number.")
     if b.manufacturing_date and b.manufacturing_date > b.expiry_date:
         db.rollback()
         raise HTTPException(status_code=400, detail="Manufacturing date is after the expiry date")

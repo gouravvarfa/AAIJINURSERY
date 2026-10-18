@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { Loading, Empty } from "../components/Loading";
 import VariantsField from "./VariantsField";
 import PurchaseItemsField from "./PurchaseItemsField";
+import SupplierField from "./SupplierField";
 import SalesOrderItemsField from "./accounting/SalesOrderItemsField";
 import SearchBox from "./accounting/SearchBox";
 import ExportButton from "./accounting/ExportButton";
@@ -33,6 +34,7 @@ export default function CrudPage({
   exportUrl,
   searchable = false,
   searchPlaceholder = "Search...",
+  idempotent = false,
 }) {
   const [items, setItems] = useState(null);
   const [mode, setMode] = useState("list"); // list | form
@@ -41,6 +43,8 @@ export default function CrudPage({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
+  // One id per opened "Add" form: sending the same form twice (double click, retry) is recognised by the server
+  const requestId = useRef(`${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`);
 
   function load() {
     setItems(null);
@@ -51,6 +55,7 @@ export default function CrudPage({
   useEffect(load, [resource, q]);
 
   function startCreate() {
+    requestId.current = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
     setForm(blankForm(fields));
     setEditingId(null);
     setError("");
@@ -85,7 +90,7 @@ export default function CrudPage({
     // Optional[datetime] fields on the backend don't reject it as invalid.
     const payload = { ...form };
     fields.forEach((f) => {
-      if (f.type === "date" && payload[f.name] === "") {
+      if ((f.type === "date" || f.type === "supplier_select") && payload[f.name] === "") {
         payload[f.name] = null;
       }
     });
@@ -93,7 +98,7 @@ export default function CrudPage({
       if (editingId) {
         await api.put(`${resource}/${editingId}`, payload);
       } else {
-        await api.post(resource, payload);
+        await api.post(resource, idempotent ? { ...payload, request_id: requestId.current } : payload);
       }
       setMode("list");
       load();
@@ -147,6 +152,8 @@ export default function CrudPage({
                     onChange={(next) => updateField(field.name, next)}
                     pricePerUnit={form.price}
                   />
+                ) : field.type === "supplier_select" ? (
+                  <SupplierField form={form} updateField={updateField} />
                 ) : field.type === "purchase_items" ? (
                   <PurchaseItemsField
                     value={form[field.name]}

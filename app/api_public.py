@@ -173,7 +173,7 @@ def get_plant(slug: str, db: Session = Depends(get_db)):
     plant = (
         db.query(Plant)
         .options(joinedload(Plant.category), selectinload(Plant.variants), selectinload(Plant.reviews))
-        .filter(Plant.slug == slug)
+        .filter(Plant.slug == slug, Plant.is_active.is_(True))
         .first()
     )
     if not plant:
@@ -183,7 +183,7 @@ def get_plant(slug: str, db: Session = Depends(get_db)):
 
 @router.get("/plants/{slug}/reviews", response_model=PlantReviewsOut)
 def get_plant_reviews(slug: str, db: Session = Depends(get_db)):
-    plant = db.query(Plant).filter(Plant.slug == slug).first()
+    plant = db.query(Plant).filter(Plant.slug == slug, Plant.is_active.is_(True)).first()
     if not plant:
         raise HTTPException(status_code=404, detail="Plant not found")
 
@@ -209,12 +209,12 @@ def get_plant_reviews(slug: str, db: Session = Depends(get_db)):
 
 @router.get("/plants/{slug}/related", response_model=list[PlantOut])
 def get_related_plants(slug: str, db: Session = Depends(get_db)):
-    plant = db.query(Plant).filter(Plant.slug == slug).first()
+    plant = db.query(Plant).filter(Plant.slug == slug, Plant.is_active.is_(True)).first()
     if not plant:
         raise HTTPException(status_code=404, detail="Plant not found")
     return (
         db.query(Plant)
-        .filter(Plant.category_id == plant.category_id, Plant.id != plant.id)
+        .filter(Plant.category_id == plant.category_id, Plant.id != plant.id, Plant.is_active.is_(True))
         .limit(4)
         .all()
     )
@@ -227,7 +227,7 @@ def get_plant_recommendations(slug: str, db: Session = Depends(get_db)):
     isn't enough co-purchase data yet (e.g. a brand-new plant). Deliberately
     separate from the existing /related endpoint (same-category only) so
     that endpoint's existing behavior is untouched."""
-    plant = db.query(Plant).filter(Plant.slug == slug).first()
+    plant = db.query(Plant).filter(Plant.slug == slug, Plant.is_active.is_(True)).first()
     if not plant:
         raise HTTPException(status_code=404, detail="Plant not found")
 

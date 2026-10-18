@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class CategoryOut(BaseModel):
@@ -797,9 +797,16 @@ class PurchaseItemIn(BaseModel):
 class PurchaseIn(BaseModel):
     purchase_date: datetime
     supplier: str = ""
+    supplier_contact_id: Optional[int] = None  # an Accounting supplier: the purchase then lands in that supplier's account
     invoice_number: str = ""
     notes: str = ""
+    request_id: Optional[str] = None  # makes a double click / retry safe
     items: List[PurchaseItemIn]
+
+    @field_validator("supplier_contact_id", mode="before")
+    @classmethod
+    def _blank_supplier_is_none(cls, v):
+        return None if v in ("", None) else v
 
 
 class PurchaseItemOut(BaseModel):
@@ -822,6 +829,8 @@ class PurchaseOut(BaseModel):
     total_cost: float
     created_by: str
     created_at: datetime
+    contact_id: Optional[int] = None
+    status: Optional[str] = None
     items: List[PurchaseItemOut] = []
 
 

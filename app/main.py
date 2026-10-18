@@ -286,6 +286,11 @@ with engine.connect() as conn:
     if "purchase_order_id" not in purchase_columns:
         conn.execute(text("ALTER TABLE purchases ADD COLUMN purchase_order_id INTEGER"))
         conn.commit()
+    if "request_id" not in purchase_columns:
+        conn.execute(text("ALTER TABLE purchases ADD COLUMN request_id VARCHAR(60)"))
+        conn.commit()
+    conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_purchases_request_id ON purchases (request_id)"))
+    conn.commit()
 
     # Employee & Labour module: extends the existing accounting_employees
     # table (Phase 2's simple directory) with real HR/payroll fields. The

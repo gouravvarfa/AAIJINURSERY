@@ -7,6 +7,7 @@ export default function Purchases() {
       resource="/admin/purchases"
       idKey="id"
       allowEdit={false}
+      idempotent
       deleteConfirmMessage={(p) =>
         `Delete this purchase from ${p.supplier || "this supplier"} (₹${p.total_cost.toLocaleString()})? ` +
         `The stock it already added will NOT be reversed automatically -- adjust it manually on the Plants page if needed.`
@@ -27,7 +28,7 @@ export default function Purchases() {
       ]}
       fields={[
         { name: "purchase_date", label: "Purchase Date", type: "date", required: true },
-        { name: "supplier", label: "Supplier (optional)", type: "text" },
+        { name: "supplier_contact_id", label: "Supplier (optional)", type: "supplier_select" },
         { name: "invoice_number", label: "Invoice Number (optional)", type: "text" },
         { name: "items", label: "Plants Purchased", type: "purchase_items", required: true },
         { name: "notes", label: "Notes (optional)", type: "textarea" },

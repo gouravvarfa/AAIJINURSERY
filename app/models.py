@@ -767,6 +767,8 @@ class Purchase(Base):
     # accounting Purchase Order -- plain Integer (no FK object), same
     # precedent as contact_id above.
     purchase_order_id = Column(Integer, nullable=True, index=True)
+    # Sent by the Add Purchase form so a double click / retry returns the same purchase instead of a second one (NULL on older rows)
+    request_id = Column(String(60), nullable=True, unique=True, index=True)
 
     items = relationship("PurchaseItem", back_populates="purchase", cascade="all, delete-orphan")
 

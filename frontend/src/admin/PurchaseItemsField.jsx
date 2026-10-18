@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import NewPlantModal from "./NewPlantModal";
 
 // Repeatable {plant, quantity, unit_cost} rows for logging a procurement
 // Purchase -- modeled directly on VariantsField.jsx's add/remove/update-row
@@ -8,6 +9,7 @@ import { api } from "../api";
 export default function PurchaseItemsField({ value, onChange }) {
   const rows = value || [];
   const [plants, setPlants] = useState([]);
+  const [newPlantFor, setNewPlantFor] = useState(null); // index of the row the new plant will be chosen in
 
   useEffect(() => {
     api.get("/admin/plants").then(setPlants);
@@ -23,6 +25,17 @@ export default function PurchaseItemsField({ value, onChange }) {
 
   function addRow() {
     onChange([...rows, { plant_id: "", quantity: 0, unit_cost: 0 }]);
+  }
+
+  // The new plant is saved already (inactive, no stock): add it to the list and choose it in that row. Nothing else in the purchase form changes.
+  function plantCreated(plant) {
+    setPlants((list) => [...list, plant].sort((a, b) => a.name.localeCompare(b.name)));
+    if (newPlantFor !== null && newPlantFor < rows.length) {
+      onChange(rows.map((row, i) => (i === newPlantFor ? { ...row, plant_id: plant.id } : row)));
+    } else {
+      onChange([...rows, { plant_id: plant.id, quantity: 0, unit_cost: 0 }]);
+    }
+    setNewPlantFor(null);
   }
 
   return (
@@ -42,10 +55,13 @@ export default function PurchaseItemsField({ value, onChange }) {
                   <option value="">Select a plant...</option>
                   {plants.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} (current stock: {p.stock_quantity})
+                      {p.name} (current stock: {p.stock_quantity}){p.is_active ? "" : " - inactive"}
                     </option>
                   ))}
                 </select>
+                <button type="button" className="btn btn-sm btn-outline dark" style={{ marginTop: 6 }} onClick={() => setNewPlantFor(i)}>
+                  + New plant
+                </button>
               </label>
               <label>
                 Quantity
@@ -80,7 +96,11 @@ export default function PurchaseItemsField({ value, onChange }) {
       })}
       <button type="button" className="btn btn-sm btn-outline dark" onClick={addRow}>
         + Add Plant
+      </button>{" "}
+      <button type="button" className="btn btn-sm btn-primary" onClick={() => setNewPlantFor(rows.length)}>
+        + Add New Plant
       </button>
+      {newPlantFor !== null && <NewPlantModal existingPlants={plants} onCreated={plantCreated} onClose={() => setNewPlantFor(null)} />}
     </div>
   );
 }

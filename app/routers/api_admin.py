@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from slugify import slugify
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.accounting.sync import sync_order_to_accounting
@@ -629,52 +630,96 @@ def list_purchases(admin: str = Depends(get_current_admin), db: Session = Depend
 def create_purchase(
     payload: PurchaseIn, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)
 ):
+    # The same form sent twice (double click, retry) must give back the same purchase, never a second one with double stock.
+    request_id = (payload.request_id or "").strip() or None
+    if request_id:
+        done = db.query(Purchase).filter(Purchase.request_id == request_id).first()
+        if done:
+            return done
+
     if not payload.items:
         raise HTTPException(status_code=400, detail="At least one purchase item is required")
+    for item in payload.items:
+        if item.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+        if item.unit_cost < 0:
+            raise HTTPException(status_code=400, detail="Unit cost cannot be negative")
     plant_ids = {i.plant_id for i in payload.items}
     plants = {p.id: p for p in db.query(Plant).filter(Plant.id.in_(plant_ids)).all()}
     missing = plant_ids - plants.keys()
     if missing:
         raise HTTPException(status_code=400, detail=f"Unknown plant id(s): {sorted(missing)}")
 
+    # Same plant on several lines: lines with the SAME unit cost are added together; lines with a DIFFERENT
+    # unit cost stay separate so the cost information is never lost. Every line adds its stock exactly once.
+    lines: dict = {}
+    for item in payload.items:
+        key = (item.plant_id, round(float(item.unit_cost), 4))
+        if key in lines:
+            lines[key] += item.quantity
+        else:
+            lines[key] = item.quantity
+
+    supplier_text = payload.supplier.strip()
+    contact = None
+    if payload.supplier_contact_id is not None:
+        from app.accounting.models import Contact
+
+        contact = db.query(Contact).filter(Contact.id == payload.supplier_contact_id).first()
+        if not contact or contact.contact_type not in ("supplier", "both"):
+            raise HTTPException(status_code=400, detail="Choose a supplier from the supplier list")
+        supplier_text = contact.name
+
     purchase = Purchase(
         purchase_date=payload.purchase_date,
-        supplier=payload.supplier.strip(),
+        supplier=supplier_text,
         invoice_number=payload.invoice_number.strip(),
         notes=payload.notes.strip(),
         created_by=admin,
+        request_id=request_id,
     )
+    if contact is not None:
+        # A purchase from a listed supplier is a bill we owe: Unpaid until a payment is recorded in Accounting.
+        purchase.contact_id = contact.id
+        purchase.status = "Unpaid"
     db.add(purchase)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        done = db.query(Purchase).filter(Purchase.request_id == request_id).first() if request_id else None
+        if done:
+            return done
+        raise
 
     total = 0.0
-    for item in payload.items:
-        if item.quantity <= 0:
-            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
-        if item.unit_cost < 0:
-            raise HTTPException(status_code=400, detail="Unit cost cannot be negative")
-        plant = plants[item.plant_id]
-        line_total = round(item.quantity * item.unit_cost, 2)
+    seen_per_plant: dict = {}
+    for (plant_id, unit_cost), quantity in lines.items():
+        plant = plants[plant_id]
+        line_total = round(quantity * unit_cost, 2)
         db.add(
             PurchaseItem(
                 purchase_id=purchase.id,
                 plant_id=plant.id,
                 plant_name=plant.name,
-                quantity=item.quantity,
-                unit_cost=item.unit_cost,
+                quantity=quantity,
+                unit_cost=unit_cost,
                 total_cost=line_total,
             )
         )
-        # procurement receipt increments live stock -- reference is per
-        # purchase+plant since one Purchase can list several plants
+        # procurement receipt increments live stock. The reference is per purchase+plant (the first line of a
+        # plant keeps the original format); a second line of the same plant at another cost gets its own suffix
+        # so its stock is added too instead of being skipped as "already done".
+        nth = seen_per_plant.get(plant.id, 0) + 1
+        seen_per_plant[plant.id] = nth
         adjust_stock(
             db,
             plant_id=plant.id,
-            quantity_delta=item.quantity,
+            quantity_delta=quantity,
             transaction_type="PURCHASE_RECEIVED",
             source_type="PURCHASE",
             source_id=purchase.id,
-            reference=f"PURCHASE:{purchase.id}:PURCHASE_RECEIVED:{plant.id}",
+            reference=f"PURCHASE:{purchase.id}:PURCHASE_RECEIVED:{plant.id}" + ("" if nth == 1 else f":{nth}"),
             created_by=admin,
         )
         total += line_total
@@ -683,7 +728,7 @@ def create_purchase(
     db.commit()
     db.refresh(purchase)
     log_activity(
-        db, admin, "purchase_created", f"Purchase #{purchase.id}: {payload.supplier or 'Unknown supplier'}"
+        db, admin, "purchase_created", f"Purchase #{purchase.id}: {supplier_text or 'Unknown supplier'}"
     )
     return purchase
 

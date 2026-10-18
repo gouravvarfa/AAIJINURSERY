@@ -144,3 +144,38 @@ def test_cannot_take_back_extra_plants_already_used():
     log = admin.get(f"{E}/{e['id']}").json()["updates"][0]
     assert admin.delete(f"{E}/{e['id']}/updates/{log['id']}").status_code == 400
     assert _ready(plant["id"]) == 5
+
+
+def _row(admin, plant, variant_id=None):
+    return [r for r in admin.get("/api/admin/inventory/stock-demand").json()["items"] if r["plant_id"] == plant["id"] and (r["variant_id"] or None) == variant_id][0]
+
+
+def test_good_plants_for_a_customer_show_in_stock_as_allocated_not_for_sale():
+    admin = _admin()
+    plant = _plant(admin, stock=50)
+    e = _create(admin, plant, 1000).json()
+    assert _row(admin, plant)["customer_held"] == 0
+    admin.post(f"{E}/{e['id']}/update", json={"prepared_plants": 600, "extra_plants": 40, "rejected_plants": 10, "request_id": _rid()})
+    r = _row(admin, plant)
+    assert r["customer_held"] == 600 and r["available_stock"] == 50 + 40  # extra is for sale, the customer's plants are not
+    assert r["physical_stock"] == 50 + 40 + 600  # but they are in the nursery, so the stock picture counts them
+    # a correction to the update moves the held number with it
+    log = admin.get(f"{E}/{e['id']}").json()["updates"][0]
+    admin.put(f"{E}/{e['id']}/updates/{log['id']}", json={"prepared_plants": 650, "extra_plants": 40, "rejected_plants": 10})
+    assert _row(admin, plant)["customer_held"] == 650
+    # handed over (closed): they leave the stock picture, nothing is added to Ready now
+    admin.post(f"{E}/{e['id']}/update", json={"finish": True, "request_id": _rid()})
+    r = _row(admin, plant)
+    assert r["customer_held"] == 0 and r["available_stock"] == 90 and r["physical_stock"] == 90
+
+
+def test_tray_plants_held_in_whole_trays_and_two_customers_add_up():
+    admin = _admin()
+    tray = _plant(admin, tray=125)
+    vid = tray["variants"][0]["id"]
+    a = _create(admin, tray, 2000, variant_id=vid).json()
+    b = _create(admin, tray, 1000, variant_id=vid).json()
+    admin.post(f"{E}/{a['id']}/update", json={"prepared_plants": 1000, "request_id": _rid()})  # 8 trays
+    admin.post(f"{E}/{b['id']}/update", json={"prepared_plants": 300, "request_id": _rid()})  # 2 trays (+50 loose)
+    r = _row(admin, tray, vid)
+    assert r["customer_held"] == 10 and r["unit"] == "trays" and r["available_stock"] == 0

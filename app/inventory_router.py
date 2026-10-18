@@ -94,18 +94,20 @@ def demand_by_target(db: Session, plant_id: Optional[int] = None) -> dict:
     return out
 
 
-def _row(plant: Plant, variant: Optional[PlantVariant], demand: dict, in_production: Optional[dict] = None) -> dict:
+def _row(plant: Plant, variant: Optional[PlantVariant], demand: dict, in_production: Optional[dict] = None, held: Optional[dict] = None) -> dict:
     d = demand.get((plant.id, variant.id if variant else None), {"reserved": 0, "pending": 0, "prepare": 0, "orders": 0})
     available = (variant.stock_quantity if variant else plant.stock_quantity) or 0
     pending = d["pending"]
     making = (in_production or {}).get((plant.id, variant.id if variant else None), 0)
+    customer_held = (held or {}).get((plant.id, variant.id if variant else None), 0)  # grown from customers' seeds, waiting for them (not for sale)
     return {
         "plant_id": plant.id,
         "variant_id": variant.id if variant else None,
         "name": plant.name + (f" - tray of {variant.tray_size}" if variant else ""),
         "unit": "trays" if variant else "plants",
-        "physical_stock": available + d["reserved"],
+        "physical_stock": available + d["reserved"] + customer_held,
         "reserved_stock": d["reserved"],
+        "customer_held": customer_held,
         "available_stock": available,
         "outstanding_demand": pending,
         "undecided": pending - d["prepare"],
@@ -122,22 +124,27 @@ def stock_position(db: Session, plant_id: int, variant_id: Optional[int]) -> dic
     if not plant:
         return {}
     variant = db.query(PlantVariant).filter(PlantVariant.id == variant_id).first() if variant_id else None
-    return _row(plant, variant, demand_by_target(db, plant_id))
+    from app.customer_held import held_by_target
+
+    return _row(plant, variant, demand_by_target(db, plant_id), held=held_by_target(db))
 
 
 @router.get("/stock-demand", dependencies=[Depends(require_permission("products", "VIEW"))])
 def stock_demand(only_shortage: bool = False, db: Session = Depends(get_db)):
     from app.production_router import planned_by_target
 
+    from app.customer_held import held_by_target
+
     demand = demand_by_target(db)
     making = planned_by_target(db)
+    held = held_by_target(db)
     rows = []
     for plant in db.query(Plant).order_by(Plant.name).all():
         variants = db.query(PlantVariant).filter(PlantVariant.plant_id == plant.id).all()
         if variants:
-            rows.extend(_row(plant, v, demand, making) for v in variants)
+            rows.extend(_row(plant, v, demand, making, held) for v in variants)
         else:
-            rows.append(_row(plant, None, demand, making))
+            rows.append(_row(plant, None, demand, making, held))
     if only_shortage:
         rows = [r for r in rows if r["shortage"] > 0 or r["to_produce"] > 0]
     totals = {
@@ -151,7 +158,7 @@ def stock_demand(only_shortage: bool = False, db: Session = Depends(get_db)):
     return {
         "items": rows,
         "totals": totals,
-        "note": "Physical = available + reserved. Demand counts website orders and offline Sales Orders once; delivered and cancelled orders are not counted.",
+        "note": "Physical = available + reserved + plants held for customers (grown from their seeds). Demand counts website orders and offline Sales Orders once; delivered and cancelled orders are not counted.",
     }
 
 

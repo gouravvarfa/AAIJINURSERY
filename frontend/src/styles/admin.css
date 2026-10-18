@@ -2324,3 +2324,5 @@ table.admin-table .row-actions {
 
 .sm-held { display: grid; gap: 1px; margin-top: 2px; }
 .sm-held-ready { color: #1c7a43 !important; font-weight: 600; }
+
+.sm-alloc-sub { display: block; font-size: 0.7rem; color: #1c7a43; font-weight: 600; white-space: normal; max-width: 120px; margin-left: auto; }

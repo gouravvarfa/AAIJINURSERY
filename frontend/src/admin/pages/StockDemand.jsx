@@ -205,18 +205,17 @@ export default function StockDemand() {
                             {p?.image_url ? <img src={p.image_url} alt="" loading="lazy" /> : <span className="sm-thumb-empty"><Icon name="ready" /></span>}
                             <div><strong>{r.name}</strong>{(() => {
                               const h = held[`${r.plant_id}-${r.variant_id || 0}`];
-                              if (!h || (h.ready <= 0 && h.left <= 0)) return null;
+                              if (!h || h.left <= 0) return null;
                               return (
                                 <span className="sm-held">
-                                  {h.ready > 0 && <small className="sm-held-ready">{num(h.ready)} plants{h.tray ? ` (${num(Math.floor(h.ready / h.tray))} trays)` : ""} ready for customers: not counted in Ready now</small>}
-                                  {h.left > 0 && <small>{num(h.left)} customer seeds still growing</small>}
+                                                                    {h.left > 0 && <small>{num(h.left)} customer seeds still growing</small>}
                                 </span>
                               );
                             })()}{a.tone !== "green" && <span className={`sm-advice stock-advice-${a.tone}`}>{a.text}</span>}</div>
                           </div>
                         </td>
-                        <td className="num"><strong>{num(r.available_stock)}</strong> <small>{r.unit}</small>{r.reserved_stock > 0 && <small className="sm-alloc-note">{num(r.reserved_stock)} allocated</small>}</td>
-                        <td className="num sm-col-alloc">{num(r.reserved_stock)}</td>
+                        <td className="num"><strong>{num(r.available_stock)}</strong> <small>{r.unit}</small>{r.reserved_stock + (r.customer_held || 0) > 0 && <small className="sm-alloc-note">{num(r.reserved_stock + (r.customer_held || 0))} allocated{r.customer_held > 0 ? ` (${num(r.customer_held)} for customers)` : ""}</small>}</td>
+                        <td className="num sm-col-alloc">{num(r.reserved_stock + (r.customer_held || 0))}{r.customer_held > 0 && <small className="sm-alloc-sub">{num(r.customer_held)} {r.unit} grown for customers</small>}</td>
                         <td className="num">{num(r.outstanding_demand)}</td>
                         <td className="num">{r.to_produce > 0 ? <span className="dl-pill dl-red"><span className="dl-label">{num(r.to_produce)}</span></span> : "-"}</td>
                         <td><span className={`sm-badge sm-badge-${s}`}>{STATUS_TEXT[s]}</span></td>

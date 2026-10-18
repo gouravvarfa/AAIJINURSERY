@@ -84,7 +84,7 @@ export default function AddPlants() {
         <div className="admin-page-head"><h1>Add plants I made</h1></div>
         <div className="admin-form-card" style={{ maxWidth: 640 }}>
           <h2 style={{ marginTop: 0, color: "#1f7a45" }}>✓ Done</h2>
-          <p>{r.already_saved ? "Already saved (nothing was added twice)." : <>Saved for <strong>{r.customer_name}</strong> ({r.entry_number}): <strong>{num(r.prepared_plants)}</strong> ready for the customer, <strong>{num(r.extra_plants)}</strong> extra, <strong>{num(r.remaining)}</strong> seeds still growing{r.status === "Completed" ? " (entry completed)" : ""}.</>}</p>
+          <p>{r.already_saved ? "Already saved (nothing was added twice)." : <>Saved for <strong>{r.customer_name}</strong> ({r.entry_number}): <strong>{num(r.prepared_plants)}</strong> ready for the customer (in Stock as Allocated, not for sale), <strong>{num(r.extra_plants)}</strong> extra (in Ready now), <strong>{num(r.remaining)}</strong> seeds still growing{r.status === "Completed" ? " (entry completed)" : ""}.</>}</p>
           {r.extra_units_added > 0 && <p>Extra plants are in Ready now ({num(r.extra_units_added)} {r.unit} added so far).</p>}
           <button type="button" className="btn btn-primary" onClick={again}>Add more plants</button>{" "}
           <Link className="btn btn-outline dark" to="/admin/stock-demand">Back to Stock</Link>
@@ -140,11 +140,12 @@ export default function AddPlants() {
             <label>
               Whose plants are these?
               <select className="form-control" value={seedId} onChange={(e) => setSeedId(e.target.value)}>
-                <option value="">Nursery's own plants (go to Ready now)</option>
+                <option value="">Nursery's own plants (go to Ready now, for sale)</option>
                 {mine.map((i) => (<option key={i.id} value={i.id}>{i.customer_name}'s seeds: {i.entry_number}, {num(i.remaining)} seeds left</option>))}
               </select>
             </label>
           )}
+          {entry && <p className="stock-hint" style={{ margin: 0 }}>Good plants for {entry.customer_name} are counted in your Stock (shown as Allocated, kept for this customer, not for sale). Extra plants go to Ready now.</p>}
           <label>
             {entry ? `How many plants are ready for ${entry.customer_name}?` : "How many GOOD plants did you get?"}
             <input className="form-control" required={!entry} inputMode="numeric" value={form.good} onChange={numSet("good")} />

@@ -58,7 +58,7 @@ export default function SeedHistory({ plants, version, onChanged }) {
     if (window.confirm(`Delete ${entry.entry_number}? This cannot be undone.`)) run(() => api.del(`${base}/${entry.id}`), `${entry.entry_number} deleted.`);
   };
   const closeEntry = (entry) => {
-    if (window.confirm(`Close ${entry.entry_number}? The ${num(entry.remaining)} seeds that are left will be counted as not grown.`)) run(() => api.post(`${base}/${entry.id}/update`, { finish: true, request_id: `${Date.now()}${Math.random().toString(36).slice(2, 10)}` }), `${entry.entry_number} closed.`);
+    if (window.confirm(`Close ${entry.entry_number}? Use this when the plants were handed over to the customer. They then leave the stock count, and the ${num(entry.remaining)} seeds still left are counted as not grown.`)) run(() => api.post(`${base}/${entry.id}/update`, { finish: true, request_id: `${Date.now()}${Math.random().toString(36).slice(2, 10)}` }), `${entry.entry_number} closed.`);
   };
   const openEntryEdit = (entry) => setEdit({ kind: "entry", entry, seeds: String(entry.seeds_given), date: entry.entry_date || "", reference: entry.reference, notes: entry.notes, plant_id: String(entry.plant_id), variant_id: entry.variant_id ? String(entry.variant_id) : "" });
   const openLineEdit = (entry, line) => setEdit({ kind: "line", entry, line, good: String(line.prepared), extra: String(line.extra), bad: String(line.rejected), notes: line.notes });
@@ -170,7 +170,7 @@ export default function SeedHistory({ plants, version, onChanged }) {
                     <div className="seed-ent-actions">
                       {e.status !== "Completed" && <Link className="btn btn-sm btn-primary" to={`/admin/stock/add?seed=${e.id}`}>Add plants</Link>}
                       <button type="button" className="btn btn-sm btn-outline dark" onClick={() => openEntryEdit(e)}>Edit entry</button>
-                      {e.status !== "Completed" && <button type="button" className="btn btn-sm btn-outline dark" disabled={busy} onClick={() => closeEntry(e)}>Close</button>}
+                      {e.status !== "Completed" && <button type="button" className="btn btn-sm btn-outline dark" disabled={busy} onClick={() => closeEntry(e)}>Handed over / Close</button>}
                       {e.log.length === 0 && <button type="button" className="btn btn-sm btn-outline dark" disabled={busy} onClick={() => removeEntry(e)}>Delete</button>}
                     </div>
                   </div>

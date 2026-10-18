@@ -7,7 +7,7 @@ import SeedHistory from "./SeedHistory";
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 const BADGE = { Pending: "badge-gold", "In Progress": "badge-accent", Completed: "badge-muted" };
-const EMPTY = { customer_id: "", new_name: "", new_phone: "", plant_id: "", variant_id: "", seeds: "", date: today(), reference: "", notes: "" };
+const EMPTY = { customer_id: "", new_name: "", new_phone: "", plant_id: "", variant_id: "", seeds: "", wanted: "", date: today(), reference: "", notes: "" };
 
 // Seeds a walk-in customer hands over. Lives on the Stock page (no separate page).
 // The plants that come out are recorded on the "Add Plants" page by choosing the customer there.
@@ -43,7 +43,7 @@ export default function SeedEntries({ plants, onChanged, startOpen = false }) {
     setError("");
     try {
       const body = {
-        plant_id: Number(form.plant_id), variant_id: form.variant_id ? Number(form.variant_id) : null, seeds_given: Number(form.seeds),
+        plant_id: Number(form.plant_id), variant_id: form.variant_id ? Number(form.variant_id) : null, seeds_given: Number(form.seeds), wanted_plants: form.wanted ? Number(form.wanted) : null,
         entry_date: form.date || null, reference: form.reference, notes: form.notes, request_id: formId.current,
       };
       if (addNew) body.new_customer = { name: form.new_name, phone: form.new_phone };
@@ -110,6 +110,7 @@ export default function SeedEntries({ plants, onChanged, startOpen = false }) {
               </label>
             )}
             <label>Seed quantity<input className="form-control" required inputMode="numeric" value={form.seeds} onChange={(e) => setForm({ ...form, seeds: sanitizeQuantityText(e.target.value, 100000000) })} /></label>
+            <label>Plants the customer wants (optional)<input className="form-control" inputMode="numeric" value={form.wanted} onChange={(e) => setForm({ ...form, wanted: sanitizeQuantityText(e.target.value, 100000000) })} placeholder="e.g. 500" /></label>
             <label>Entry date<input className="form-control" type="date" required value={form.date} onChange={set("date")} /></label>
             <label>Sales order / reference (optional)<input className="form-control" maxLength={80} value={form.reference} onChange={set("reference")} /></label>
             <label>Notes (optional)<input className="form-control" maxLength={1000} value={form.notes} onChange={set("notes")} /></label>

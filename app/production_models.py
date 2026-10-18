@@ -117,6 +117,11 @@ class SeedEntry(Base):
     variant_id = Column(Integer, nullable=True)
     tray_size = Column(Integer, nullable=True)
     seeds_given = Column(Integer, nullable=False, default=0)
+    # How many plants the customer wants (optional). Good plants up to this number are kept for the customer,
+    # anything more is extra and goes to Ready now.
+    wanted_plants = Column(Integer, nullable=True)
+    # Set when the plants were given to the customer. Until then they are held in the nursery (shown in Stock as Allocated).
+    handed_over_at = Column(DateTime, nullable=True)
     prepared_plants = Column(Integer, nullable=False, default=0)  # healthy plants made for the customer (running total)
     extra_plants = Column(Integer, nullable=False, default=0)  # extra usable plants -> ready stock (running total)
     extra_units_added = Column(Integer, nullable=False, default=0)  # what has already gone into ready stock (trays or plants)

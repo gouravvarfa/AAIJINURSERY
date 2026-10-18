@@ -2326,3 +2326,5 @@ table.admin-table .row-actions {
 .sm-held-ready { color: #1c7a43 !important; font-weight: 600; }
 
 .sm-alloc-sub { display: block; font-size: 0.7rem; color: #1c7a43; font-weight: 600; white-space: normal; max-width: 120px; margin-left: auto; }
+
+.seed-split { margin: 0; padding: 8px 10px; background: #f1f8f4; border: 1px solid #cfe5d6; border-radius: 10px; font-size: 0.86rem; }

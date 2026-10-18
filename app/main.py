@@ -286,6 +286,16 @@ with engine.connect() as conn:
     if "purchase_order_id" not in purchase_columns:
         conn.execute(text("ALTER TABLE purchases ADD COLUMN purchase_order_id INTEGER"))
         conn.commit()
+    seed_entry_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(seed_entries)"))}
+    if seed_entry_columns:
+        if "wanted_plants" not in seed_entry_columns:
+            conn.execute(text("ALTER TABLE seed_entries ADD COLUMN wanted_plants INTEGER"))
+            conn.commit()
+        if "handed_over_at" not in seed_entry_columns:
+            conn.execute(text("ALTER TABLE seed_entries ADD COLUMN handed_over_at DATETIME"))
+            # entries that were already completed before this existed were treated as handed over: keep it that way
+            conn.execute(text("UPDATE seed_entries SET handed_over_at = COALESCE(completed_at, updated_at, created_at) WHERE status = 'Completed'"))
+            conn.commit()
     if "request_id" not in purchase_columns:
         conn.execute(text("ALTER TABLE purchases ADD COLUMN request_id VARCHAR(60)"))
         conn.commit()

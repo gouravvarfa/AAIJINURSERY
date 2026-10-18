@@ -179,3 +179,65 @@ def test_tray_plants_held_in_whole_trays_and_two_customers_add_up():
     admin.post(f"{E}/{b['id']}/update", json={"prepared_plants": 300, "request_id": _rid()})  # 2 trays (+50 loose)
     r = _row(admin, tray, vid)
     assert r["customer_held"] == 10 and r["unit"] == "trays" and r["available_stock"] == 0
+
+
+def test_customer_wants_500_gave_600_seeds_650_good_come_out():
+    """The shop's real case: only 'how many good' is written; 500 stay for the customer, 150 go to Ready now."""
+    admin = _admin()
+    plant = _plant(admin, stock=20)
+    e = _create(admin, plant, 600, wanted_plants=500).json()
+    assert e["wanted_plants"] == 500 and e["customer_pending"] == 500
+    # more plants than seeds is refused unless the seeds are raised on purpose
+    r = admin.post(f"{E}/{e['id']}/update", json={"good_plants": 650, "request_id": _rid()})
+    assert r.status_code == 400 and "more plants than seeds" in r.text
+    ok = admin.post(f"{E}/{e['id']}/update", json={"good_plants": 650, "raise_seeds": True, "request_id": _rid()})
+    assert ok.status_code == 200, ok.text
+    j = ok.json()
+    assert (j["prepared_plants"], j["extra_plants"], j["seeds_given"], j["remaining"], j["customer_pending"]) == (500, 150, 650, 0, 0)
+    row = _row(admin, plant)
+    assert row["available_stock"] == 20 + 150 and row["customer_held"] == 500 and row["physical_stock"] == 20 + 150 + 500
+    # all seeds are accounted for (entry shows Completed) but the plants are still in the nursery until they are handed over
+    assert j["status"] == "Completed" and j["handed_over"] is False
+    assert any("raised from 600 to 650" in (u["notes"] or "") for u in admin.get(f"{E}/{e['id']}").json()["updates"])
+    h = admin.post(f"{E}/{e['id']}/handover", json={"request_id": _rid()})
+    assert h.status_code == 200 and h.json()["handed_over"] is True
+    again = admin.post(f"{E}/{e['id']}/handover", json={"request_id": _rid()})
+    assert again.json()["already_saved"] is True
+    row = _row(admin, plant)
+    assert row["customer_held"] == 0 and row["available_stock"] == 170 and row["physical_stock"] == 170
+
+
+def test_good_plants_fill_the_customers_share_first_over_several_updates():
+    admin = _admin()
+    plant = _plant(admin, stock=0)
+    e = _create(admin, plant, 900, wanted_plants=500).json()
+    a = admin.post(f"{E}/{e['id']}/update", json={"good_plants": 400, "rejected_plants": 20, "request_id": _rid()}).json()
+    assert (a["prepared_plants"], a["extra_plants"], a["customer_pending"]) == (400, 0, 100)
+    b = admin.post(f"{E}/{e['id']}/update", json={"good_plants": 150, "request_id": _rid()}).json()
+    assert (b["prepared_plants"], b["extra_plants"], b["customer_pending"], b["status"]) == (500, 50, 0, "In Progress")
+    r = _row(admin, plant)
+    assert r["available_stock"] == 50 and r["customer_held"] == 500
+    # the same click twice adds once
+    rid = _rid()
+    admin.post(f"{E}/{e['id']}/update", json={"good_plants": 10, "request_id": rid})
+    admin.post(f"{E}/{e['id']}/update", json={"good_plants": 10, "request_id": rid})
+    assert _row(admin, plant)["available_stock"] == 60
+
+
+def test_wanted_can_be_set_with_the_first_update_and_is_needed_for_good_plants():
+    admin = _admin()
+    plant = _plant(admin)
+    e = _create(admin, plant, 300).json()
+    assert admin.post(f"{E}/{e['id']}/update", json={"good_plants": 100, "request_id": _rid()}).status_code == 400  # nobody said how many the customer wants
+    ok = admin.post(f"{E}/{e['id']}/update", json={"good_plants": 100, "wanted_plants": 80, "request_id": _rid()})
+    assert ok.status_code == 200 and (ok.json()["prepared_plants"], ok.json()["extra_plants"]) == (80, 20)
+    assert admin.post(f"{E}/{e['id']}/update", json={"good_plants": 5, "prepared_plants": 5, "request_id": _rid()}).status_code == 400  # not both ways at once
+
+
+def test_old_completed_entries_stay_handed_over_not_suddenly_held():
+    admin = _admin()
+    plant = _plant(admin, stock=5)
+    e = _create(admin, plant, 100).json()
+    admin.post(f"{E}/{e['id']}/update", json={"prepared_plants": 60, "finish": True, "request_id": _rid()})  # the older way of closing
+    j = admin.get(f"{E}/{e['id']}").json()
+    assert j["handed_over"] is True and _row(admin, plant)["customer_held"] == 0

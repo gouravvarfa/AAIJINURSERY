@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../../../api";
 import { sanitizeQuantityText } from "../../../utils/quantity";
 import { num } from "../../stock/stockUi";
@@ -44,6 +43,7 @@ export default function SeedHistory({ plants, version, onChanged }) {
   const saveEntry = (e) => {
     e.preventDefault();
     const body = { seeds_given: Number(edit.seeds), entry_date: edit.date, reference: edit.reference, notes: edit.notes };
+    if (edit.wanted) body.wanted_plants = Number(edit.wanted);
     if (!edit.entry.log.length) { body.plant_id = Number(edit.plant_id); body.variant_id = edit.variant_id ? Number(edit.variant_id) : null; }
     run(() => api.put(`${base}/${edit.entry.id}`, body), `${edit.entry.entry_number} saved.`);
   };
@@ -57,10 +57,30 @@ export default function SeedHistory({ plants, version, onChanged }) {
   const removeEntry = (entry) => {
     if (window.confirm(`Delete ${entry.entry_number}? This cannot be undone.`)) run(() => api.del(`${base}/${entry.id}`), `${entry.entry_number} deleted.`);
   };
-  const closeEntry = (entry) => {
-    if (window.confirm(`Close ${entry.entry_number}? Use this when the plants were handed over to the customer. They then leave the stock count, and the ${num(entry.remaining)} seeds still left are counted as not grown.`)) run(() => api.post(`${base}/${entry.id}/update`, { finish: true, request_id: `${Date.now()}${Math.random().toString(36).slice(2, 10)}` }), `${entry.entry_number} closed.`);
+  const handOver = (entry) => {
+    const left = entry.remaining > 0 ? ` The ${num(entry.remaining)} seeds still left are counted as not grown.` : "";
+    if (window.confirm(`Handed over ${entry.entry_number}? Use this when the plants were given to ${entry.customer_name}. They then leave the stock count.${left}`)) run(() => api.post(`${base}/${entry.id}/handover`, { request_id: `${Date.now()}${Math.random().toString(36).slice(2, 10)}` }), `${entry.entry_number} marked as handed over.`);
   };
-  const openEntryEdit = (entry) => setEdit({ kind: "entry", entry, seeds: String(entry.seeds_given), date: entry.entry_date || "", reference: entry.reference, notes: entry.notes, plant_id: String(entry.plant_id), variant_id: entry.variant_id ? String(entry.variant_id) : "" });
+  const openProduce = (entry) => setEdit({ kind: "produce", entry, wanted: entry.wanted_plants ? String(entry.wanted_plants) : "", good: "", bad: "", notes: "", rid: `${Date.now()}${Math.random().toString(36).slice(2, 10)}` });
+  const saveProduce = (e) => {
+    e.preventDefault();
+    const en = edit.entry;
+    const good = Number(edit.good || 0);
+    const bad = Number(edit.bad || 0);
+    const used = en.prepared_plants + en.extra_plants + en.rejected_plants + good + bad;
+    let raise = false;
+    if (used > en.seeds_given) {
+      if (!window.confirm(`You wrote more plants (${num(used)}) than seeds given (${num(en.seeds_given)}). Save anyway and raise "seeds given" to ${num(used)}?`)) return;
+      raise = true;
+    }
+    const body = { good_plants: good, rejected_plants: bad, notes: edit.notes, raise_seeds: raise, request_id: edit.rid };
+    if (edit.wanted && Number(edit.wanted) !== en.wanted_plants) body.wanted_plants = Number(edit.wanted);
+    run(() => api.post(`${base}/${en.id}/update`, body), `${en.entry_number} updated.`);
+  };
+  const wantedN = Number(edit?.wanted || 0);
+  const goodN = Number(edit?.good || 0);
+  const forCustomer = edit?.kind === "produce" ? Math.min(goodN, Math.max(wantedN - edit.entry.prepared_plants, 0)) : 0;
+  const openEntryEdit = (entry) => setEdit({ kind: "entry", entry, seeds: String(entry.seeds_given), wanted: entry.wanted_plants ? String(entry.wanted_plants) : "", date: entry.entry_date || "", reference: entry.reference, notes: entry.notes, plant_id: String(entry.plant_id), variant_id: entry.variant_id ? String(entry.variant_id) : "" });
   const openLineEdit = (entry, line) => setEdit({ kind: "line", entry, line, good: String(line.prepared), extra: String(line.extra), bad: String(line.rejected), notes: line.notes });
   const numField = (k) => (e) => setEdit({ ...edit, [k]: sanitizeQuantityText(e.target.value, 100000000) });
   const editPlant = plants.find((p) => String(p.id) === String(edit?.plant_id));
@@ -75,8 +95,30 @@ export default function SeedHistory({ plants, version, onChanged }) {
       {error && <div className="alert alert-error">{error}</div>}
       {edit && (
         <div className="seed-form seed-edit">
-          <h4>{edit.kind === "entry" ? `Edit ${edit.entry.entry_number}: ${edit.entry.customer_name}` : `Edit update of ${edit.entry.entry_number} (${fmt(edit.line.at)})`}</h4>
-          {edit.kind === "entry" ? (
+          <h4>{edit.kind === "produce" ? `Update plants of ${edit.entry.entry_number}: ${edit.entry.customer_name}` : edit.kind === "entry" ? `Edit ${edit.entry.entry_number}: ${edit.entry.customer_name}` : `Edit update of ${edit.entry.entry_number} (${fmt(edit.line.at)})`}</h4>
+          {edit.kind === "produce" ? (
+            <form onSubmit={saveProduce} className="stock-form-grid">
+              <p className="stock-hint" style={{ margin: 0 }}>Write only the NEW numbers since the last update. {num(edit.entry.remaining)} seeds are still left.</p>
+              <label>Plants the customer wants
+                <input className="form-control" required inputMode="numeric" value={edit.wanted} onChange={numField("wanted")} placeholder="e.g. 500" />
+              </label>
+              <label>Good plants that came out
+                <input className="form-control" inputMode="numeric" value={edit.good} onChange={numField("good")} />
+              </label>
+              <label>Bad / dead plants (optional)
+                <input className="form-control" inputMode="numeric" value={edit.bad} onChange={numField("bad")} />
+              </label>
+              {goodN > 0 && wantedN > 0 && (
+                <p className="seed-split" role="status">
+                  <strong>{num(forCustomer)}</strong> kept for {edit.entry.customer_name} (in Stock as Allocated, not for sale)
+                  {goodN - forCustomer > 0 ? <>, and <strong>{num(goodN - forCustomer)}</strong> extra go to <strong>Ready now</strong> (for sale)</> : null}.
+                  {edit.entry.prepared_plants + forCustomer < wantedN ? ` Still to give: ${num(wantedN - edit.entry.prepared_plants - forCustomer)}.` : ""}
+                </p>
+              )}
+              <label>Notes (optional)<input className="form-control" maxLength={1000} value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} /></label>
+              <div><button className="btn btn-primary" disabled={busy || (goodN + Number(edit.bad || 0) < 1) || !wantedN}>{busy ? "Saving..." : "Save"}</button>{" "}<button type="button" className="btn btn-outline dark" onClick={() => setEdit(null)}>Cancel</button></div>
+            </form>
+          ) : edit.kind === "entry" ? (
             <form onSubmit={saveEntry} className="stock-form-grid">
               {!edit.entry.log.length && (
                 <>
@@ -96,6 +138,7 @@ export default function SeedHistory({ plants, version, onChanged }) {
                 </>
               )}
               <label>Seeds given<input className="form-control" required inputMode="numeric" value={edit.seeds} onChange={numField("seeds")} /></label>
+              <label>Plants the customer wants<input className="form-control" inputMode="numeric" value={edit.wanted || ""} onChange={numField("wanted")} /></label>
               <label>Entry date<input className="form-control" type="date" required value={edit.date} onChange={(e) => setEdit({ ...edit, date: e.target.value })} /></label>
               <label>Reference<input className="form-control" maxLength={80} value={edit.reference} onChange={(e) => setEdit({ ...edit, reference: e.target.value })} /></label>
               <label>Notes<input className="form-control" maxLength={1000} value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} /></label>
@@ -134,10 +177,15 @@ export default function SeedHistory({ plants, version, onChanged }) {
                         <strong>{e.plant_name}</strong>
                         <small>{e.entry_number} · {e.entry_date}{e.reference ? ` · ${e.reference}` : ""}</small>
                       </div>
-                      <span className={`badge ${BADGE[e.status] || "badge-muted"}`}>{e.status_label}</span>
+                      <span>
+                        <span className={`badge ${BADGE[e.status] || "badge-muted"}`}>{e.status_label}</span>
+                        {" "}
+                        {e.handed_over ? <span className="badge badge-muted">Handed over</span> : e.prepared_plants > 0 ? <span className="badge badge-accent">Plants with us</span> : null}
+                      </span>
                     </div>
                     <div className="seed-ent-nums">
                       <div><span>{num(e.seeds_given)}</span>Seeds given</div>
+                      {e.wanted_plants ? <div><span>{num(e.wanted_plants)}</span>Customer wants</div> : null}
                       <div className="good"><span>{num(e.prepared_plants)}</span>Good (for customer)</div>
                       <div className="extra"><span>{num(e.extra_plants)}</span>Extra</div>
                       <div className="bad"><span>{num(e.rejected_plants)}</span>Bad</div>
@@ -168,9 +216,9 @@ export default function SeedHistory({ plants, version, onChanged }) {
                       </div>
                     )}
                     <div className="seed-ent-actions">
-                      {e.status !== "Completed" && <Link className="btn btn-sm btn-primary" to={`/admin/stock/add?seed=${e.id}`}>Add plants</Link>}
+                      {e.status !== "Completed" && <button type="button" className="btn btn-sm btn-primary" onClick={() => openProduce(e)}>Update plants</button>}
                       <button type="button" className="btn btn-sm btn-outline dark" onClick={() => openEntryEdit(e)}>Edit entry</button>
-                      {e.status !== "Completed" && <button type="button" className="btn btn-sm btn-outline dark" disabled={busy} onClick={() => closeEntry(e)}>Handed over / Close</button>}
+                      {!e.handed_over && <button type="button" className="btn btn-sm btn-outline dark" disabled={busy} onClick={() => handOver(e)}>{e.status === "Completed" ? "Handed over" : "Handed over / Close"}</button>}
                       {e.log.length === 0 && <button type="button" className="btn btn-sm btn-outline dark" disabled={busy} onClick={() => removeEntry(e)}>Delete</button>}
                     </div>
                   </div>

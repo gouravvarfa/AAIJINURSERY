@@ -63,6 +63,8 @@ def _out(e: SeedEntry) -> dict:
     return {
         "id": e.id, "entry_number": e.entry_number, "status": e.status, "status_label": LABEL.get(e.status, e.status), "contact_id": e.contact_id, "customer_name": e.customer_name,
         "plant_id": e.plant_id, "variant_id": e.variant_id, "tray_size": e.tray_size, "unit": unit, "seeds_given": e.seeds_given, "prepared_plants": e.prepared_plants,
+        "wanted_plants": e.wanted_plants, "customer_pending": max(e.wanted_plants - e.prepared_plants, 0) if e.wanted_plants else None,
+        "handed_over": e.handed_over_at is not None, "handed_over_at": e.handed_over_at.isoformat() + "Z" if e.handed_over_at else None,
         "extra_plants": e.extra_plants, "extra_units_added": e.extra_units_added, "extra_loose": loose, "rejected_plants": e.rejected_plants, "remaining": remaining,
         "entry_date": e.entry_date.date().isoformat() if e.entry_date else None, "reference": e.reference or "", "notes": e.notes or "", "created_by": e.created_by,
         "completed_at": e.completed_at.isoformat() + "Z" if e.completed_at else None,
@@ -100,6 +102,7 @@ class SeedEntryIn(BaseModel):
     plant_id: int
     variant_id: Optional[int] = None
     seeds_given: int = Field(ge=1, le=BIG)
+    wanted_plants: Optional[int] = Field(default=None, ge=1, le=BIG)  # how many plants the customer wants
     entry_date: Optional[date] = None
     reference: str = Field(default="", max_length=80)
     notes: str = Field(default="", max_length=1000)
@@ -140,7 +143,7 @@ def create_entry(payload: SeedEntryIn, admin: str = Depends(get_current_admin), 
 
     when = datetime.combine(payload.entry_date or date.today(), datetime.min.time())
     entry = SeedEntry(request_id=payload.request_id, contact_id=contact.id, customer_name=contact.name, plant_id=plant.id, variant_id=variant.id if variant else None,
-                      tray_size=variant.tray_size if variant else None, seeds_given=payload.seeds_given, entry_date=when, reference=payload.reference.strip(),
+                      tray_size=variant.tray_size if variant else None, seeds_given=payload.seeds_given, wanted_plants=payload.wanted_plants, entry_date=when, reference=payload.reference.strip(),
                       notes=payload.notes.strip(), created_by=admin, status="Pending")
     db.add(entry)
     try:
@@ -227,7 +230,12 @@ class SeedEntryUpdateIn(BaseModel):
     prepared_plants: int = Field(default=0, ge=0, le=BIG)  # added now
     extra_plants: int = Field(default=0, ge=0, le=BIG)  # added now
     rejected_plants: int = Field(default=0, ge=0, le=BIG)  # added now
-    finish: bool = False  # nothing more will grow: the seeds still remaining count as lost
+    finish: bool = False  # nothing more will grow: the seeds still remaining count as lost (and the plants were handed over)
+    # Simplest way to update: only say how many GOOD plants came out. The customer's share is worked out from
+    # "wanted_plants" and the rest is extra, which goes straight to Ready now.
+    good_plants: Optional[int] = Field(default=None, ge=0, le=BIG)
+    wanted_plants: Optional[int] = Field(default=None, ge=1, le=BIG)  # set / change what the customer wants
+    raise_seeds: bool = False  # more plants than seeds were written: raise "seeds given" to match (recorded in the note)
     notes: str = Field(default="", max_length=1000)
     request_id: str = Field(min_length=8, max_length=60)
 
@@ -241,16 +249,31 @@ def update_entry(entry_id: int, payload: SeedEntryUpdateIn, admin: str = Depends
         return {**_with_plant(db, [e])[0], "already_saved": True}  # a retry / double click
     if e.status == "Completed":
         raise HTTPException(status_code=400, detail="This entry is already completed")
-    add_total = payload.prepared_plants + payload.extra_plants + payload.rejected_plants
+    extra_note = ""
+    if payload.wanted_plants is not None and payload.wanted_plants != e.wanted_plants:
+        extra_note += f" Customer wants {payload.wanted_plants} plants" + (f" (was {e.wanted_plants})." if e.wanted_plants else ".")
+        e.wanted_plants = payload.wanted_plants
+    prepared_add, extra_add, rejected_add = payload.prepared_plants, payload.extra_plants, payload.rejected_plants
+    if payload.good_plants is not None:
+        if payload.prepared_plants or payload.extra_plants:
+            raise HTTPException(status_code=400, detail="Write either the good plants, or the customer's share and the extra separately, not both")
+        if not e.wanted_plants:
+            raise HTTPException(status_code=400, detail="First write how many plants the customer wants, so the extra can go to stock")
+        prepared_add = min(payload.good_plants, max(e.wanted_plants - e.prepared_plants, 0))
+        extra_add = payload.good_plants - prepared_add
+    add_total = prepared_add + extra_add + rejected_add
     if add_total == 0 and not payload.finish:
-        raise HTTPException(status_code=400, detail="Write at least one number (prepared, extra or rejected), or finish the entry")
+        raise HTTPException(status_code=400, detail="Write at least one number (good plants, bad plants), or finish the entry")
     used = e.prepared_plants + e.extra_plants + e.rejected_plants + add_total
     if used > e.seeds_given:
-        raise HTTPException(status_code=400, detail=f"That is {used - e.seeds_given} more plants than seeds given ({e.seeds_given}). Only {e.seeds_given - (used - add_total)} seeds are still remaining.")
+        if not payload.raise_seeds:
+            raise HTTPException(status_code=400, detail=f"That is {used - e.seeds_given} more plants than seeds given ({e.seeds_given}). Only {e.seeds_given - (used - add_total)} seeds are still remaining.")
+        extra_note += f" Seeds given raised from {e.seeds_given} to {used} because more plants came out."
+        e.seeds_given = used
 
-    e.prepared_plants += payload.prepared_plants
-    e.extra_plants += payload.extra_plants
-    e.rejected_plants += payload.rejected_plants
+    e.prepared_plants += prepared_add
+    e.extra_plants += extra_add
+    e.rejected_plants += rejected_add
     lost = 0
     if payload.finish:
         lost = e.seeds_given - (e.prepared_plants + e.extra_plants + e.rejected_plants)
@@ -266,8 +289,10 @@ def update_entry(entry_id: int, payload: SeedEntryUpdateIn, admin: str = Depends
     e.status = "Completed" if (payload.finish or remaining == 0) else "In Progress"
     e.completed_at = datetime.utcnow() if e.status == "Completed" else None
     e.updated_at = datetime.utcnow()
-    note = (payload.notes.strip() + (f" (Finished: {lost} seeds that did not grow are counted as lost)" if lost else "")).strip()
-    db.add(SeedEntryUpdate(entry_id=e.id, request_id=payload.request_id, prepared_add=payload.prepared_plants, extra_add=payload.extra_plants, rejected_add=payload.rejected_plants + lost,
+    if payload.finish and e.handed_over_at is None:
+        e.handed_over_at = datetime.utcnow()  # closing means the plants were handed over
+    note = (payload.notes.strip() + (f" (Finished: {lost} seeds that did not grow are counted as lost)" if lost else "") + extra_note).strip()
+    db.add(SeedEntryUpdate(entry_id=e.id, request_id=payload.request_id, prepared_add=prepared_add, extra_add=extra_add, rejected_add=rejected_add + lost,
                            finished=e.status == "Completed", notes=note, created_by=admin))
     try:
         db.commit()
@@ -275,6 +300,34 @@ def update_entry(entry_id: int, payload: SeedEntryUpdateIn, admin: str = Depends
         db.rollback()
         return {**_with_plant(db, [db.query(SeedEntry).filter(SeedEntry.id == entry_id).first()])[0], "already_saved": True}
     record_admin_audit(admin, "seed_entry_updated", {"entry": e.id})
+    db.refresh(e)
+    return {**_with_plant(db, [e])[0], "already_saved": False}
+
+
+class HandoverIn(BaseModel):
+    request_id: str = Field(min_length=8, max_length=60)
+
+
+@router.post("/{entry_id}/handover", dependencies=[EDIT])
+def handover(entry_id: int, payload: HandoverIn, admin: str = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """The plants were given to the customer: they stop being held in the nursery. If seeds were still left, they are counted as not grown."""
+    e = db.query(SeedEntry).filter(SeedEntry.id == entry_id).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Seed entry not found")
+    if e.handed_over_at is not None:
+        return {**_with_plant(db, [e])[0], "already_saved": True}
+    if db.query(SeedEntryUpdate.id).filter(SeedEntryUpdate.request_id == payload.request_id).first():
+        return {**_with_plant(db, [e])[0], "already_saved": True}
+    lost = max(e.seeds_given - (e.prepared_plants + e.extra_plants + e.rejected_plants), 0)
+    e.rejected_plants += lost
+    e.handed_over_at = datetime.utcnow()
+    e.status = "Completed"
+    e.completed_at = e.completed_at or datetime.utcnow()
+    e.updated_at = datetime.utcnow()
+    db.add(SeedEntryUpdate(entry_id=e.id, request_id=payload.request_id, prepared_add=0, extra_add=0, rejected_add=lost, finished=True,
+                           notes="Plants handed over to the customer" + (f" ({lost} seeds that did not grow are counted as lost)" if lost else ""), created_by=admin))
+    db.commit()
+    record_admin_audit(admin, "seed_entry_handed_over", {"entry": e.id})
     db.refresh(e)
     return {**_with_plant(db, [e])[0], "already_saved": False}
 
@@ -319,6 +372,7 @@ class EntryEdit(BaseModel):
     plant_id: Optional[int] = None
     variant_id: Optional[int] = None
     seeds_given: Optional[int] = Field(default=None, ge=1, le=BIG)
+    wanted_plants: Optional[int] = Field(default=None, ge=1, le=BIG)
     entry_date: Optional[date] = None
     reference: Optional[str] = Field(default=None, max_length=80)
     notes: Optional[str] = Field(default=None, max_length=1000)
@@ -352,6 +406,8 @@ def edit_entry(entry_id: int, payload: EntryEdit, admin: str = Depends(get_curre
         if payload.seeds_given < used:
             raise HTTPException(status_code=400, detail=f"{used} plants are already recorded, so seeds cannot be less than {used}")
         e.seeds_given = payload.seeds_given
+    if payload.wanted_plants is not None:
+        e.wanted_plants = payload.wanted_plants
     if payload.entry_date is not None:
         e.entry_date = datetime.combine(payload.entry_date, datetime.min.time())
     if payload.reference is not None:

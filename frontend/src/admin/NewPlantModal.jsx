@@ -9,6 +9,10 @@ export default function NewPlantModal({ existingPlants, onCreated, onClose }) {
   const [form, setForm] = useState({ name: "", category_id: "", price: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [catOpen, setCatOpen] = useState(false);
+  const [catName, setCatName] = useState("");
+  const [catError, setCatError] = useState("");
+  const [catBusy, setCatBusy] = useState(false);
   const submitting = useRef(false); // blocks a second click while the first one is still being sent
 
   useEffect(() => {
@@ -19,6 +23,31 @@ export default function NewPlantModal({ existingPlants, onCreated, onClose }) {
   const same = existingPlants.find((p) => p.name.trim().toLowerCase() === name.toLowerCase());
   const price = Number(form.price);
   const ready = name && form.category_id && form.price !== "" && price > 0 && !same;
+
+  async function addCategory() {
+    const n = catName.trim();
+    if (!n || catBusy) return;
+    const dup = categories.find((c) => c.name.trim().toLowerCase() === n.toLowerCase());
+    if (dup) {
+      setForm((f) => ({ ...f, category_id: String(dup.id) }));
+      setCatOpen(false);
+      setCatName("");
+      return;
+    }
+    setCatBusy(true);
+    setCatError("");
+    try {
+      const created = await api.post("/admin/categories", { name: n });
+      setCategories((list) => [...list, created]);
+      setForm((f) => ({ ...f, category_id: String(created.id) }));
+      setCatOpen(false);
+      setCatName("");
+    } catch (err) {
+      setCatError(err.message || "Could not create the category.");
+    } finally {
+      setCatBusy(false);
+    }
+  }
 
   async function save(e) {
     e.preventDefault();
@@ -54,10 +83,20 @@ export default function NewPlantModal({ existingPlants, onCreated, onClose }) {
           </div>
           <div className="form-group">
             <label htmlFor="np_cat">Category</label>
-            <select id="np_cat" className="form-control" required value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
-              <option value="">Select a category...</option>
-              {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-            </select>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select id="np_cat" className="form-control" style={{ flex: 1 }} required value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
+                <option value="">Select a category...</option>
+                {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+              </select>
+              <button type="button" className="btn btn-sm btn-outline dark" onClick={() => setCatOpen((v) => !v)}>+ New category</button>
+            </div>
+            {catOpen && (
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <input className="form-control" style={{ flex: 1 }} placeholder="New category name" maxLength={120} value={catName} onChange={(e) => setCatName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCategory(); } }} aria-label="New category name" />
+                <button type="button" className="btn btn-sm btn-primary" disabled={catBusy || !catName.trim()} onClick={addCategory}>{catBusy ? "Adding..." : "Add"}</button>
+              </div>
+            )}
+            {catError && <small style={{ color: "#b3261e" }}>{catError}</small>}
           </div>
           <div className="form-group">
             <label htmlFor="np_price">Selling price (₹)</label>

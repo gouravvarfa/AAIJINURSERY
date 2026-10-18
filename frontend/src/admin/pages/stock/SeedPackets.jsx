@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
 import SearchSelect from "../../accounting/SearchSelect";
+import NewPlantModal from "../../NewPlantModal";
 import { sanitizeQuantityText } from "../../../utils/quantity";
 import { num } from "../../stock/stockUi";
 
@@ -88,18 +89,19 @@ export default function SeedPackets() {
           <button key={key} type="button" role="tab" aria-selected={tab === key} className={`sm-chip${tab === key ? " active" : ""}`} onClick={() => setTab(key)}>{label}</button>
         ))}
       </div>
-      {tab === "new" && <NewEntry plants={plants} onSaved={(msg) => { refresh(msg); setTab("inventory"); }} />}
+      {tab === "new" && <NewEntry plants={plants} onPlantCreated={(pl) => setPlants((list) => [...list, pl].sort((x, y) => x.name.localeCompare(y.name)))} onSaved={(msg) => { refresh(msg); setTab("inventory"); }} />}
       {tab === "inventory" && <Inventory plants={plants} tick={tick} onChanged={refresh} />}
       {tab === "history" && <History tick={tick} />}
     </div>
   );
 }
 
-function NewEntry({ plants, onSaved }) {
+function NewEntry({ plants, onSaved, onPlantCreated }) {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [ask, setAsk] = useState("");
+  const [showNewPlant, setShowNewPlant] = useState(false);
   const requestId = useRef(newId());
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const packets = Number(form.packets || 0);
@@ -149,7 +151,13 @@ function NewEntry({ plants, onSaved }) {
       <div className="sp-grid">
         <div className="form-group sp-wide">
           <label htmlFor="sp_plant">Plant name *</label>
-          <SearchSelect id="sp_plant" options={plants.map((p) => ({ value: p.id, label: p.name }))} value={form.plant_id} onChange={(v) => setForm({ ...form, plant_id: v })} placeholder="Search and select a plant..." searchPlaceholder="Type the plant name" emptyText="No plant matches" />
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <SearchSelect id="sp_plant" options={plants.map((p) => ({ value: p.id, label: p.name + (p.is_active === false ? " (inactive)" : "") }))} value={form.plant_id} onChange={(v) => setForm({ ...form, plant_id: v })} placeholder="Search and select a plant..." searchPlaceholder="Type the plant name" emptyText="No plant matches. Use + New Plant to add it." />
+            </div>
+            <button type="button" className="btn btn-sm btn-outline dark" onClick={() => setShowNewPlant(true)}>+ New Plant</button>
+          </div>
+          {showNewPlant && <NewPlantModal existingPlants={plants} onCreated={(pl) => { onPlantCreated(pl); setForm((f) => ({ ...f, plant_id: pl.id })); setShowNewPlant(false); }} onClose={() => setShowNewPlant(false)} />}
         </div>
         <label>Seed variety / name<input className="form-control" maxLength={150} value={form.variety} onChange={set("variety")} placeholder="e.g. Hybrid 1057" /></label>
         <label>Seed company / brand *<input className="form-control" required maxLength={150} value={form.company} onChange={set("company")} /></label>

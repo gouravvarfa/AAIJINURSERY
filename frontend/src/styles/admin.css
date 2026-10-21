@@ -2335,7 +2335,7 @@ table.admin-table .row-actions {
 .sl-legacy { background: #f7f7f7; }
 .sl-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .sl-head strong { margin-right: auto; }
-.sl-kind { width: auto; min-width: 170px; height: 38px; }
+.sl-kind { width: auto; min-width: 170px; height: auto; min-height: 44px; padding-top: 8px; padding-bottom: 8px; line-height: 1.3; }
 .sl-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 12px; }
 .sl-grid label, .sl-grid > div { display: grid; gap: 4px; min-width: 0; align-content: start; }
 .sl-wide { grid-column: 1 / -1; }
@@ -2346,5 +2346,6 @@ table.admin-table .row-actions {
 .sl-linetotal { font-size: 0.86rem; color: var(--color-text-muted); }
 .sl-linetotal strong { color: var(--color-text, #1c2b22); }
 .sl-total { margin: 4px 0 0; text-align: right; }
+@media (max-width: 1100px) { .sl-lines { padding-bottom: 56px; } }
 @media (max-width: 900px) { .sl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .sl-grid { grid-template-columns: minmax(0, 1fr); } .sl-kind { width: 100%; } }

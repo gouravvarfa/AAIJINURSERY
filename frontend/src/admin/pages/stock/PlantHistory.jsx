@@ -26,7 +26,7 @@ export default function PlantHistory() {
             <p>Ready plants {num(plant.ready_stock)} · {plant.is_active ? "Active on website" : "Inactive (not on website)"} · Seed packets are counted separately from plant stock.</p>
           </div>
         </div>
-        <div className="sm-head-actions"><Link className="btn btn-outline dark" to="/admin/stock/packets">Seed Packet Entry</Link></div>
+        <div className="sm-head-actions"><Link className="btn btn-outline dark" to="/admin/stock/packets">Seed Packet Stock</Link></div>
       </div>
 
       <div className="sp-kpis">

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../../api";
-import { PlantLink, qtyText, useSuggestions, useSupplyMeta } from "../../accounting/supplyCommon";
+import { qtyText, useSupplyMeta } from "../../accounting/supplyCommon";
 import { num } from "../../stock/stockUi";
 
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
@@ -9,13 +9,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (v) => (v ? new Date(`${v}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "-");
 const fmtTime = (v) => new Date(v).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const money = (n) => (n == null ? "-" : `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`);
-const SIZE_UNITS = ["g", "kg", "mg", "seeds", "pcs", "ml", "litre"];
 const TYPE_LABEL = { RECEIPT: "Received", USAGE: "Used", ADJUSTMENT: "Adjusted", EXPIRED_WRITEOFF: "Written off", CORRECTION: "Corrected" };
 const BADGE = { OK: "sp-ok", "Expiring soon": "sp-soon", Expired: "sp-expired", Empty: "sp-empty" };
-const EMPTY = {
-  item_kind: "seed_packet", item_name: "", plant_id: "", company: "", supplier_contact_id: "", supplier: "", lot_number: "", quantity: "", unit: "", packet_size: "", packet_unit: "g",
-  purchase_date: today(), mfg_date: "", expiry_date: "", unit_price: "", total_amount: "", invoice_number: "", storage_location: "", notes: "", attachment_url: "",
-};
 
 function daysText(d) {
   if (d == null) return "no expiry";
@@ -73,167 +68,22 @@ export default function SeedPackets() {
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12l2 5v13H4V8z" /><path d="M4 8h16M9 12h6" /></svg>
           </span>
           <div>
-            <h1>Seed Packet Entry</h1>
-            <p>Seed packets, medicines, fertilizers and supplies you buy: lot, expiry, usage and history. Separate from plant stock.</p>
+            <h1>Seed Packet Stock</h1>
+            <p>Seed packets, medicines, fertilizers and supplies: lot, expiry, usage and history. New stock comes in through Purchase Orders. Separate from plant stock.</p>
           </div>
         </div>
-        <div className="sm-head-actions">
-          <button type="button" className="btn btn-primary sm-new" onClick={() => { setTab("new"); setNotice(""); }}>+ New Packet Entry</button>
-        </div>
+        <div className="sm-head-actions"><Link className="btn btn-primary sm-new" to="/admin/accounting/purchase-orders">+ New Purchase Order</Link></div>
       </div>
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
       <SeedPacketAlerts key={tick} onOpen={() => setTab("inventory")} />
       <div className="sm-filters" role="tablist" aria-label="Packet sections">
-        {[["new", "New Packet Entry"], ["inventory", "Packet Inventory"], ["history", "Packet History"]].map(([key, label]) => (
+        {[["inventory", "Packet Inventory"], ["history", "Packet History"]].map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} className={`sm-chip${tab === key ? " active" : ""}`} onClick={() => setTab(key)}>{label}</button>
         ))}
       </div>
-      {tab === "new" && <NewEntry plants={plants} onPlantCreated={(pl) => setPlants((list) => [...list, pl].sort((x, y) => x.name.localeCompare(y.name)))} onSaved={(msg) => { refresh(msg); setTab("inventory"); }} />}
       {tab === "inventory" && <Inventory plants={plants} tick={tick} onChanged={refresh} />}
       {tab === "history" && <History tick={tick} />}
     </div>
-  );
-}
-
-function NewEntry({ plants, onSaved, onPlantCreated }) {
-  const { meta, kind, whole } = useSupplyMeta();
-  const [form, setForm] = useState(EMPTY);
-  const [suppliers, setSuppliers] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [ask, setAsk] = useState(""); // same lot already recorded: add to it?
-  const [dup, setDup] = useState(""); // this supplier already has this bill number
-  const [dupReason, setDupReason] = useState("");
-  const requestId = useRef(newId());
-  const sug = useSuggestions(form.item_kind);
-  const k = kind(form.item_kind);
-  const unit = form.unit || k.default_unit;
-  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
-
-  useEffect(() => {
-    Promise.all([api.get("/admin/accounting/contacts?contact_type=supplier"), api.get("/admin/accounting/contacts?contact_type=both")])
-      .then(([a, b]) => setSuppliers([...a, ...b].sort((x, y) => x.name.localeCompare(y.name)))).catch(() => {});
-  }, []);
-
-  const qty = Number(form.quantity || 0);
-  const total = form.total_amount !== "" ? Number(form.total_amount) : form.unit_price !== "" && qty ? Math.round(Number(form.unit_price) * qty * 100) / 100 : null;
-  const supplierName = form.supplier_contact_id ? suppliers.find((s) => s.id === Number(form.supplier_contact_id))?.name : form.supplier.trim();
-  const problems = [];
-  if (form.expiry_date && form.purchase_date && form.expiry_date < form.purchase_date) problems.push("Expiry date is before the purchase date.");
-  if (form.mfg_date && form.expiry_date && form.mfg_date > form.expiry_date) problems.push("Manufacturing date is after the expiry date.");
-  if (qty > 0 && whole(unit) && Math.abs(qty - Math.round(qty)) > 1e-9) problems.push(`${unit} must be a whole number. Use kg, g, litre or ml for fractions.`);
-  const hasName = form.item_name.trim() || (form.item_kind === "seed_packet" && form.plant_id);
-  const ready = hasName && (form.item_kind !== "seed_packet" || form.company.trim()) && (!k.lot_required || form.lot_number.trim()) && (!k.expiry_required || form.expiry_date) && qty > 0 && form.purchase_date && problems.length === 0;
-
-  async function save(e, merge = false) {
-    e?.preventDefault();
-    if (busy || !ready) return;
-    setBusy(true);
-    setError("");
-    try {
-      const body = {
-        item_kind: form.item_kind, item_name: form.item_name, plant_id: form.item_kind === "seed_packet" && form.plant_id ? Number(form.plant_id) : null, company: form.company,
-        supplier: form.supplier_contact_id ? "" : form.supplier, supplier_contact_id: form.supplier_contact_id ? Number(form.supplier_contact_id) : null, lot_number: form.lot_number,
-        quantity: qty, quantity_unit: unit, packet_size: form.item_kind === "seed_packet" && form.packet_size ? Number(form.packet_size) : null, packet_unit: form.item_kind === "seed_packet" ? form.packet_unit : "",
-        purchase_date: form.purchase_date, manufacturing_date: form.mfg_date || null, expiry_date: form.expiry_date || null,
-        unit_price: form.unit_price === "" ? null : Number(form.unit_price), total_amount: form.total_amount === "" ? null : Number(form.total_amount),
-        invoice_number: form.invoice_number, storage_location: form.storage_location, notes: form.notes, attachment_url: form.attachment_url,
-        merge_into_existing: merge, allow_duplicate_bill: Boolean(dup), duplicate_reason: dup ? dupReason : "", request_id: requestId.current,
-      };
-      const r = await api.post("/admin/stock/seed-packets", body);
-      const bill = r.billed ? ` A Bill was made for ${supplierName} (Unpaid) in Accounting → Bills. Pay it from Payments Out.` : "";
-      setForm(EMPTY);
-      setAsk("");
-      setDup("");
-      setDupReason("");
-      requestId.current = newId();
-      onSaved(`Saved ${r.record_no}: ${num(qty)} ${unit} of ${r.item_name || r.plant_name}${r.batch_number ? `, lot ${r.batch_number}` : ""}${r.expiry_date ? `, expiry ${fmtDate(r.expiry_date)}` : ""}.${bill}`);
-    } catch (err) {
-      const msg = String(err.message || "");
-      if (err.status === 409 && msg.startsWith("BATCH_EXISTS")) setAsk(msg.replace("BATCH_EXISTS: ", ""));
-      else if (err.status === 409 && msg.startsWith("DUPLICATE_BILL")) setDup(msg.replace("DUPLICATE_BILL: ", ""));
-      else setError(msg || "Could not save the entry.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form className="sp-form" onSubmit={save}>
-      {error && <div className="alert alert-error">{error}</div>}
-      {ask && (
-        <div className="alert alert-warning sp-ask" role="alert">
-          <p>{ask}</p>
-          <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={(e) => save(e, true)}>Yes, add to that lot</button>{" "}
-          <button type="button" className="btn btn-sm btn-outline dark" onClick={() => setAsk("")}>No, let me check the lot number</button>
-        </div>
-      )}
-      {dup && (
-        <div className="alert alert-warning sp-ask" role="alert">
-          <p>{dup}</p>
-          <input className="form-control" placeholder="Why is this a second bill with the same number? (required)" value={dupReason} onChange={(e) => setDupReason(e.target.value)} aria-label="Reason for the duplicate bill number" />
-          <div><button type="button" className="btn btn-sm btn-primary" disabled={busy || dupReason.trim().length < 5} onClick={(e) => save(e)}>Save anyway</button>{" "}
-            <button type="button" className="btn btn-sm btn-outline dark" onClick={() => { setDup(""); setDupReason(""); }}>No, let me check the bill number</button></div>
-        </div>
-      )}
-      <div className="sp-grid">
-        <label>Item type *
-          <select className="form-control" value={form.item_kind} onChange={(e) => setForm({ ...form, item_kind: e.target.value, unit: "", plant_id: e.target.value === "seed_packet" ? form.plant_id : "" })}>
-            {meta.kinds.map((x) => (<option key={x.key} value={x.key}>{x.label}</option>))}
-          </select>
-        </label>
-        <label className="sp-span2">{form.item_kind === "seed_packet" ? "Seed name / variety" : "Item name *"}
-          <input className="form-control" list="sp-names" maxLength={200} value={form.item_name} onChange={set("item_name")} placeholder={form.item_kind === "seed_packet" ? "e.g. Hybrid 1057 (or choose the plant below)" : "e.g. Neem oil"} />
-          <datalist id="sp-names">{sug.names.map((x) => (<option key={x} value={x} />))}</datalist>
-        </label>
-        {form.item_kind === "seed_packet" && (
-          <div className="form-group sp-wide">
-            <label htmlFor="sp_plant">Plant (optional)</label>
-            <PlantLink id="sp_plant" plants={plants} value={form.plant_id} onChange={(v) => setForm((f) => ({ ...f, plant_id: v }))} onPlantCreated={onPlantCreated} />
-          </div>
-        )}
-        <label>{form.item_kind === "seed_packet" ? "Seed company / brand *" : "Company / brand"}
-          <input className="form-control" list="sp-co" maxLength={150} value={form.company} onChange={set("company")} />
-          <datalist id="sp-co">{sug.companies.map((x) => (<option key={x} value={x} />))}</datalist>
-        </label>
-        <label>Lot / batch number{k.lot_required ? " *" : ""}<input className="form-control" maxLength={80} value={form.lot_number} onChange={set("lot_number")} /></label>
-        <div className="sp-pair">
-          <label>Quantity received *<input className="form-control" inputMode="decimal" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: qtyText(e.target.value) })} /></label>
-          <label>Unit<select className="form-control" value={unit} onChange={set("unit")}>{meta.units.map((u) => (<option key={u.key} value={u.key}>{u.key}</option>))}</select></label>
-        </div>
-        {form.item_kind === "seed_packet" && (
-          <div className="sp-pair">
-            <label>Packet size<input className="form-control" inputMode="decimal" value={form.packet_size} onChange={(e) => setForm({ ...form, packet_size: qtyText(e.target.value) })} /></label>
-            <label>Size unit<select className="form-control" value={form.packet_unit} onChange={set("packet_unit")}>{SIZE_UNITS.map((u) => <option key={u}>{u}</option>)}</select></label>
-          </div>
-        )}
-        <label>Purchase date *<input className="form-control" type="date" required value={form.purchase_date} max={today()} onChange={set("purchase_date")} /></label>
-        <label>Manufacturing date<input className="form-control" type="date" value={form.mfg_date} onChange={set("mfg_date")} /></label>
-        <label>Expiry date{k.expiry_required ? " *" : ""}<input className="form-control" type="date" value={form.expiry_date} onChange={set("expiry_date")} /></label>
-        <label className="sp-span2">Supplier / vendor
-          <select className="form-control" value={form.supplier_contact_id} onChange={(e) => setForm({ ...form, supplier_contact_id: e.target.value, supplier: e.target.value ? "" : form.supplier })}>
-            <option value="">{`Type a supplier name below (or choose an existing supplier)`}</option>
-            {suppliers.map((s) => (<option key={s.id} value={s.id}>{s.name}{s.phone ? ` (${s.phone})` : ""}</option>))}
-          </select>
-          {!form.supplier_contact_id && <input className="form-control" maxLength={150} style={{ marginTop: 6 }} placeholder="Supplier name" value={form.supplier} onChange={set("supplier")} />}
-        </label>
-        <label>Supplier bill / invoice number<input className="form-control" maxLength={80} value={form.invoice_number} onChange={(e) => { setForm({ ...form, invoice_number: e.target.value }); setDup(""); }} placeholder="Leave empty if no bill yet" /></label>
-        <label>Cost per {unit} (₹)<input className="form-control" inputMode="decimal" value={form.unit_price} onChange={(e) => setForm({ ...form, unit_price: qtyText(e.target.value) })} /></label>
-        <label>Total purchase amount (₹)<input className="form-control" inputMode="decimal" value={form.total_amount} placeholder={total != null && form.total_amount === "" ? String(total) : ""} onChange={(e) => setForm({ ...form, total_amount: qtyText(e.target.value) })} /></label>
-        <label>Storage location<input className="form-control" maxLength={120} value={form.storage_location} onChange={set("storage_location")} placeholder="e.g. Cold room, shelf 2" /></label>
-        <label className="sp-wide">Packet label / bill photo link (optional)<input className="form-control" maxLength={300} value={form.attachment_url} onChange={set("attachment_url")} placeholder="https://..." /></label>
-        <label className="sp-wide">Notes<input className="form-control" maxLength={1000} value={form.notes} onChange={set("notes")} /></label>
-      </div>
-      {problems.map((p) => <p key={p} className="sp-problem">{p}</p>)}
-      <div className="sp-expense">
-        {total != null && total > 0 && supplierName ? (
-          <p>A <strong>Bill of {money(total)}</strong> will be made for <strong>{supplierName}</strong> in <strong>Accounting → Bills</strong> and shows in their account as <strong>Unpaid</strong>. Pay it from Accounting → Payments Out. You do not enter it again.</p>
-        ) : total != null && total > 0 ? (
-          <p className="stock-hint">Choose or type a supplier to make a Bill in their account. Without a supplier the stock is saved but nothing is booked in Accounting.</p>
-        ) : <p className="stock-hint">No amount entered, so no Bill is made. Add the cost and a supplier to book it in Accounting.</p>}
-      </div>
-      <button className="btn btn-primary" disabled={busy || !ready}>{busy ? "Saving..." : "Save entry"}</button>
-    </form>
   );
 }
 
@@ -335,7 +185,7 @@ function Inventory({ plants, tick, onChanged }) {
           <div><button className="btn btn-primary" disabled={busy}>{busy ? "Saving..." : "Save"}</button>{" "}<button type="button" className="btn btn-outline dark" onClick={() => setAct(null)}>Cancel</button></div>
         </form>
       )}
-      {data && data.items.length === 0 ? <p className="stock-hint">Nothing matches. Use "New Packet Entry" to add the first lot.</p> : data && (
+      {data && data.items.length === 0 ? <p className="stock-hint">Nothing here yet. Stock is added when a Purchase Order is converted to a bill.</p> : data && (
         <div className="admin-table-wrap">
           <table className="admin-table sp-table">
             <thead><tr><th>Item</th><th>Plant</th><th>Company</th><th>Lot</th><th className="num">Received</th><th className="num">Used</th><th className="num">Remaining</th><th>Purchased</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>

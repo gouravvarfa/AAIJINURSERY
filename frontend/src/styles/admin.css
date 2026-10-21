@@ -2328,3 +2328,23 @@ table.admin-table .row-actions {
 .sm-alloc-sub { display: block; font-size: 0.7rem; color: #1c7a43; font-weight: 600; white-space: normal; max-width: 120px; margin-left: auto; }
 
 .seed-split { margin: 0; padding: 8px 10px; background: #f1f8f4; border: 1px solid #cfe5d6; border-radius: 10px; font-size: 0.86rem; }
+
+/* ---- Purchase Order supply lines ---- */
+.sl-lines { display: grid; gap: 12px; }
+.sl-card { border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 14px; background: #fbfdfc; display: grid; gap: 10px; min-width: 0; }
+.sl-legacy { background: #f7f7f7; }
+.sl-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.sl-head strong { margin-right: auto; }
+.sl-kind { width: auto; min-width: 170px; height: 38px; }
+.sl-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 12px; }
+.sl-grid label, .sl-grid > div { display: grid; gap: 4px; min-width: 0; align-content: start; }
+.sl-wide { grid-column: 1 / -1; }
+.sl-label { font-size: 0.76rem; font-weight: 600; color: var(--color-text-muted); }
+.sl-pair { display: grid; grid-template-columns: 1fr 90px; gap: 8px; }
+.sl-foot { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
+.sl-more { background: none; border: 0; padding: 0; color: var(--color-primary, #1f6b45); cursor: pointer; font: inherit; font-size: 0.84rem; text-decoration: underline; }
+.sl-linetotal { font-size: 0.86rem; color: var(--color-text-muted); }
+.sl-linetotal strong { color: var(--color-text, #1c2b22); }
+.sl-total { margin: 4px 0 0; text-align: right; }
+@media (max-width: 900px) { .sl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .sl-grid { grid-template-columns: minmax(0, 1fr); } .sl-kind { width: 100%; } }

@@ -5,10 +5,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.accounting.models import Contact, PaymentOut
-from app.accounting.schemas import BillOut
+from app.accounting.schemas import BillOut, SupplyLineOut
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models import Purchase
+from app.supply_models import PurchaseLine
 
 router = APIRouter(prefix="/bills", tags=["accounting-bills"])
 
@@ -21,6 +22,7 @@ def _with_summary(db: Session, bill: Purchase) -> BillOut:
         or 0
     )
     out = BillOut.model_validate(bill)
+    out.supply_lines = [SupplyLineOut.model_validate(l) for l in db.query(PurchaseLine).filter(PurchaseLine.purchase_id == bill.id).order_by(PurchaseLine.line_no)]
     out.amount_paid = round(total_paid, 2)
     out.balance_due = round(max(bill.total_cost - total_paid, 0), 2)
     if bill.contact_id:

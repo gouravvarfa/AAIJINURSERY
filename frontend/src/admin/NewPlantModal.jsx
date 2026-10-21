@@ -4,7 +4,7 @@ import { api } from "../api";
 
 // A small "create plant" popup used inside Add Purchase. It reuses the normal plant API (POST /admin/plants).
 // The plant is created INACTIVE (not shown on the website) with no stock; stock only arrives when the purchase is saved.
-export default function NewPlantModal({ existingPlants, onCreated, onClose }) {
+export default function NewPlantModal({ existingPlants, onCreated, onClose, note }) {
   const [categories, setCategories] = useState([]);
   const [form, setForm] = useState({ name: "", category_id: "", price: "" });
   const [error, setError] = useState("");
@@ -72,7 +72,7 @@ export default function NewPlantModal({ existingPlants, onCreated, onClose }) {
         <button type="button" className="modal-close" aria-label="Close" onClick={onClose} disabled={busy}>&times;</button>
         <h3 style={{ marginTop: 0 }}>Add New Plant</h3>
         <p className="stock-hint" style={{ marginTop: 0 }}>
-          The plant is saved as <strong>inactive</strong>: it will not show on the website until you add its photo and details on the Plants page and make it active. It gets no stock until this purchase is saved.
+          {note || <>The plant is saved as <strong>inactive</strong>: it will not show on the website until you add its photo and details on the Plants page and make it active. It gets no stock until this purchase is saved.</>}
         </p>
         {error && <div className="alert alert-error">{error}</div>}
         {same && <div className="alert alert-warning">A plant called "{same.name}" already exists. Close this and choose it from the list instead of creating it again.</div>}

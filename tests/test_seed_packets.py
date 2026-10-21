@@ -33,7 +33,7 @@ def _body(plant, days=400, **kw):
     today = date.today()
     base = {"plant_id": plant["id"], "variety": "Hybrid", "company": f"Co{random.randint(1, 999)}", "supplier": f"Sup{random.randint(1, 999)}", "batch_number": f"B-{uuid.uuid4().hex[:6]}",
             "packets": 25, "packet_size": 10, "packet_unit": "g", "purchase_date": today.isoformat(), "expiry_date": (today + timedelta(days=days)).isoformat(),
-            "unit_price": 100, "invoice_number": "BILL-1", "request_id": uuid.uuid4().hex}
+            "unit_price": 100, "invoice_number": f"BILL-{uuid.uuid4().hex[:8]}", "request_id": uuid.uuid4().hex}
     return base | kw
 
 
@@ -43,42 +43,45 @@ def _make(c, plant, **kw):
     return r.json()
 
 
-def test_entry_saves_batch_and_books_expense_automatically():
+def test_entry_saves_batch_and_books_a_supplier_bill_not_an_expense():
     c = _admin()
-    plant = _plant(c)
-    stock_before = c.get(f"/api/admin/plants/{plant['id']}").json()["stock_quantity"] if False else 40
-    b = _make(c, plant, packets=20, unit_price=150, supplier="Ravi Seeds Agency", invoice_number="INV-77")
-    assert b["received"] == 20 and b["remaining"] == 20 and b["used"] == 0 and b["status"] == "OK" and b["record_no"].startswith("SP-")
+    plant = _plant(c, stock=40)
+    before_expenses = len(c.get(f"{A}/expenses?q=Seed Packets").json())
+    b = _make(c, plant, packets=20, unit_price=150, supplier="Ravi Seeds Agency", invoice_number="INV-77", batch_number="BILL-LOT-1")
+    assert b["received"] == 20 and b["remaining"] == 20 and b["used"] == 0 and b["status"] == "OK" and b["record_no"].startswith("SP-") and b["billed"] is True
     db = SessionLocal()
     try:
-        assert db.query(Plant.stock_quantity).filter(Plant.id == plant["id"]).scalar() == stock_before  # plant stock untouched
+        assert db.query(Plant.stock_quantity).filter(Plant.id == plant["id"]).scalar() == 40  # plant stock untouched
     finally:
         db.close()
-    exp = [e for e in c.get(f"{A}/expenses?q=Seed Packets").json() if f"batch {b['batch_number']}" in e["description"]]
-    assert len(exp) == 1
-    e = exp[0]
-    assert e["category"] == "Seed Packets" and e["total_amount"] == 3000 and e["status"] == "Unpaid" and e["reference"] == "INV-77" and e["contact"]["name"] == "Ravi Seeds Agency"
+    assert len(c.get(f"{A}/expenses?q=Seed Packets").json()) == before_expenses  # no Expense any more
+    bill = c.get(f"{A}/bills/{b['purchase_id']}").json()
+    assert bill["status"] == "Unpaid" and bill["total_cost"] == 3000 and bill["invoice_number"] == "INV-77" and bill["contact"]["name"] == "Ravi Seeds Agency"
+    assert bill["balance_due"] == 3000 and bill["supply_lines"][0]["lot_number"] == "BILL-LOT-1" and bill["supply_lines"][0]["quantity"] == 20
+    sup = c.get(f"{A}/contacts/{bill['contact']['id']}").json()
+    assert sup["payable"] == 3000 and sup["total_paid_out"] == 0
 
 
-def test_paid_now_marks_expense_paid_and_double_click_books_once():
+def test_paid_now_is_refused_and_a_double_click_makes_one_bill():
     c = _admin()
     plant = _plant(c)
-    body = _body(plant, packets=10, total_amount=900, paid_now=True, paid_method="UPI")
+    assert c.post(P, json=_body(plant, packets=10, total_amount=900, supplier="Pay Agro", paid_now=True)).status_code == 400  # payment is recorded in Accounting, Payments Out
+    body = _body(plant, packets=10, total_amount=900, supplier="Double Agro", batch_number="DBL-1")
     a, b = c.post(P, json=body), c.post(P, json=body)
-    assert a.status_code == 201 and b.json()["already_saved"] is True and a.json()["id"] == b.json()["id"]
-    found = [e for e in c.get(f"{A}/expenses?q=Seed Packets").json() if f"batch {body['batch_number']}" in e["description"]]
-    assert len(found) == 1 and found[0]["status"] == "Paid" and found[0]["balance_due"] == 0 and found[0]["amount_paid"] == 900
+    assert a.status_code == 201 and b.json()["already_saved"] is True and a.json()["id"] == b.json()["id"] and a.json()["purchase_id"] == b.json()["purchase_id"]
+    sup = [x for x in c.get(f"{A}/contacts").json() if x["name"] == "Double Agro"][0]
+    assert sup["payable"] == 900 and len(c.get(f"{A}/bills?contact_id={sup['id']}").json()) == 1
     assert a.json()["remaining"] == 10
 
 
-def test_no_price_means_no_expense():
+def test_no_price_means_stock_only_no_bill():
     c = _admin()
     plant = _plant(c)
-    body = _body(plant, unit_price=None)
+    body = _body(plant, unit_price=None, supplier="No Price Agro")
     body.pop("unit_price")
     b = c.post(P, json=body).json()
-    assert not [e for e in c.get(f"{A}/expenses?q=Seed Packets").json() if f"batch {body['batch_number']}" in e["description"]]
-    assert b["remaining"] == 25
+    assert b["billed"] is False and b["purchase_id"] is None and b["remaining"] == 25
+    assert not [x for x in c.get(f"{A}/contacts").json() if x["name"] == "No Price Agro"]  # no supplier account is created when nothing is billed
 
 
 def test_validation():
@@ -87,13 +90,14 @@ def test_validation():
     today = date.today()
     bad = lambda **kw: c.post(P, json=_body(plant, **kw)).status_code
     assert bad(packets=0) == 422 and bad(packets=-3) == 422
-    assert c.post(P, json={k: v for k, v in _body(plant).items() if k != "expiry_date"}).status_code == 422  # expiry required
+    assert c.post(P, json={k: v for k, v in _body(plant).items() if k != "expiry_date"}).status_code == 400  # expiry is required for seed packets
     assert bad(expiry_date="2026-13-45") == 422
     assert bad(expiry_date=(today - timedelta(days=5)).isoformat()) == 400  # expiry before purchase
     assert bad(manufacturing_date=(today + timedelta(days=500)).isoformat()) == 400
     assert bad(plant_id=99999999) == 400
     assert bad(packet_unit="bucket") == 400
-    assert bad(company="") == 422 and bad(batch_number="") == 422
+    assert bad(company="") == 400 and bad(batch_number="") == 400  # lot is required for seed packets
+    assert bad(packets=2.5) == 400  # packets are whole numbers
 
 
 def test_same_batch_number_is_never_silently_mixed():
@@ -225,46 +229,45 @@ def _seed_expense_count(c):
     return len([e for e in c.get(f"{A}/expenses?q=Seed Packets").json()])
 
 
-def test_each_purchase_is_one_expense_and_merge_never_duplicates():
+def test_each_purchase_is_one_bill_and_merge_never_duplicates():
     c = _admin()
     plant = _plant(c)
-    first = _make(c, plant, packets=10, unit_price=100, company="Merge Co", variety="V", batch_number="MRG-1")
-    assert len(_expenses_for(c, "MRG-1")) == 1
-    again = _body(plant, packets=5, unit_price=100, company="Merge Co", variety="V", batch_number="MRG-1", expiry_date=first["expiry_date"], merge_into_existing=True)
+    first = _make(c, plant, packets=10, unit_price=100, company="Merge Co", variety="V", batch_number="MRG-1", supplier="Merge Agro", invoice_number="M-1")
+    again = _body(plant, packets=5, unit_price=100, company="Merge Co", variety="V", batch_number="MRG-1", expiry_date=first["expiry_date"], merge_into_existing=True, supplier="Merge Agro", invoice_number="M-2")
     assert c.post(P, json=again).status_code == 201
-    assert c.post(P, json=again).json()["already_saved"] is True  # double click on the merge: no third expense
-    ex = _expenses_for(c, "MRG-1")
-    assert sorted(e["total_amount"] for e in ex) == [500, 1000]  # one per real purchase, nothing doubled
-    assert c.get(f"{P}/{first['id']}").json()["received"] == 15
+    assert c.post(P, json=again).json()["already_saved"] is True  # double click on the merge: no third bill
+    sup = [x for x in c.get(f"{A}/contacts").json() if x["name"] == "Merge Agro"][0]
+    bills = c.get(f"{A}/bills?contact_id={sup['id']}").json()
+    assert sorted(b["total_cost"] for b in bills) == [500, 1000]  # one bill per real purchase, nothing doubled
+    assert c.get(f"{P}/{first['id']}").json()["received"] == 15 and sup["payable"] == 1500
 
 
 def test_use_adjust_correct_writeoff_never_touch_accounting():
     c = _admin()
     plant = _plant(c)
-    b = _make(c, plant, packets=20, unit_price=50, batch_number="NOACC-1")
-    before = _seed_expense_count(c)
-    contacts = len(c.get(f"{A}/contacts").json())
+    b = _make(c, plant, packets=20, unit_price=50, batch_number="NOACC-1", supplier="Acc Agro")
+    sup_id = c.get(f"{A}/bills/{b['purchase_id']}").json()["contact"]["id"]
+    bills, contacts = len(c.get(f"{A}/bills").json()), len(c.get(f"{A}/contacts").json())
     c.post(f"{P}/{b['id']}/use", json={"quantity": 2, "request_id": uuid.uuid4().hex})
     c.post(f"{P}/{b['id']}/adjust", json={"new_remaining": 10, "reason": "count", "request_id": uuid.uuid4().hex})
     c.post(f"{P}/{b['id']}/correct", json={"storage_location": "Shelf 9", "reason": "moved", "request_id": uuid.uuid4().hex})
     c.post(f"{P}/{b['id']}/write-off", json={"reason": "discard", "request_id": uuid.uuid4().hex})
-    assert _seed_expense_count(c) == before and len(c.get(f"{A}/contacts").json()) == contacts
-    assert len(_expenses_for(c, "NOACC-1")) == 1 and _expenses_for(c, "NOACC-1")[0]["total_amount"] == 1000
+    assert len(c.get(f"{A}/bills").json()) == bills and len(c.get(f"{A}/contacts").json()) == contacts
+    assert c.get(f"{A}/contacts/{sup_id}").json()["payable"] == 1000  # the bill is a cost already incurred: stock use does not change what is owed
 
 
-def test_unpaid_stays_unpaid_and_paid_has_exactly_one_payment():
+def test_bill_stays_unpaid_until_a_payment_is_recorded_in_accounting():
     c = _admin()
     plant = _plant(c)
-    _make(c, plant, packets=4, unit_price=250, batch_number="UNP-1")
-    e = _expenses_for(c, "UNP-1")[0]
-    assert e["status"] == "Unpaid" and e["amount_paid"] == 0 and e["balance_due"] == 1000
-    assert [p for p in c.get(f"{A}/payments-out").json() if p.get("expense_id") == e["id"]] == []
-    body = _body(plant, packets=4, unit_price=250, batch_number="PAID-1", paid_now=True, paid_method="Bank")
-    c.post(P, json=body)
-    c.post(P, json=body)
-    pe = _expenses_for(c, "PAID-1")[0]
-    pays = [p for p in c.get(f"{A}/payments-out").json() if p.get("expense_id") == pe["id"]]
-    assert len(pays) == 1 and pays[0]["amount"] == 1000 and pays[0]["method"] == "Bank" and pe["status"] == "Paid"
+    b = _make(c, plant, packets=4, unit_price=250, batch_number="UNP-1", supplier="Unpaid Agro")
+    bill = c.get(f"{A}/bills/{b['purchase_id']}").json()
+    assert bill["status"] == "Unpaid" and bill["amount_paid"] == 0 and bill["balance_due"] == 1000
+    assert [x for x in c.get(f"{A}/payments-out").json() if x.get("purchase_id") == bill["id"]] == []
+    # a payment recorded the normal way (Payments Out) reduces the payable, once
+    assert c.post(f"{A}/payments-out", json={"purchase_id": bill["id"], "amount": 400, "method": "Bank", "payment_date": "2026-10-16T00:00:00"}).status_code == 201
+    sup = c.get(f"{A}/contacts/{bill['contact']['id']}").json()
+    assert sup["payable"] == 600 and sup["total_paid_out"] == 400
+    assert c.get(f"{A}/bills/{bill['id']}").json()["balance_due"] == 600
 
 
 def test_supplier_contact_is_reused_not_duplicated():
@@ -278,19 +281,19 @@ def test_supplier_contact_is_reused_not_duplicated():
     assert len(same) == 1 and same[0]["contact_type"] == "supplier"
 
 
-def test_failure_while_booking_expense_saves_nothing(monkeypatch):
+def test_failure_while_booking_the_bill_saves_nothing(monkeypatch):
     import app.seed_packets as sp
     c = _admin()
     plant = _plant(c)
-    body = _body(plant, packets=3, unit_price=10, batch_number="ATOMIC-1")
-    monkeypatch.setattr(sp, "_supplier_contact", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    body = _body(plant, packets=3, unit_price=10, batch_number="ATOMIC-1", supplier="Atomic Agro")
+    monkeypatch.setattr(sp, "create_supply_bill", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     try:
         c.post(P, json=body)
     except Exception:
         pass
     monkeypatch.undo()
     assert c.get(f"{P}?batch=ATOMIC-1").json()["items"] == []  # no half-saved batch
-    assert _expenses_for(c, "ATOMIC-1") == []
+    assert not [x for x in c.get(f"{A}/contacts").json() if x["name"] == "Atomic Agro"]  # and no supplier left behind
     assert c.post(P, json=body).status_code == 201  # and the same form can be sent again
 
 
@@ -310,7 +313,7 @@ def test_stock_can_never_go_negative_even_if_two_requests_race():
     b = _make(c, plant, packets=5, batch_number="RACE-1")
     import app.seed_packets as sp
     # simulate the second request having read "5 left" before the first one saved
-    real = sp._remaining
+    real = sp.batch_remaining
     calls = {"n": 0}
 
     def stale(db, batch_id):
@@ -318,11 +321,11 @@ def test_stock_can_never_go_negative_even_if_two_requests_race():
         return 5 if calls["n"] == 1 else real(db, batch_id)
 
     c.post(f"{P}/{b['id']}/use", json={"quantity": 4, "request_id": uuid.uuid4().hex})
-    sp._remaining = stale
+    sp.batch_remaining = stale
     try:
         r = c.post(f"{P}/{b['id']}/use", json={"quantity": 4, "request_id": uuid.uuid4().hex})
     finally:
-        sp._remaining = real
+        sp.batch_remaining = real
     assert r.status_code == 400
     assert c.get(f"{P}/{b['id']}").json()["remaining"] == 1
 

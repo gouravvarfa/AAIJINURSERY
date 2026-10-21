@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.accounting.supplier_balance import supplier_position
 from app.accounting.models import (
     Contact,
     Expense,
@@ -494,13 +495,8 @@ def supplier_outstanding_report(admin: str = Depends(get_current_admin), db: Ses
     contacts = db.query(Contact).filter(Contact.contact_type.in_(["supplier", "both"])).all()
     rows = []
     for c in contacts:
-        total_purchases = money(
-            db.query(func.coalesce(func.sum(Purchase.total_cost), 0)).filter(Purchase.contact_id == c.id).scalar()
-        )
-        total_paid_out = money(
-            db.query(func.coalesce(func.sum(PaymentOut.amount), 0)).filter(PaymentOut.contact_id == c.id).scalar()
-        )
-        payable = money(total_purchases - total_paid_out)
+        sp = supplier_position(db, c.id)
+        total_purchases, total_paid_out, payable = money(sp["owed"]), money(sp["paid"]), money(sp["payable"])
         if payable > 0:
             rows.append(ContactOutstandingRow(contact_id=c.id, name=c.name, total=total_purchases, paid=total_paid_out, outstanding=payable))
     rows.sort(key=lambda r: r.outstanding, reverse=True)

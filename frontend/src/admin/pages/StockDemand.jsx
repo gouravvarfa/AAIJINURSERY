@@ -225,6 +225,7 @@ export default function StockDemand() {
                             <Menu>
                               {a.to && <Link to={a.to}>{a.action}</Link>}
                               {a.make && <Link to={a.make.to}>{a.make.action}</Link>}
+                              <Link to={`/admin/plants/${r.plant_id}/history`}>Plant history</Link>
                               <Link to={`/admin/stock/add?plant=${r.plant_id}&variant=${r.variant_id || ""}`}>Add plants</Link>
                               <button type="button" onClick={() => { setFix(r); setCount(String(r.available_stock)); setReason(""); setMsg(""); }}>Correct count</button>
                             </Menu>

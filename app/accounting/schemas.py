@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -255,24 +255,44 @@ class PaymentInOut(BaseModel):
 class PurchaseOrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    plant_id: int
+    plant_id: Optional[int] = None
     description: str
-    quantity: int
+    quantity: float
     unit_price: float
     tax_amount: float
     line_total: float
     variant_id: Optional[int] = None
     tray_size: Optional[int] = None
+    item_kind: str = "plant"
+    lot_number: str = ""
+    company: str = ""
+    unit: str = ""
+    mfg_date: Optional[date] = None
+    expiry_date: Optional[date] = None
+    packet_size: Optional[float] = None
+    packet_unit: str = ""
+    storage_location: str = ""
+    line_notes: str = ""
 
 
 class PurchaseOrderItemIn(BaseModel):
-    plant_id: int
-    description: str = ""
-    quantity: int = 1
-    unit_price: float = 0
+    # seed_packet | medicine | fertilizer | supply. ("plant" only exists on older orders and cannot be added any more.)
+    item_kind: str = "seed_packet"
+    description: str = ""  # the item name
+    plant_id: Optional[int] = None  # seed packets only; empty = Unassigned / General stock
+    company: str = ""
+    lot_number: str = ""
+    quantity: float = 1
+    unit: str = ""
+    unit_price: float = 0  # unit cost
+    mfg_date: Optional[date] = None
+    expiry_date: Optional[date] = None
+    packet_size: Optional[float] = None
+    packet_unit: str = ""
+    storage_location: str = ""
+    line_notes: str = ""
     tax_rate_id: Optional[int] = None
-    # When set, quantity means "number of trays received" and unit_price the
-    # per-tray cost -- same convention as Sales Order/website OrderItem.
+    # Older plant lines only: when set, quantity means "number of trays received" and unit_price the per-tray cost.
     variant_id: Optional[int] = None
 
 
@@ -320,6 +340,9 @@ class PurchaseOrderConvertIn(BaseModel):
     """Manually convert a Purchase Order into a Bill (the existing Purchase
     table)."""
     due_date: Optional[datetime] = None
+    supplier_bill_number: str = ""  # the supplier's own bill / invoice number (optional)
+    allow_duplicate_bill: bool = False  # the same supplier already has this bill number: go ahead anyway
+    duplicate_reason: str = ""  # why (audited on the bill)
 
 
 # ---------- Bills (existing Purchase table, exposed here for linking) ----------
@@ -332,6 +355,29 @@ class BillItemOut(BaseModel):
     quantity: int
     unit_cost: float
     total_cost: float
+
+
+class SupplyLineOut(BaseModel):
+    """A bill line for seed packets, medicines, fertilizers or other supplies (with its own lot and expiry)."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    line_no: int
+    item_kind: str
+    item_name: str
+    plant_id: Optional[int] = None
+    company: str = ""
+    lot_number: str = ""
+    quantity: float
+    unit: str = ""
+    unit_cost: float
+    total_cost: float
+    mfg_date: Optional[date] = None
+    expiry_date: Optional[date] = None
+    packet_size: Optional[float] = None
+    packet_unit: str = ""
+    storage_location: str = ""
+    notes: str = ""
+    batch_id: Optional[int] = None
 
 
 class BillOut(BaseModel):
@@ -352,6 +398,9 @@ class BillOut(BaseModel):
     balance_due: float = 0
     contact: Optional[ContactOut] = None
     items: List[BillItemOut] = []
+    supply_lines: List[SupplyLineOut] = []
+    duplicate_override_reason: Optional[str] = None
+    duplicate_override_by: Optional[str] = None
 
 
 # ---------- Expenses ----------

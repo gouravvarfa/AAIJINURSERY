@@ -263,7 +263,7 @@ def party_statement(
             for f in rf_q.all():
                 raw_rows.append((f.refund_date, "Refund to customer", f"REFUND-{f.id}", "offline", f.amount, 0))
     else:
-        bill_q = db.query(Purchase).filter(Purchase.contact_id == contact.id)
+        bill_q = db.query(Purchase).filter(Purchase.contact_id == contact.id, Purchase.status.notin_(("Voided", "Cancelled")))
         if source:
             bill_q = bill_q.filter(Purchase.source == source)
         if date_from:
@@ -272,6 +272,15 @@ def party_statement(
             bill_q = bill_q.filter(Purchase.purchase_date <= date_to)
         for b in bill_q.all():
             raw_rows.append((b.purchase_date, f"Bill {b.invoice_number or ('#' + str(b.id))}", b.invoice_number or f"BILL-{b.id}", b.source, b.total_cost, 0))
+        # expenses booked against the supplier are owed to them too (their payments are in the list below)
+        ex_q = db.query(Expense).filter(Expense.contact_id == contact.id, Expense.status.notin_(("Voided", "Cancelled")))
+        if date_from:
+            ex_q = ex_q.filter(Expense.expense_date >= date_from)
+        if date_to:
+            ex_q = ex_q.filter(Expense.expense_date <= date_to)
+        for e in ex_q.all():
+            if not source or source == e.source:
+                raw_rows.append((e.expense_date, f"Expense: {e.category}", e.reference or f"EXP-{e.id}", e.source, e.total_amount, 0))
 
         pay_q = db.query(PaymentOut).filter(PaymentOut.contact_id == contact.id)
         if source:

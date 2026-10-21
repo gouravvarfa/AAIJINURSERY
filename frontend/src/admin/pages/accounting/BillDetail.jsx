@@ -103,6 +103,23 @@ export default function BillDetail() {
         <div>
           <div className="admin-form-card" style={{ maxWidth: "none", marginBottom: 20 }}>
             <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Line Items</h2>
+            {bill.duplicate_override_reason && (
+              <div className="alert alert-warning">Same supplier bill number entered again on purpose by {bill.duplicate_override_by}: {bill.duplicate_override_reason}</div>
+            )}
+            {(bill.supply_lines || []).map((l) => (
+              <div key={`s-${l.id}`} className="admin-order-item-row">
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600 }}>{l.item_name}</div>
+                  <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
+                    {l.quantity} {l.unit} &times; &#8377;{l.unit_cost}
+                    {l.company ? ` · ${l.company}` : ""}
+                    {l.lot_number ? ` · Lot ${l.lot_number}` : ""}
+                    {l.expiry_date ? ` · Expires ${new Date(l.expiry_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : ""}
+                  </div>
+                </div>
+                <div style={{ fontWeight: 700 }}>&#8377;{l.total_cost}</div>
+              </div>
+            ))}
             {bill.items.map((item) => (
               <div key={item.id} className="admin-order-item-row">
                 <div style={{ flex: 1 }}>

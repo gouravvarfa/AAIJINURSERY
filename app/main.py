@@ -32,6 +32,8 @@ from app.inventory_router import router as inventory_demand_router
 from app.stock_orders import router as stock_orders_router
 import app.production_models  # noqa: F401  (registers the seed / production tables)
 import app.seed_packet_models  # noqa: F401  (registers the seed packet tables)
+import app.supply_models  # noqa: F401  (registers the supplier bill lines table)
+from app import supply_migration
 from app.production_router import router as production_router
 from app.communications.router import router as communications_router
 from app.communications.inbox_router import router as communications_inbox_router
@@ -57,6 +59,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 
 Base.metadata.create_all(bind=engine)
+supply_migration.run(engine)  # data-preserving upgrade for bill lines / supplies (backs up first when it has to rebuild a table)
 
 # Schema shims (ALTER TABLE for pre-existing tables) must run before
 # seed_if_empty -- seeding queries ORM models whose Python class already
@@ -583,6 +586,8 @@ from app.seed_entries import router as seed_entries_router
 app.include_router(seed_entries_router)  # walk-in seed entries (permissions checked inside)
 from app.seed_packets import router as seed_packets_router
 app.include_router(seed_packets_router)  # seed packet purchases, batches, expiry alerts (permissions checked inside)
+from app.plant_history import router as plant_history_router
+app.include_router(plant_history_router)  # read-only plant history (stock, packets, purchases, customer seeds)
 app.include_router(inventory_demand_router)  # stock vs demand + per-line stock/prepare decision (permissions checked inside)
 app.include_router(stock_orders_router)  # stock team's order list + prepare/ready (permissions checked inside)
 app.include_router(accounting_router, dependencies=[Depends(require_permission("accounting", "VIEW"))])

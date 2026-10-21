@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.accounting.audit import record_change
@@ -19,6 +20,7 @@ from app.database import get_db
 from app.deps import get_current_admin
 from app.inventory import adjust_stock
 from app.models import Plant, PlantVariant, Purchase, PurchaseItem
+from app.supply_inventory import create_supply_bill, normalise_line
 
 router = APIRouter(tags=["accounting-purchase-orders"])
 
@@ -70,40 +72,47 @@ def get_purchase_order(
     return _with_bill_ref(db, item)
 
 
-def _add_lines(db: Session, order: PurchaseOrder, lines) -> float:
-    """Validates and adds the given line items to `order`, returning their
-    subtotal. Shared by create and edit so both apply the same checks."""
-    plant_ids = {i.plant_id for i in lines}
-    plants = {p.id: p for p in db.query(Plant).filter(Plant.id.in_(plant_ids)).all()}
-    missing = plant_ids - plants.keys()
-    if missing:
-        raise HTTPException(status_code=400, detail=f"Unknown plant id(s): {sorted(missing)}")
+def _add_lines(db: Session, order: PurchaseOrder, lines, allow_plant: bool = False) -> float:
+    """Validates and adds the given line items to `order`, returning their subtotal. Shared by create and edit so both apply the
+    same checks. A Purchase Order is for seed packets, medicines, fertilizers and other supplies. Plants are not bought here
+    ("plant" lines only survive on older orders that already had them)."""
     subtotal = 0.0
-    for line in lines:
-        if line.quantity <= 0:
-            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
-        plant = plants[line.plant_id]
-        tray_size = None
-        if line.variant_id is not None:
-            variant = db.query(PlantVariant).filter(PlantVariant.id == line.variant_id, PlantVariant.plant_id == plant.id).first()
-            if not variant:
-                raise HTTPException(status_code=400, detail="Unknown tray-size option for this plant")
-            tray_size = variant.tray_size
-        line_total = round(line.quantity * line.unit_price, 2)
+    order_day = (order.order_date or datetime.utcnow()).date()
+    for n, line in enumerate(lines, 1):
+        kind = line.item_kind or "seed_packet"
+        if kind == "plant":
+            if not allow_plant:
+                raise HTTPException(status_code=400, detail=f"Line {n}: plants are not bought on a Purchase Order. Choose seed packet, medicine, fertilizer or other supply (plants are purchased from Admin, Purchases).")
+            if line.plant_id is None:
+                raise HTTPException(status_code=400, detail=f"Line {n}: unknown plant")
+            plant = db.query(Plant).filter(Plant.id == line.plant_id).first()
+            if not plant:
+                raise HTTPException(status_code=400, detail=f"Unknown plant id(s): [{line.plant_id}]")
+            if line.quantity <= 0:
+                raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+            tray_size = None
+            if line.variant_id is not None:
+                variant = db.query(PlantVariant).filter(PlantVariant.id == line.variant_id, PlantVariant.plant_id == plant.id).first()
+                if not variant:
+                    raise HTTPException(status_code=400, detail="Unknown tray-size option for this plant")
+                tray_size = variant.tray_size
+            line_total = round(line.quantity * line.unit_price, 2)
+            subtotal += line_total
+            db.add(PurchaseOrderItem(purchase_order_id=order.id, plant_id=plant.id, description=line.description or plant.name, quantity=line.quantity, unit_price=line.unit_price,
+                                     tax_rate_id=line.tax_rate_id, line_total=line_total, variant_id=line.variant_id, tray_size=tray_size, item_kind="plant"))
+            continue
+        spec = normalise_line(db, {
+            "item_kind": kind, "item_name": line.description, "plant_id": line.plant_id, "company": line.company, "lot_number": line.lot_number, "quantity": line.quantity,
+            "unit": line.unit, "unit_cost": line.unit_price, "mfg_date": line.mfg_date, "expiry_date": line.expiry_date, "packet_size": line.packet_size, "packet_unit": line.packet_unit,
+            "storage_location": line.storage_location, "notes": line.line_notes,
+        }, order_day, label=f"Line {n}")
+        line_total = round(spec["quantity"] * (spec["unit_cost"] or 0), 2)
         subtotal += line_total
-        db.add(
-            PurchaseOrderItem(
-                purchase_order_id=order.id,
-                plant_id=plant.id,
-                description=line.description or plant.name,
-                quantity=line.quantity,
-                unit_price=line.unit_price,
-                tax_rate_id=line.tax_rate_id,
-                line_total=line_total,
-                variant_id=line.variant_id,
-                tray_size=tray_size,
-            )
-        )
+        db.add(PurchaseOrderItem(
+            purchase_order_id=order.id, plant_id=spec["plant_id"], description=spec["item_name"], quantity=spec["quantity"], unit_price=spec["unit_cost"] or 0, tax_rate_id=line.tax_rate_id,
+            line_total=line_total, item_kind=spec["item_kind"], lot_number=spec["lot_number"], company=spec["company"], unit=spec["unit"], mfg_date=spec["mfg_date"],
+            expiry_date=spec["expiry_date"], packet_size=spec["packet_size"], packet_unit=spec["packet_unit"], storage_location=spec["storage_location"], line_notes=spec["notes"],
+        ))
     return subtotal
 
 
@@ -165,9 +174,11 @@ def update_purchase_order(
         raise HTTPException(status_code=400, detail="Unknown contact")
 
     before = {"contact_id": order.contact_id, "order_date": str(order.order_date), "notes": order.notes, "total_amount": order.total_amount}
+    had_plants = any(i.item_kind == "plant" for i in order.items)
     order.items.clear()
     db.flush()
-    subtotal = _add_lines(db, order, payload.items)
+    order.order_date = payload.order_date
+    subtotal = _add_lines(db, order, payload.items, allow_plant=had_plants)
     order.contact_id = contact.id
     order.order_date = payload.order_date
     order.notes = payload.notes
@@ -211,52 +222,77 @@ def convert_to_bill(
     if existing:
         raise HTTPException(status_code=400, detail="This purchase order already has a bill")
 
+    today = date.today()
+    bill_number = (payload.supplier_bill_number or "").strip()
     bill = Purchase(
         purchase_date=datetime.utcnow(),
         supplier=order.contact.name if order.contact else "",
-        invoice_number=f"BILL-{order.order_number}",
+        invoice_number=bill_number or f"BILL-{order.order_number}",
         notes=f"Auto-created from Purchase Order {order.order_number}",
         status="Unpaid",
         due_date=payload.due_date,
         source="offline",
         contact_id=order.contact_id,
         purchase_order_id=order.id,
+        request_id=f"PO:{order.id}",  # a second bill for the same order is impossible, even if two clicks race
         created_by=admin,
     )
     db.add(bill)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="This purchase order already has a bill")
 
-    total = 0.0
-    for line in order.items:
+    plant_total = 0.0
+    supply_specs = []
+    for n, line in enumerate(order.items, 1):
+        if line.item_kind != "plant":
+            supply_specs.append(normalise_line(db, {
+                "item_kind": line.item_kind, "item_name": line.description, "plant_id": line.plant_id, "company": line.company, "lot_number": line.lot_number, "quantity": line.quantity,
+                "unit": line.unit, "unit_cost": line.unit_price, "total_cost": line.line_total, "mfg_date": line.mfg_date, "expiry_date": line.expiry_date,
+                "packet_size": line.packet_size, "packet_unit": line.packet_unit, "storage_location": line.storage_location, "notes": line.line_notes,
+            }, today, label=f"Line {n} ({line.description})"))
+            continue
+        # older orders only: a plant line is received into plant stock exactly as before
         plant = db.query(Plant).filter(Plant.id == line.plant_id).first()
         db.add(
             PurchaseItem(
                 purchase_id=bill.id,
                 plant_id=line.plant_id,
                 plant_name=line.description or (plant.name if plant else ""),
-                quantity=line.quantity,
+                quantity=int(round(line.quantity)),
                 unit_cost=line.unit_price,
                 total_cost=line.line_total,
             )
         )
         if plant:
-            # A tray-size line credits that variant's own stock (quantity =
-            # number of trays received), exactly how a tray sale deducts it
-            # on the website -- never the plant's plain per-unit stock.
+            # A tray-size line credits that variant's own stock (quantity = number of trays received), exactly how a tray sale
+            # deducts it on the website -- never the plant's plain per-unit stock.
             adjust_stock(
                 db,
                 plant_id=plant.id,
                 variant_id=line.variant_id,
-                quantity_delta=line.quantity,
+                quantity_delta=int(round(line.quantity)),
                 transaction_type="PURCHASE_RECEIVED",
                 source_type="PURCHASE_ORDER",
                 source_id=order.id,
                 reference=f"PURCHASE_ORDER:{order.id}:PURCHASE_RECEIVED:{line.variant_id or plant.id}",
                 created_by=admin,
             )
-        total += line.line_total
+        plant_total += line.line_total
 
-    bill.total_cost = round(total, 2)
+    if supply_specs:
+        # supplies go to their lot batches (never to plant stock); duplicate supplier bill numbers are stopped here
+        create_supply_bill(db, contact=order.contact, bill_number=bill_number, fallback_number=f"BILL-{order.order_number}", purchase_date=today, lines=supply_specs, admin=admin,
+                           request_id=None, override_duplicate=payload.allow_duplicate_bill, override_reason=payload.duplicate_reason, purchase=bill, extra_total=plant_total)
+    else:
+        from app.supply_inventory import check_duplicate_bill
+
+        reason = check_duplicate_bill(db, order.contact, bill_number, payload.allow_duplicate_bill, payload.duplicate_reason, exclude_id=bill.id)
+        if reason:
+            bill.duplicate_override_reason, bill.duplicate_override_by = reason, admin
+        bill.total_cost = round(plant_total, 2)
 
     old_status = order.status
     order.status = "Billed"

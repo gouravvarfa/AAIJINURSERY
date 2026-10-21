@@ -1,4 +1,4 @@
-"""Seed packets bought from seed companies: one row per batch (lot), and an append-only
+"""Seed packets (and medicines, fertilizers, other supplies) bought from suppliers: one row per batch (lot), and an append-only
 movement log. Quantities are NOT stored on the batch: received / used / adjusted / remaining
 are always the sums of the movement log, so history can never disagree with the numbers.
 
@@ -18,7 +18,12 @@ class SeedPacketBatch(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     record_no = Column(String(20), default="")
-    plant_id = Column(Integer, ForeignKey("plants.id"), nullable=False, index=True)
+    # Which plant a seed packet is for. NULL = "Unassigned / General stock" (and for medicines, fertilizers and other supplies).
+    plant_id = Column(Integer, ForeignKey("plants.id"), nullable=True, index=True)
+    # seed_packet | medicine | fertilizer | supply
+    item_kind = Column(String(20), nullable=False, default="seed_packet", index=True)
+    item_name = Column(String(200), default="")  # what it is, e.g. "Chlorpyrifos" (seed packets use `variety`)
+    quantity_unit = Column(String(12), default="packets")  # the unit the stock is counted in (packets, bottles, kg, litre ...)
     variety = Column(String(150), default="")
     company = Column(String(150), default="", index=True)
     supplier = Column(String(150), default="", index=True)
@@ -46,7 +51,7 @@ class SeedPacketMovement(Base):
     id = Column(Integer, primary_key=True, index=True)
     batch_id = Column(Integer, ForeignKey("seed_packet_batches.id"), nullable=False)
     movement_type = Column(String(20), nullable=False, index=True)
-    quantity = Column(Integer, nullable=False, default=0)  # signed packets: + in, - out, 0 for a status/detail correction
+    quantity = Column(Float, nullable=False, default=0)  # signed units: + in, - out, 0 for a status/detail correction (decimals for kg / litre)
     reason = Column(Text, default="")
     detail = Column(Text, default="")  # e.g. "expiry 2026-11-15 -> 2026-12-01"
     is_exception = Column(Boolean, nullable=False, default=False)  # used although expired, by an authorised admin
@@ -55,7 +60,9 @@ class SeedPacketMovement(Base):
     total_amount = Column(Float, nullable=True)
     invoice_number = Column(String(80), default="")
     supplier = Column(String(150), default="")
-    expense_id = Column(Integer, nullable=True)  # the accounting expense booked for this purchase
+    expense_id = Column(Integer, nullable=True)  # older receipts only: the expense that was booked before bills were used
+    purchase_id = Column(Integer, nullable=True, index=True)  # the supplier Bill this receipt came from
+    purchase_line_id = Column(Integer, nullable=True)
     request_id = Column(String(60), nullable=True)
     performed_by = Column(String(80), default="")
     created_at = Column(DateTime, default=datetime.utcnow, index=True)

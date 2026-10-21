@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../../api";
 import SearchSelect from "../../accounting/SearchSelect";
 import { Loading, Empty } from "../../../components/Loading";
-import PurchaseOrderItemsField from "../../accounting/PurchaseOrderItemsField";
+import SupplyLinesField, { blankLine } from "../../accounting/SupplyLinesField";
+import { lineProblem, useSupplyMeta } from "../../accounting/supplyCommon";
 import SearchBox from "../../accounting/SearchBox";
 import ExportButton from "../../accounting/ExportButton";
 import { purchaseOrderBadgeClass } from "../../accounting/accountingStatus";
@@ -21,7 +22,8 @@ export default function PurchaseOrders() {
   const [q, setQ] = useState("");
   const [mode, setMode] = useState("list");
   const [contacts, setContacts] = useState([]);
-  const [form, setForm] = useState({ contact_id: "", order_date: todayDateInput(), notes: "", items: [] });
+  const supply = useSupplyMeta();
+  const [form, setForm] = useState({ contact_id: "", order_date: todayDateInput(), notes: "", items: [blankLine()] });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -82,11 +84,21 @@ export default function PurchaseOrders() {
           order_date: String(order.order_date).slice(0, 10),
           notes: order.notes || "",
           items: order.items.map((i) => ({
+            item_kind: i.item_kind || "plant",
             plant_id: i.plant_id || "",
             variant_id: i.variant_id || "",
             description: i.description,
+            company: i.company || "",
+            lot_number: i.lot_number || "",
             quantity: i.quantity,
+            unit: i.unit || "",
             unit_price: i.unit_price,
+            mfg_date: i.mfg_date || "",
+            expiry_date: i.expiry_date || "",
+            packet_size: i.packet_size || "",
+            packet_unit: i.packet_unit || "g",
+            storage_location: i.storage_location || "",
+            line_notes: i.line_notes || "",
           })),
         });
         setMode("form");
@@ -104,7 +116,7 @@ export default function PurchaseOrders() {
 
   function startCreate() {
     setEditingOrder(null);
-    setForm({ contact_id: "", order_date: todayDateInput(), notes: "", items: [] });
+    setForm({ contact_id: "", order_date: todayDateInput(), notes: "", items: [blankLine()] });
     setError("");
     api.get("/admin/accounting/contacts").then(setContacts);
     setMode("form");
@@ -116,9 +128,16 @@ export default function PurchaseOrders() {
       setError("Please select a supplier contact.");
       return;
     }
-    if (!form.items.length || form.items.some((i) => !i.plant_id)) {
-      setError("Add at least one line item, and select a plant for every line.");
+    if (!form.items.length) {
+      setError("Add at least one item.");
       return;
+    }
+    for (let n = 0; n < form.items.length; n += 1) {
+      const problem = lineProblem(form.items[n], n + 1, supply);
+      if (problem) {
+        setError(problem);
+        return;
+      }
     }
     setSaving(true);
     setError("");
@@ -128,11 +147,21 @@ export default function PurchaseOrders() {
         order_date: form.order_date,
         notes: form.notes,
         items: form.items.map((i) => ({
-          plant_id: Number(i.plant_id),
+          item_kind: i.item_kind,
+          plant_id: i.plant_id ? Number(i.plant_id) : null,
           variant_id: i.variant_id || null,
           description: i.description,
-          quantity: i.quantity,
-          unit_price: i.unit_price,
+          company: i.company,
+          lot_number: i.lot_number,
+          quantity: Number(i.quantity),
+          unit: i.unit || supply.kind(i.item_kind).default_unit,
+          unit_price: Number(i.unit_price) || 0,
+          mfg_date: i.mfg_date || null,
+          expiry_date: i.expiry_date || null,
+          packet_size: i.packet_size ? Number(i.packet_size) : null,
+          packet_unit: i.packet_unit || "",
+          storage_location: i.storage_location,
+          line_notes: i.line_notes,
         })),
       };
       if (editingOrder) {
@@ -265,7 +294,7 @@ export default function PurchaseOrders() {
             </div>
             <div className="form-group">
               <label>Line Items</label>
-              <PurchaseOrderItemsField
+              <SupplyLinesField
                 value={form.items}
                 onChange={(next) => setForm((f) => ({ ...f, items: next }))}
               />

@@ -769,6 +769,9 @@ class Purchase(Base):
     purchase_order_id = Column(Integer, nullable=True, index=True)
     # Sent by the Add Purchase form so a double click / retry returns the same purchase instead of a second one (NULL on older rows)
     request_id = Column(String(60), nullable=True, unique=True, index=True)
+    # Set only when the same supplier bill number was entered again on purpose (who, and why). Audited.
+    duplicate_override_reason = Column(Text, default="")
+    duplicate_override_by = Column(String(80), default="")
 
     items = relationship("PurchaseItem", back_populates="purchase", cascade="all, delete-orphan")
 

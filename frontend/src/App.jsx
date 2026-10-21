@@ -59,6 +59,7 @@ import AdminStockDemand from "./admin/pages/StockDemand";
 import AdminStockOrders from "./admin/pages/StockOrders";
 import AdminStockAllocations from "./admin/pages/stock/StockAllocations";
 import AdminCustomerSeeds from "./admin/pages/stock/CustomerSeeds";
+import AdminPlantHistory from "./admin/pages/stock/PlantHistory";
 import AdminSeedPackets from "./admin/pages/stock/SeedPackets";
 import AdminAddPlants from "./admin/pages/stock/AddPlants";
 import AdminSessions from "./admin/pages/Sessions";
@@ -172,6 +173,7 @@ export default function App() {
           <Route path="orders/:id" element={<AdminOrderDetail />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="plants" element={<AdminPlants />} />
+          <Route path="plants/:id/history" element={<AdminPlantHistory />} />
           <Route path="purchases" element={<AdminPurchases />} />
           <Route path="services" element={<AdminServices />} />
           <Route path="pricing-plans" element={<AdminPricingPlans />} />

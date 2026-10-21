@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.accounting.audit import record_change
 from app.accounting.balances import contact_position, position
+from app.accounting.supplier_balance import supplier_position
 from app.accounting.models import (
     Contact,
     Expense,
@@ -37,18 +38,9 @@ def _with_summary(db: Session, contact: Contact) -> ContactOut:
     own = position(db, [contact.id])
     total_sales = own["invoiced"]
     total_paid = own["invoiced"] - own["net"]  # money that actually reduced this contact's balance
-    total_purchases = (
-        db.query(func.coalesce(func.sum(Purchase.total_cost), 0))
-        .filter(Purchase.contact_id == contact.id)
-        .scalar()
-        or 0
-    )
-    total_paid_out = (
-        db.query(func.coalesce(func.sum(PaymentOut.amount), 0))
-        .filter(PaymentOut.contact_id == contact.id)
-        .scalar()
-        or 0
-    )
+    sp = supplier_position(db, contact.id)  # bills + expenses owed, payments made, payable (one definition for the app)
+    total_purchases = sp["owed"]
+    total_paid_out = sp["paid"]
 
     out = ContactOut.model_validate(contact)
     out.total_sales = round(total_sales, 2)
@@ -60,7 +52,7 @@ def _with_summary(db: Session, contact: Contact) -> ContactOut:
     out.linked_contact_ids = [i for i in pos["contact_ids"] if i != contact.id]
     out.total_purchases = round(total_purchases, 2)
     out.total_paid_out = round(total_paid_out, 2)
-    out.payable = round(total_purchases - total_paid_out, 2)
+    out.payable = sp["payable"]
 
     out.orders_count = db.query(SalesOrder).filter(SalesOrder.contact_id == contact.id).count()
     out.invoices_count = db.query(Invoice).filter(Invoice.contact_id == contact.id).count()

@@ -19,6 +19,7 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -377,9 +378,9 @@ class PurchaseOrderItem(Base):
     purchase_order_id = Column(
         Integer, ForeignKey("accounting_purchase_orders.id"), nullable=False, index=True
     )
-    plant_id = Column(Integer, ForeignKey("plants.id"), nullable=False)
-    description = Column(String(200), default="")  # snapshot of plant name at write time
-    quantity = Column(Integer, default=1)
+    plant_id = Column(Integer, ForeignKey("plants.id"), nullable=True)  # only older lines (kind "plant") and seed packets point at a plant
+    description = Column(String(200), default="")  # the item name (older lines: snapshot of the plant name)
+    quantity = Column(Float, default=1)  # decimals for kg / litre; older plant lines are whole numbers
     unit_price = Column(Float, default=0)  # unit cost
     tax_rate_id = Column(Integer, ForeignKey("accounting_tax_rates.id"), nullable=True)
     tax_amount = Column(Float, default=0)
@@ -392,6 +393,17 @@ class PurchaseOrderItem(Base):
     # loose per-unit stock.
     variant_id = Column(Integer, nullable=True)
     tray_size = Column(Integer, nullable=True)
+    # Supplies (new Purchase Orders): plant | seed_packet | medicine | fertilizer | supply. "plant" only exists on older orders.
+    item_kind = Column(String(20), nullable=False, default="plant")
+    lot_number = Column(String(80), default="")
+    company = Column(String(150), default="")
+    unit = Column(String(12), default="")
+    mfg_date = Column(Date, nullable=True)
+    expiry_date = Column(Date, nullable=True)
+    packet_size = Column(Float, nullable=True)
+    packet_unit = Column(String(10), default="")
+    storage_location = Column(String(120), default="")
+    line_notes = Column(Text, default="")
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
     plant = relationship("Plant")

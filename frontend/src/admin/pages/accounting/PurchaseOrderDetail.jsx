@@ -12,6 +12,9 @@ export default function PurchaseOrderDetail() {
   const [error, setError] = useState("");
   const [converting, setConverting] = useState(false);
   const [dueDate, setDueDate] = useState("");
+  const [billNo, setBillNo] = useState("");
+  const [dup, setDup] = useState(""); // set when the supplier already has this bill number
+  const [dupReason, setDupReason] = useState("");
 
   function load() {
     setOrder(null);
@@ -30,10 +33,18 @@ export default function PurchaseOrderDetail() {
     try {
       const bill = await api.post(`/admin/accounting/purchase-orders/${id}/convert-to-bill`, {
         due_date: dueDate || null,
+        supplier_bill_number: billNo,
+        allow_duplicate_bill: Boolean(dup),
+        duplicate_reason: dup ? dupReason : "",
       });
       navigate(`/admin/accounting/bills/${bill.id}`);
     } catch (err) {
-      setError(err.message || "Unable to convert this purchase order to a bill.");
+      if (err.status === 409 && String(err.message).startsWith("DUPLICATE_BILL")) {
+        setDup(String(err.message).replace("DUPLICATE_BILL: ", ""));
+        setError("");
+      } else {
+        setError(err.message || "Unable to convert this purchase order to a bill.");
+      }
       setConverting(false);
     }
   }
@@ -75,9 +86,17 @@ export default function PurchaseOrderDetail() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>{item.description}</div>
                   <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                    {item.tray_size ? `${item.quantity} trays of ${item.tray_size}` : `Qty ${item.quantity}`} &times; &#8377;{item.unit_price}
+                    {item.tray_size ? `${item.quantity} trays of ${item.tray_size}` : `Qty ${item.quantity}${item.unit ? " " + item.unit : ""}`} &times; &#8377;{item.unit_price}
                     {item.tray_size ? "/tray" : ""}
                   </div>
+                  {item.item_kind && item.item_kind !== "plant" && (
+                    <div style={{ color: "var(--color-text-muted)", fontSize: "0.8rem" }}>
+                      {{ seed_packet: "Seed packet", medicine: "Medicine", fertilizer: "Fertilizer", supply: "Other supply" }[item.item_kind]}
+                      {item.company ? ` · ${item.company}` : ""}
+                      {item.lot_number ? ` · Lot ${item.lot_number}` : ""}
+                      {item.expiry_date ? ` · Expires ${new Date(item.expiry_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : ""}
+                    </div>
+                  )}
                 </div>
                 <div style={{ fontWeight: 700 }}>&#8377;{item.line_total}</div>
               </div>
@@ -124,8 +143,18 @@ export default function PurchaseOrderDetail() {
             <div className="admin-form-card" style={{ maxWidth: "none" }}>
               <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Convert to Bill</h2>
               <p style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                Receiving this bill will increase stock for each line item's plant.
+                Making the bill receives every line into its lot in Seed Packet Entry (packet and supply stock, with the lot and expiry above). It does not add ready plant stock. The bill stays Unpaid until you record a payment in Payments Out.
               </p>
+              <div className="form-group">
+                <label htmlFor="supplier_bill_no">Supplier's bill / invoice number (optional)</label>
+                <input id="supplier_bill_no" className="form-control" maxLength={80} value={billNo} onChange={(e) => { setBillNo(e.target.value); setDup(""); }} placeholder="Leave empty if the supplier has not given a bill yet" />
+              </div>
+              {dup && (
+                <div className="alert alert-warning" role="alert">
+                  <p style={{ margin: "0 0 8px" }}>{dup}</p>
+                  <input className="form-control" placeholder="Why is this a second bill with the same number? (required)" value={dupReason} onChange={(e) => setDupReason(e.target.value)} aria-label="Reason for the duplicate bill number" />
+                </div>
+              )}
               <div className="form-group">
                 <label htmlFor="due_date">Due Date (optional)</label>
                 <input
@@ -139,10 +168,10 @@ export default function PurchaseOrderDetail() {
               <button
                 type="button"
                 className="btn btn-primary btn-block"
-                disabled={converting}
+                disabled={converting || (dup && dupReason.trim().length < 5)}
                 onClick={handleConvert}
               >
-                {converting ? "Converting..." : "Convert to Bill"}
+                {converting ? "Converting..." : dup ? "Convert anyway" : "Convert to Bill"}
               </button>
             </div>
           )}

@@ -171,6 +171,11 @@ class SalesOrderOut(BaseModel):
     contact: Optional[ContactOut] = None
     items: List[SalesOrderItemOut] = []
     invoices: List[SalesOrderInvoiceRef] = []
+    # Advance payments taken against this order (filled in by the router from customer receipts).
+    advance_received: float = 0
+    advance_remaining: float = 0  # not yet used on an invoice
+    balance_after_advance: float = 0  # order total minus advance received
+    advances: List[dict] = []
 
 
 # ---------- Invoices ----------

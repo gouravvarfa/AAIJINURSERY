@@ -2,12 +2,12 @@ from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.accounting.audit import record_change
-from app.accounting.balances import DEAD, apply_advance, contact_position, money, recompute_invoice
+from app.accounting.balances import DEAD, apply_advance, contact_position, money, receipt_remaining, recompute_invoice
 from app.accounting.notifications import queue_invoice_created, queue_payment_received, queue_sales_order_created
 from app.accounting.models import (
     Contact,
@@ -15,6 +15,7 @@ from app.accounting.models import (
     Invoice,
     InvoiceItem,
     PaymentIn,
+    ReceiptAllocation,
     SalesOrder,
     SalesOrderItem,
 )
@@ -122,7 +123,61 @@ def get_sales_order(
             line.physical_stock = pos.get("physical_stock")
             line.reserved_stock = pos.get("reserved_stock")
             line.available_stock = pos.get("available_stock")
+    _attach_advances(db, item)
     return item
+
+
+def _attach_advances(db: Session, order: SalesOrder) -> None:
+    rows = db.query(CustomerReceipt).filter(CustomerReceipt.sales_order_id == order.id).order_by(CustomerReceipt.id).all()
+    live = [r for r in rows if r.status == "Active"]
+    order.advances = [{"id": r.id, "amount": r.amount, "method": r.method, "payment_date": r.payment_date.isoformat() if r.payment_date else None, "reference": r.reference or "",
+                       "notes": r.notes or "", "status": r.status, "remaining": receipt_remaining(db, r), "recorded_by": r.recorded_by} for r in rows]
+    order.advance_received = money(sum(r.amount for r in live))
+    order.advance_remaining = money(sum(receipt_remaining(db, r) for r in live))
+    order.balance_after_advance = money(max((order.total_amount or 0) - order.advance_received, 0))
+
+
+class AdvanceIn(BaseModel):
+    amount: float = Field(gt=0, le=1_000_000_000)
+    method: str = "Cash"
+    payment_date: Optional[datetime] = None
+    reference: str = Field(default="", max_length=120)
+    notes: str = Field(default="", max_length=1000)
+    request_id: str = Field(min_length=8, max_length=60)
+
+
+@router.post("/sales-orders/{item_id}/advance", response_model=SalesOrderOut, status_code=201)
+def record_advance(
+    item_id: int,
+    payload: AdvanceIn,
+    admin: str = Depends(get_current_admin),
+    _role: str = Depends(require_accounting_action("CREATE", SALES_WRITE_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Advance payment received against a Sales Order. It is the customer's money from now on: it lowers what they
+    owe at once, and is used automatically on the invoice when this order is billed. Retrying the same request_id
+    never records it twice."""
+    order = db.query(SalesOrder).filter(SalesOrder.id == item_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Sales order not found")
+    if payload.method not in ("Cash", "Bank", "UPI", "Card", "Online", "Other"):
+        raise HTTPException(status_code=400, detail="Unknown payment method")
+    if db.query(CustomerReceipt.id).filter(CustomerReceipt.request_id == payload.request_id).first():
+        return get_sales_order(order.id, admin, db)
+    if order.status in ("Cancelled", "Voided") or db.query(Invoice.id).filter(Invoice.sales_order_id == order.id).first():
+        raise HTTPException(status_code=400, detail="This order is already invoiced or closed. Record the payment on its invoice instead.")
+    taken = float(db.query(func.coalesce(func.sum(CustomerReceipt.amount), 0)).filter(CustomerReceipt.sales_order_id == order.id, CustomerReceipt.status == "Active").scalar() or 0)
+    if money(taken + payload.amount) > money(order.total_amount) + 0.004:
+        raise HTTPException(status_code=400, detail=f"Advance cannot be more than the order total ({money(order.total_amount):,.2f}). Already received {money(taken):,.2f}.")
+    r = CustomerReceipt(contact_id=order.contact_id, amount=money(payload.amount), method=payload.method, payment_date=payload.payment_date or datetime.utcnow(),
+                        reference=payload.reference.strip() or f"Advance for {order.order_number}", notes=payload.notes.strip(), kind="advance", sales_order_id=order.id,
+                        request_id=payload.request_id, recorded_by=admin)
+    db.add(r)
+    db.flush()
+    record_change(db, "accounting_customer_receipts", r.id, "create", changed_by=admin)
+    record_change(db, "accounting_sales_orders", order.id, "update", changed_by=admin, changes={"advance_received": (money(taken), money(taken + payload.amount))})
+    db.commit()
+    return get_sales_order(order.id, admin, db)
 
 
 def _add_lines(db: Session, order: SalesOrder, lines) -> float:
@@ -337,8 +392,15 @@ def convert_to_invoice(
     # Money handled when the bill is made (walk-in customer): use the earlier advance and/or
     # take payment now. These are real, separate records (allocation / payment / advance).
     advance_used = 0.0
+    # Advance taken against THIS order is always used on its bill, first.
+    for adv in db.query(CustomerReceipt).filter(CustomerReceipt.sales_order_id == order.id, CustomerReceipt.status == "Active").order_by(CustomerReceipt.id).all():
+        take = min(receipt_remaining(db, adv), money(invoice.total_amount - advance_used))
+        if take > 0.004:
+            db.add(ReceiptAllocation(receipt_id=adv.id, invoice_id=invoice.id, amount=money(take), created_by=admin, created_at=datetime.utcnow()))
+            advance_used = money(advance_used + take)
+    db.flush()
     if payload.use_advance:
-        advance_used = apply_advance(db, invoice, invoice.total_amount, admin)
+        advance_used = money(advance_used + apply_advance(db, invoice, invoice.total_amount, admin))
     received = money(payload.received_amount)
     if received > 0:
         need = max(invoice.total_amount - advance_used, 0)

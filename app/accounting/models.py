@@ -271,6 +271,7 @@ class CustomerReceipt(Base):
     # advance | overpayment | void_transfer
     kind = Column(String(20), nullable=False, default="advance")
     invoice_id = Column(Integer, ForeignKey("accounting_invoices.id"), nullable=True, index=True)  # the invoice it came from, if any
+    sales_order_id = Column(Integer, nullable=True, index=True)  # an advance taken against this Sales Order
     status = Column(String(10), nullable=False, default="Active", index=True)  # Active | Reversed
     request_id = Column(String(60), nullable=True)
     recorded_by = Column(String(80), default="")

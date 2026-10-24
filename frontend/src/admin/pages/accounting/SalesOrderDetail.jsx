@@ -19,6 +19,11 @@ export default function SalesOrderDetail() {
   const [method, setMethod] = useState("Cash");
   const [useAdvance, setUseAdvance] = useState(false);
   const [position, setPosition] = useState(null);
+  const [advAmount, setAdvAmount] = useState("");
+  const [advMethod, setAdvMethod] = useState("Cash");
+  const [advRef, setAdvRef] = useState("");
+  const [advBusy, setAdvBusy] = useState(false);
+  const [advKey, setAdvKey] = useState(() => `adv-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`);
 
   function load() {
     setOrder(null);
@@ -30,6 +35,35 @@ export default function SalesOrderDetail() {
   }
 
   useEffect(load, [id]);
+
+  async function saveAdvance(e) {
+    e.preventDefault();
+    if (advBusy) return;
+    setAdvBusy(true);
+    setError("");
+    try {
+      const updated = await api.post(`/admin/accounting/sales-orders/${id}/advance`, { amount: Number(advAmount), method: advMethod, reference: advRef, request_id: advKey });
+      setOrder(updated);
+      setAdvAmount("");
+      setAdvRef("");
+      setAdvKey(`adv-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`);
+    } catch (err) {
+      setError(err.message || "Could not record the advance.");
+    } finally {
+      setAdvBusy(false);
+    }
+  }
+
+  async function reverseAdvance(receiptId) {
+    if (!window.confirm("Remove this advance? Use this only if it was entered by mistake.")) return;
+    setError("");
+    try {
+      await api.post(`/admin/accounting/receipts/${receiptId}/reverse`, {});
+      load();
+    } catch (err) {
+      setError(err.message || "Could not remove the advance.");
+    }
+  }
 
   async function handleConvert() {
     setConverting(true);
@@ -172,6 +206,38 @@ export default function SalesOrderDetail() {
 
           {order.source === "offline" && <DeliveryPanel salesOrder={order} />}
 
+          {(canConvert || order.advances?.length > 0) && (
+            <div className="admin-form-card" style={{ maxWidth: "none", marginBottom: 20 }}>
+              <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Advance Payment</h2>
+              <div className="sp-kpis" style={{ marginBottom: 10 }}>
+                <div><span>₹{order.total_amount.toLocaleString("en-IN")}</span>Order total</div>
+                <div><span>₹{order.advance_received.toLocaleString("en-IN")}</span>Advance received</div>
+                <div className={order.balance_after_advance > 0 ? "warn" : ""}><span>₹{order.balance_after_advance.toLocaleString("en-IN")}</span>Balance to pay</div>
+              </div>
+              {order.advances.map((a) => (
+                <p key={a.id} style={{ margin: "4px 0", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <strong>₹{a.amount.toLocaleString("en-IN")}</strong> · {a.method} · {new Date(a.payment_date).toLocaleDateString("en-IN")}{a.reference ? ` · ${a.reference}` : ""}
+                  {a.status === "Reversed" ? <span className="badge badge-muted">Removed</span> : a.remaining < a.amount ? <span className="badge badge-muted">Used on invoice</span> : canConvert ? (
+                    <button type="button" className="btn btn-sm btn-outline dark" onClick={() => reverseAdvance(a.id)}>Remove</button>
+                  ) : null}
+                </p>
+              ))}
+              {canConvert && (
+                <form onSubmit={saveAdvance} style={{ marginTop: 10 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <input className="form-control" style={{ flex: "1 1 120px" }} inputMode="decimal" placeholder="Advance amount (₹)" aria-label="Advance amount" value={advAmount} onChange={(e) => setAdvAmount(e.target.value.replace(/[^0-9.]/g, ""))} />
+                    <select className="form-control" style={{ flex: "0 1 120px" }} value={advMethod} onChange={(e) => setAdvMethod(e.target.value)} aria-label="Advance payment method">
+                      {["Cash", "Bank", "UPI", "Card", "Online", "Other"].map((m) => <option key={m}>{m}</option>)}
+                    </select>
+                    <input className="form-control" style={{ flex: "1 1 140px" }} maxLength={120} placeholder="Reference (optional)" aria-label="Advance reference" value={advRef} onChange={(e) => setAdvRef(e.target.value)} />
+                    <button className="btn btn-primary" disabled={advBusy || !(Number(advAmount) > 0)}>{advBusy ? "Saving..." : "Record Advance"}</button>
+                  </div>
+                  <small className="stock-hint">It lowers what the customer owes at once and is adjusted automatically on the invoice when you convert this order.</small>
+                </form>
+              )}
+            </div>
+          )}
+
           {canConvert && (
             <div className="admin-form-card" style={{ maxWidth: "none" }}>
               <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Convert to Invoice</h2>
@@ -185,11 +251,11 @@ export default function SalesOrderDetail() {
                   onChange={(e) => setDueDate(e.target.value)}
                 />
               </div>
-              <CustomerBalanceCard contactId={order.contact_id} onLoaded={setPosition} />
-              {position?.advance > 0 && (
+              <CustomerBalanceCard key={order.advance_received} contactId={order.contact_id} onLoaded={setPosition} />
+              {position?.advance - (order.advance_remaining || 0) > 0.004 && (
                 <label className="sp-check" style={{ margin: "8px 0" }}>
                   <input type="checkbox" checked={useAdvance} onChange={(e) => setUseAdvance(e.target.checked)} />
-                  Use the customer's advance (₹{position.advance.toLocaleString("en-IN")}) on this bill
+                  Use the customer's other advance (₹{Math.max(position.advance - (order.advance_remaining || 0), 0).toLocaleString("en-IN")}) on this bill
                 </label>
               )}
               <div className="form-group">

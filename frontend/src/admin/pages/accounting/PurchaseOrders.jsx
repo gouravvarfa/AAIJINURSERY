@@ -23,7 +23,7 @@ export default function PurchaseOrders() {
   const [mode, setMode] = useState("list");
   const [contacts, setContacts] = useState([]);
   const supply = useSupplyMeta();
-  const [form, setForm] = useState({ contact_id: "", order_date: todayDateInput(), notes: "", items: [blankLine()] });
+  const [form, setForm] = useState({ contact_id: "", order_date: todayDateInput(), notes: "", supplier_bill_number: "", items: [blankLine()] });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -83,6 +83,7 @@ export default function PurchaseOrders() {
           contact_id: order.contact_id,
           order_date: String(order.order_date).slice(0, 10),
           notes: order.notes || "",
+          supplier_bill_number: order.supplier_bill_number || "",
           items: order.items.map((i) => ({
             item_kind: i.item_kind || "plant",
             plant_id: i.plant_id || "",
@@ -116,7 +117,7 @@ export default function PurchaseOrders() {
 
   function startCreate() {
     setEditingOrder(null);
-    setForm({ contact_id: "", order_date: todayDateInput(), notes: "", items: [blankLine()] });
+    setForm({ contact_id: "", order_date: todayDateInput(), notes: "", supplier_bill_number: "", items: [blankLine()] });
     setError("");
     api.get("/admin/accounting/contacts").then(setContacts);
     setMode("form");
@@ -146,6 +147,7 @@ export default function PurchaseOrders() {
         contact_id: Number(form.contact_id),
         order_date: form.order_date,
         notes: form.notes,
+        supplier_bill_number: form.supplier_bill_number,
         items: form.items.map((i) => ({
           item_kind: i.item_kind,
           plant_id: i.plant_id ? Number(i.plant_id) : null,
@@ -282,6 +284,17 @@ export default function PurchaseOrders() {
               </div>
             )}
             <div className="form-group">
+              <label htmlFor="supplier_bill_number">Supplier Bill Number (optional)</label>
+              <input
+                id="supplier_bill_number"
+                className="form-control"
+                maxLength={80}
+                value={form.supplier_bill_number}
+                onChange={(e) => setForm((f) => ({ ...f, supplier_bill_number: e.target.value }))}
+                placeholder="The number printed on the supplier's bill"
+              />
+            </div>
+            <div className="form-group">
               <label htmlFor="order_date">Order Date</label>
               <input
                 id="order_date"
@@ -345,6 +358,7 @@ export default function PurchaseOrders() {
               <tr>
                 <th>Order #</th>
                 <th>Supplier</th>
+                <th>Supplier Bill #</th>
                 <th>Date</th>
                 <th>Total</th>
                 <th>Status</th>
@@ -356,6 +370,7 @@ export default function PurchaseOrders() {
                 <tr key={item.id}>
                   <td>{item.order_number}</td>
                   <td>{item.contact?.name || "-"}</td>
+                  <td>{item.supplier_bill_number || "-"}</td>
                   <td>{new Date(item.order_date).toLocaleDateString()}</td>
                   <td>₹{item.total_amount.toLocaleString()}</td>
                   <td>

@@ -21,7 +21,7 @@ export default function PurchaseOrderDetail() {
     setError("");
     api
       .get(`/admin/accounting/purchase-orders/${id}`)
-      .then(setOrder)
+      .then((o) => { setOrder(o); setBillNo(o.supplier_bill_number || ""); })
       .catch((err) => setError(err.message || "Could not load this purchase order."));
   }
 
@@ -62,6 +62,7 @@ export default function PurchaseOrderDetail() {
         <div>
           <h1 style={{ marginBottom: 4 }}>Purchase Order {order.order_number}</h1>
           <span className={`badge ${purchaseOrderBadgeClass(order.status)}`}>{order.status}</span>
+          {order.supplier_bill_number && <div style={{ marginTop: 6, color: "var(--color-text-muted)" }}>Supplier bill no. <strong>{order.supplier_bill_number}</strong></div>}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {order.status === "Draft" && !order.bill && (

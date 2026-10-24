@@ -316,3 +316,16 @@ def test_new_plant_created_inactive_has_no_stock_and_a_packet_does_not_activate_
     _entry(c, plant_id=plant["id"], item_name="Seed for it", quantity=40)
     assert _stock(plant["id"]) == 0  # 40 packets are packet stock, not 40 ready plants
     assert c.get(f"/api/admin/plants/{plant['id']}/history").json()["plant"]["is_active"] is False
+
+
+def test_po_keeps_supplier_bill_number_and_uses_it_on_convert():
+    c = _admin()
+    sup = _supplier(c)
+    line = _line("seed_packet", description="Okra", lot_number="OK-1", quantity=5, unit_price=10)
+    po = _po(c, sup, [line], supplier_bill_number="  SB-77 ").json()
+    assert po["supplier_bill_number"] == "SB-77"
+    assert c.get(f"{PO}/{po['id']}").json()["supplier_bill_number"] == "SB-77"
+    po2 = c.put(f"{PO}/{po['id']}", json={"contact_id": sup["id"], "order_date": datetime.utcnow().isoformat(), "items": [line], "supplier_bill_number": "SB-78"}).json()
+    assert po2["supplier_bill_number"] == "SB-78"
+    bill = _bill(c, po["id"]).json()
+    assert bill["invoice_number"] == "SB-78"

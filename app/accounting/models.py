@@ -355,6 +355,7 @@ class PurchaseOrder(Base):
     tax_total = Column(Float, default=0)
     total_amount = Column(Float, default=0)
     notes = Column(Text, default="")
+    supplier_bill_number = Column(String(80), default="")  # the supplier's own bill number, kept next to the PO
     source = Column(String(10), nullable=False, default="offline", index=True)
     source_id = Column(String(40), nullable=True)
     created_by = Column(String(80), default="")

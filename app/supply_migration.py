@@ -20,6 +20,7 @@ ADD_COLUMNS = {
     "purchases": [("duplicate_override_reason", "TEXT DEFAULT ''"), ("duplicate_override_by", "VARCHAR(80) DEFAULT ''")],
     "seed_packet_batches": [("item_kind", "VARCHAR(20) NOT NULL DEFAULT 'seed_packet'"), ("item_name", "VARCHAR(200) DEFAULT ''"), ("quantity_unit", "VARCHAR(12) DEFAULT 'packets'")],
     "seed_packet_movements": [("purchase_id", "INTEGER"), ("purchase_line_id", "INTEGER")],
+    "accounting_purchase_orders": [("supplier_bill_number", "VARCHAR(80) DEFAULT ''")],
     "accounting_purchase_order_items": [
         ("item_kind", "VARCHAR(20) NOT NULL DEFAULT 'plant'"), ("lot_number", "VARCHAR(80) DEFAULT ''"), ("company", "VARCHAR(150) DEFAULT ''"),
         ("unit", "VARCHAR(12) DEFAULT ''"), ("mfg_date", "DATE"), ("expiry_date", "DATE"), ("packet_size", "FLOAT"), ("packet_unit", "VARCHAR(10) DEFAULT ''"),

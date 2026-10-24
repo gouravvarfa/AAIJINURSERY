@@ -135,6 +135,7 @@ def create_purchase_order(
         status="Draft",
         order_date=payload.order_date,
         notes=payload.notes,
+        supplier_bill_number=(payload.supplier_bill_number or "").strip()[:80],
         source="offline",
         created_by=admin,
     )
@@ -182,6 +183,7 @@ def update_purchase_order(
     order.contact_id = contact.id
     order.order_date = payload.order_date
     order.notes = payload.notes
+    order.supplier_bill_number = (payload.supplier_bill_number or "").strip()[:80]
     order.subtotal = round(subtotal, 2)
     order.total_amount = round(subtotal, 2)
     after = {"contact_id": order.contact_id, "order_date": str(order.order_date), "notes": order.notes, "total_amount": order.total_amount}
@@ -223,7 +225,7 @@ def convert_to_bill(
         raise HTTPException(status_code=400, detail="This purchase order already has a bill")
 
     today = date.today()
-    bill_number = (payload.supplier_bill_number or "").strip()
+    bill_number = (payload.supplier_bill_number or order.supplier_bill_number or "").strip()
     bill = Purchase(
         purchase_date=datetime.utcnow(),
         supplier=order.contact.name if order.contact else "",

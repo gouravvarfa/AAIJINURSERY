@@ -300,6 +300,7 @@ class PurchaseOrderIn(BaseModel):
     contact_id: int
     order_date: datetime
     notes: str = ""
+    supplier_bill_number: str = ""
     items: List[PurchaseOrderItemIn]
 
 
@@ -324,6 +325,7 @@ class PurchaseOrderOut(BaseModel):
     tax_total: float
     total_amount: float
     notes: str
+    supplier_bill_number: str = ""
     source: str
     source_id: Optional[str] = None
     created_by: str

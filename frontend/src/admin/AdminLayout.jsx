@@ -326,7 +326,8 @@ export default function AdminLayout() {
             type="button"
             className="admin-logout-btn"
             onClick={() => {
-              if (confirm("Are you sure you want to log out?")) logout();
+              // No native confirm(): iPad home-screen apps can block it, which made the button look dead.
+              Promise.resolve(logout()).catch(() => {}).finally(() => window.location.assign("/login"));
             }}
           >
             <LogoutIcon />

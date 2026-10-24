@@ -29,6 +29,9 @@ export default function SalesOrders() {
   const [contacts, setContacts] = useState([]);
   const [form, setForm] = useState({ contact_id: "", order_date: todayDateInput(), delivery_date: "", notes: "", items: [] });
   const [saving, setSaving] = useState(false);
+  const [advAmount, setAdvAmount] = useState("");
+  const [advMethod, setAdvMethod] = useState("Cash");
+  const [advRef, setAdvRef] = useState("");
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [showContactModal, setShowContactModal] = useState(false);
@@ -118,6 +121,9 @@ export default function SalesOrders() {
   function startCreate() {
     setEditingOrder(null);
     setForm({ contact_id: "", order_date: todayDateInput(), delivery_date: "", notes: "", items: [] });
+    setAdvAmount("");
+    setAdvMethod("Cash");
+    setAdvRef("");
     setError("");
     api.get("/admin/accounting/contacts").then(setContacts);
     setMode("form");
@@ -155,7 +161,22 @@ export default function SalesOrders() {
         navigate("/admin/accounting/sales-orders/" + editingOrder.id);
         return;
       }
-      await api.post("/admin/accounting/sales-orders", body);
+      const advance = Number(advAmount || 0);
+      const orderTotal = form.items.reduce((n, i) => n + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0);
+      if (advance > 0 && advance > orderTotal + 0.004) {
+        setError("Advance cannot be more than the order total.");
+        return;
+      }
+      const created = await api.post("/admin/accounting/sales-orders", body);
+      if (advance > 0) {
+        try {
+          await api.post(`/admin/accounting/sales-orders/${created.id}/advance`, { amount: advance, method: advMethod, reference: advRef, request_id: `adv-new-${created.id}` });
+        } catch (err) {
+          // The order is saved; the advance can be entered again on its page.
+          navigate("/admin/accounting/sales-orders/" + created.id);
+          return;
+        }
+      }
       setMode("list");
       load();
     } catch (err) {
@@ -306,6 +327,19 @@ export default function SalesOrders() {
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
               />
             </div>
+            {!editingOrder && (
+              <div className="form-group">
+                <label htmlFor="advance_amount">Advance Payment received (optional)</label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input id="advance_amount" className="form-control" style={{ flex: "1 1 140px" }} inputMode="decimal" placeholder="Amount (₹)" value={advAmount} onChange={(e) => setAdvAmount(e.target.value.replace(/[^0-9.]/g, ""))} />
+                  <select className="form-control" style={{ flex: "0 1 120px" }} value={advMethod} onChange={(e) => setAdvMethod(e.target.value)} aria-label="Advance payment method">
+                    {["Cash", "Bank", "UPI", "Card", "Online", "Other"].map((m) => <option key={m}>{m}</option>)}
+                  </select>
+                  <input className="form-control" style={{ flex: "1 1 160px" }} maxLength={120} placeholder="Reference (optional)" aria-label="Advance reference" value={advRef} onChange={(e) => setAdvRef(e.target.value)} />
+                </div>
+                <small className="stock-hint">Money the customer already paid. It lowers their outstanding at once and is adjusted on the invoice automatically.</small>
+              </div>
+            )}
             <button className="btn btn-primary" disabled={saving}>
               {saving ? "Saving..." : editingOrder ? "Save Changes" : "Save Sales Order"}
             </button>

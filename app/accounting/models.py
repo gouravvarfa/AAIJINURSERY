@@ -406,6 +406,7 @@ class PurchaseOrderItem(Base):
     packet_unit = Column(String(10), default="")
     storage_location = Column(String(120), default="")
     line_notes = Column(Text, default="")
+    plant_sell_price = Column(Float, nullable=True)  # seed packets: what ONE plant grown from this seed sells for (never the packet cost)
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
     plant = relationship("Plant")

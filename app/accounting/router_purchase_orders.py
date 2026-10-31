@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.accounting.audit import record_change
+from app.audit import record_admin_audit
 from app.accounting.models import Contact, PurchaseOrder, PurchaseOrderItem
 from app.accounting.permissions import PURCHASE_WRITE_ROLES, require_accounting_action
 from app.accounting.router_bills import _with_summary as _bill_with_summary
@@ -72,6 +73,18 @@ def get_purchase_order(
     return _with_bill_ref(db, item)
 
 
+def _sell_price(line, spec, n: int):
+    """The selling price of one plant grown from this seed (only for a seed packet linked to a plant)."""
+    price = getattr(line, "plant_sell_price", None)
+    if price is None or price == "":
+        return None
+    if not spec.get("plant_id") or spec["item_kind"] != "seed_packet":
+        raise HTTPException(status_code=400, detail=f"Line {n}: a plant selling price needs a seed packet linked to a plant")
+    if not (0 < float(price) <= 100000):
+        raise HTTPException(status_code=400, detail=f"Line {n}: the plant selling price must be more than 0")
+    return round(float(price), 2)
+
+
 def _add_lines(db: Session, order: PurchaseOrder, lines, allow_plant: bool = False) -> float:
     """Validates and adds the given line items to `order`, returning their subtotal. Shared by create and edit so both apply the
     same checks. A Purchase Order is for seed packets, medicines, fertilizers and other supplies. Plants are not bought here
@@ -112,6 +125,7 @@ def _add_lines(db: Session, order: PurchaseOrder, lines, allow_plant: bool = Fal
             purchase_order_id=order.id, plant_id=spec["plant_id"], description=spec["item_name"], quantity=spec["quantity"], unit_price=spec["unit_cost"] or 0, tax_rate_id=line.tax_rate_id,
             line_total=line_total, item_kind=spec["item_kind"], lot_number=spec["lot_number"], company=spec["company"], unit=spec["unit"], mfg_date=spec["mfg_date"],
             expiry_date=spec["expiry_date"], packet_size=spec["packet_size"], packet_unit=spec["packet_unit"], storage_location=spec["storage_location"], line_notes=spec["notes"],
+            plant_sell_price=_sell_price(line, spec, n),
         ))
     return subtotal
 
@@ -296,6 +310,13 @@ def convert_to_bill(
             bill.duplicate_override_reason, bill.duplicate_override_by = reason, admin
         bill.total_cost = round(plant_total, 2)
 
+    # A plant selling price typed on a seed line becomes that plant's selling price (audited). Packet cost is never used as a plant price.
+    for it in order.items:
+        if it.item_kind == "seed_packet" and it.plant_id and it.plant_sell_price:
+            plant = db.query(Plant).filter(Plant.id == it.plant_id).first()
+            if plant and round(plant.price or 0, 2) != round(it.plant_sell_price, 2):
+                record_admin_audit(admin, "plant_price_set_from_purchase_order", {"plant": plant.id, "old": plant.price, "new": it.plant_sell_price, "purchase_order": order.id})
+                plant.price = round(it.plant_sell_price, 2)
     old_status = order.status
     order.status = "Billed"
     db.commit()

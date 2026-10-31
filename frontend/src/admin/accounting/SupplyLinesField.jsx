@@ -3,7 +3,7 @@ import { api } from "../../api";
 import { PlantLink, qtyText, useSuggestions, useSupplyMeta } from "./supplyCommon";
 
 const money = (n) => `₹${(Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-export const blankLine = (kind = "seed_packet", unit = "packets") => ({ item_kind: kind, description: "", plant_id: "", company: "", lot_number: "", quantity: "", unit, unit_price: "", mfg_date: "", expiry_date: "", packet_size: "", packet_unit: "g", storage_location: "", line_notes: "" });
+export const blankLine = (kind = "seed_packet", unit = "packets") => ({ item_kind: kind, description: "", plant_id: "", company: "", lot_number: "", quantity: "", unit, unit_price: "", mfg_date: "", expiry_date: "", packet_size: "", packet_unit: "g", storage_location: "", line_notes: "", plant_sell_price: "" });
 
 // One line of a Purchase Order: a seed packet, medicine, fertilizer or other supply, with its own lot number and expiry.
 // (Plants are not bought here. Older orders that already had plant lines show them as read-only rows.)
@@ -70,6 +70,13 @@ function LineCard({ row, n, meta, kind, whole, plants, showMore, toggleMore, onC
           <select className="form-control" value={row.unit || k.default_unit} onChange={(e) => onChange({ unit: e.target.value })}>{meta.units.map((u) => (<option key={u.key} value={u.key}>{u.key}</option>))}</select></label>
         <label><span className="sl-label">Unit cost (₹)</span><input className="form-control" inputMode="decimal" value={row.unit_price} onChange={(e) => onChange({ unit_price: qtyText(e.target.value) })} /></label>
         <label><span className="sl-label">Expiry date{k.expiry_required ? " *" : ""}</span><input className="form-control" type="date" value={row.expiry_date} onChange={(e) => onChange({ expiry_date: e.target.value })} /></label>
+        {row.item_kind === "seed_packet" && row.plant_id && (
+          <label className="sl-wide"><span className="sl-label">Plant selling price (₹ for ONE plant grown from this seed, optional)</span>
+            <input className="form-control" inputMode="decimal" value={row.plant_sell_price} onChange={(e) => onChange({ plant_sell_price: qtyText(e.target.value) })} placeholder="What you sell one plant for, not the packet cost" />
+            <small className="stock-hint">{(() => { const pl = plants.find((x) => x.id === Number(row.plant_id)); return pl ? `Current selling price of ${pl.name}: ₹${pl.price}. ` : ""; })()}Leave empty to keep the current price. When you receive this order the plant's price is changed to this.</small>
+            {Number(row.plant_sell_price) > 100 && <small className="sp-problem">₹{row.plant_sell_price} for one plant looks very high. Please check.</small>}
+          </label>
+        )}
       </div>
       <div className="sl-foot">
         <button type="button" className="sl-more" onClick={toggleMore}>{showMore ? "Fewer details" : "More details (manufacturing date, packet size, storage, notes)"}</button>

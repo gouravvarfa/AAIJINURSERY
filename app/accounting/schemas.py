@@ -278,6 +278,7 @@ class PurchaseOrderItemOut(BaseModel):
     packet_unit: str = ""
     storage_location: str = ""
     line_notes: str = ""
+    plant_sell_price: Optional[float] = None
 
 
 class PurchaseOrderItemIn(BaseModel):
@@ -296,6 +297,7 @@ class PurchaseOrderItemIn(BaseModel):
     packet_unit: str = ""
     storage_location: str = ""
     line_notes: str = ""
+    plant_sell_price: Optional[float] = None
     tax_rate_id: Optional[int] = None
     # Older plant lines only: when set, quantity means "number of trays received" and unit_price the per-tray cost.
     variant_id: Optional[int] = None

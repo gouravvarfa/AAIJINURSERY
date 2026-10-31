@@ -100,6 +100,7 @@ export default function PurchaseOrders() {
             packet_unit: i.packet_unit || "g",
             storage_location: i.storage_location || "",
             line_notes: i.line_notes || "",
+            plant_sell_price: i.plant_sell_price || "",
           })),
         });
         setMode("form");
@@ -164,6 +165,7 @@ export default function PurchaseOrders() {
           packet_unit: i.packet_unit || "",
           storage_location: i.storage_location,
           line_notes: i.line_notes,
+          plant_sell_price: i.plant_sell_price ? Number(i.plant_sell_price) : null,
         })),
       };
       if (editingOrder) {

@@ -84,11 +84,11 @@ def _with_plant(db: Session, items: list[SeedEntry]) -> list[dict]:
 # ------------------------------------------------------------------ customers
 @router.get("/customers", dependencies=[VIEW])
 def customers(q: str = Query("", max_length=60), db: Session = Depends(get_db)):
-    query = db.query(Contact).filter(Contact.contact_type == "customer", Contact.is_active.is_(True))
+    query = db.query(Contact).filter(Contact.contact_type.in_(("customer", "both")), Contact.is_active.is_(True))
     if q.strip():
         like = f"%{q.strip()}%"
         query = query.filter(Contact.name.ilike(like) | Contact.phone.ilike(like))
-    return [{"id": c.id, "name": c.name, "phone": c.phone or ""} for c in query.order_by(Contact.name).limit(40)]
+    return [{"id": c.id, "name": c.name, "phone": c.phone or ""} for c in query.order_by(Contact.name).limit(1000)]
 
 
 class NewCustomer(BaseModel):

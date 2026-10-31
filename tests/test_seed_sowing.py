@@ -62,3 +62,27 @@ def test_only_seed_lots_can_be_sown():
     _bill(c, po["id"])
     fert = [x for x in c.get(f"{P}?kind=fertilizer&show_empty=true").json()["items"] if x["item_name"] == "Urea"][0]
     assert _sow(c, fert["id"], 1).status_code == 404
+
+
+def test_plant_selling_price_on_po_sets_plant_price_but_packet_cost_never_does():
+    from tests.test_seed_packets import _plant
+
+    c = _admin()
+    plant = _plant(c, stock=0)
+    before = c.get("/api/admin/plants").json()
+    price0 = [x for x in before if x["id"] == plant["id"]][0]["price"]
+    sup = _supplier(c)
+    lot = f"PR-{uuid.uuid4().hex[:6]}"
+    line = _line("seed_packet", plant_id=plant["id"], description="Chilli seed", company="Co", lot_number=lot, quantity=5, unit_price=16400)
+    po = _po(c, sup, [line]).json()
+    assert _bill(c, po["id"]).status_code == 200
+    now = [x for x in c.get("/api/admin/plants").json() if x["id"] == plant["id"]][0]["price"]
+    assert now == price0  # a 16,400 packet cost never becomes the plant price
+    line2 = _line("seed_packet", plant_id=plant["id"], description="Chilli seed", company="Co", lot_number=lot + "B", quantity=5, unit_price=16400, plant_sell_price=2.5)
+    po2 = _po(c, sup, [line2]).json()
+    assert po2["items"][0]["plant_sell_price"] == 2.5
+    assert _bill(c, po2["id"]).status_code == 200
+    now = [x for x in c.get("/api/admin/plants").json() if x["id"] == plant["id"]][0]["price"]
+    assert now == 2.5
+    bad = _line("medicine", description="Neem", lot_number="N1", quantity=1, unit_price=5, plant_sell_price=3)
+    assert _po(c, sup, [bad]).status_code == 400

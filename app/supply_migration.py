@@ -25,7 +25,7 @@ ADD_COLUMNS = {
     "accounting_purchase_order_items": [
         ("item_kind", "VARCHAR(20) NOT NULL DEFAULT 'plant'"), ("lot_number", "VARCHAR(80) DEFAULT ''"), ("company", "VARCHAR(150) DEFAULT ''"),
         ("unit", "VARCHAR(12) DEFAULT ''"), ("mfg_date", "DATE"), ("expiry_date", "DATE"), ("packet_size", "FLOAT"), ("packet_unit", "VARCHAR(10) DEFAULT ''"),
-        ("storage_location", "VARCHAR(120) DEFAULT ''"), ("line_notes", "TEXT DEFAULT ''"),
+        ("storage_location", "VARCHAR(120) DEFAULT ''"), ("line_notes", "TEXT DEFAULT ''"), ("plant_sell_price", "FLOAT"),
     ],
 }
 # plant_id: a packet can be "Unassigned / General", medicines have no plant. expiry_date: fertilizers and supplies often have none.

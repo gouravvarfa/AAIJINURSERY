@@ -1,3 +1,4 @@
+import SearchSelect from "../../accounting/SearchSelect";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
 import { sanitizeQuantityText } from "../../../utils/quantity";
@@ -42,6 +43,7 @@ export default function SeedEntries({ plants, onChanged, startOpen = false }) {
     setBusy(true);
     setError("");
     try {
+      if (!addNew && !form.customer_id) throw new Error("Choose a customer first.");
       const body = {
         plant_id: Number(form.plant_id), variant_id: form.variant_id ? Number(form.variant_id) : null, seeds_given: Number(form.seeds), wanted_plants: form.wanted ? Number(form.wanted) : null,
         entry_date: form.date || null, reference: form.reference, notes: form.notes, request_id: formId.current,
@@ -85,10 +87,14 @@ export default function SeedEntries({ plants, onChanged, startOpen = false }) {
               <>
                 <label>
                   Customer
-                  <select className="form-control" required value={form.customer_id} onChange={set("customer_id")}>
-                    <option value="">Choose a customer...</option>
-                    {customers.map((c) => (<option key={c.id} value={c.id}>{c.name}{c.phone ? ` (${c.phone})` : ""}</option>))}
-                  </select>
+                  <SearchSelect
+                    options={customers.map((c) => ({ value: c.id, label: c.name, hint: c.phone || "" }))}
+                    value={form.customer_id}
+                    onChange={(v) => setForm({ ...form, customer_id: v ? String(v) : "" })}
+                    placeholder="Choose a customer..."
+                    searchPlaceholder="Search by name or mobile"
+                    emptyText="No customer found. Use + New customer."
+                  />
                 </label>
                 <button type="button" className="btn btn-sm btn-outline dark" onClick={() => setAddNew(true)}>+ New customer</button>
               </>

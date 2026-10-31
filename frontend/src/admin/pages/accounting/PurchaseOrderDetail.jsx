@@ -142,9 +142,9 @@ export default function PurchaseOrderDetail() {
 
           {canConvert && (
             <div className="admin-form-card" style={{ maxWidth: "none" }}>
-              <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Convert to Bill</h2>
+              <h2 style={{ fontSize: "1.1rem", marginTop: 0 }}>Receive Stock &amp; Make Bill</h2>
               <p style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                Making the bill receives every line into its lot in Seed Packet Stock (packet and supply stock, with the lot and expiry above). It does not add ready plant stock. The bill stays Unpaid until you record a payment in Payments Out.
+                Stock is added only when you press the button below (goods received), not when the Purchase Order is saved. Receiving every line into its lot in Seed Packet Stock (packet and supply stock, with the lot and expiry above). It does not add ready plant stock. The bill stays Unpaid until you record a payment in Payments Out.
               </p>
               <div className="form-group">
                 <label htmlFor="supplier_bill_no">Supplier's bill / invoice number (optional)</label>
@@ -172,7 +172,7 @@ export default function PurchaseOrderDetail() {
                 disabled={converting || (dup && dupReason.trim().length < 5)}
                 onClick={handleConvert}
               >
-                {converting ? "Converting..." : dup ? "Convert anyway" : "Convert to Bill"}
+                {converting ? "Receiving..." : dup ? "Receive anyway" : "Receive Stock & Make Bill"}
               </button>
             </div>
           )}

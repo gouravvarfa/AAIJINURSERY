@@ -33,3 +33,22 @@ class PurchaseLine(Base):
     notes = Column(Text, default="")
     batch_id = Column(Integer, ForeignKey("seed_packet_batches.id"), nullable=True, index=True)  # the stock batch this line was received into
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SeedSowing(Base):
+    """One sowing: seed packets taken from a lot and sown in nursery trays. The stock deduction itself is the lot's USAGE
+    movement (usage_movement_id); this row keeps the nursery details (date, trays, nursery batch number)."""
+
+    __tablename__ = "seed_sowings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sowing_date = Column(Date, nullable=False, index=True)
+    batch_id = Column(Integer, ForeignKey("seed_packet_batches.id"), nullable=False, index=True)
+    packets_used = Column(Float, nullable=False, default=0)  # partial packets allowed (0.5 = half a packet)
+    trays_sown = Column(Integer, nullable=False, default=0)
+    nursery_batch_number = Column(String(80), default="")  # the nursery batch / tray lot number given to this sowing
+    notes = Column(Text, default="")
+    usage_movement_id = Column(Integer, nullable=True)
+    request_id = Column(String(60), nullable=True, unique=True)
+    created_by = Column(String(80), default="")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

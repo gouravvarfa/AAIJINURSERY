@@ -586,6 +586,8 @@ from app.seed_entries import router as seed_entries_router
 app.include_router(seed_entries_router)  # walk-in seed entries (permissions checked inside)
 from app.seed_packets import router as seed_packets_router
 app.include_router(seed_packets_router)  # seed packet purchases, batches, expiry alerts (permissions checked inside)
+from app.seed_sowing import router as seed_sowing_router
+app.include_router(seed_sowing_router)  # sowing entries: seed packets used for nursery trays
 from app.plant_history import router as plant_history_router
 app.include_router(plant_history_router)  # read-only plant history (stock, packets, purchases, customer seeds)
 app.include_router(inventory_demand_router)  # stock vs demand + per-line stock/prepare decision (permissions checked inside)

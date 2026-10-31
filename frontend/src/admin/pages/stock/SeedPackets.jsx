@@ -77,11 +77,12 @@ export default function SeedPackets() {
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
       <SeedPacketAlerts key={tick} onOpen={() => setTab("inventory")} />
       <div className="sm-filters" role="tablist" aria-label="Packet sections">
-        {[["inventory", "Packet Inventory"], ["history", "Packet History"]].map(([key, label]) => (
+        {[["inventory", "Packet Inventory"], ["sowing", "Sowing Entry"], ["history", "Stock History"]].map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} className={`sm-chip${tab === key ? " active" : ""}`} onClick={() => setTab(key)}>{label}</button>
         ))}
       </div>
       {tab === "inventory" && <Inventory plants={plants} tick={tick} onChanged={refresh} />}
+      {tab === "sowing" && <Sowing tick={tick} onSaved={(msg) => refresh(msg)} />}
       {tab === "history" && <History tick={tick} />}
     </div>
   );
@@ -238,7 +239,7 @@ function History({ tick }) {
       {!rows ? null : rows.length === 0 ? <p className="stock-hint">No history yet.</p> : (
         <div className="admin-table-wrap">
           <table className="admin-table sp-table">
-            <thead><tr><th>When</th><th>What</th><th>Item / lot</th><th className="num">Quantity</th><th>Reason / details</th><th>By</th></tr></thead>
+            <thead><tr><th>When</th><th>What</th><th>Item / lot</th><th className="num">Quantity</th><th className="num">Balance</th><th>Reason / details</th><th>By</th></tr></thead>
             <tbody>
               {rows.map((h) => (
                 <tr key={h.id}>
@@ -246,8 +247,105 @@ function History({ tick }) {
                   <td><span className={`sp-type sp-type-${h.type.toLowerCase()}`}>{TYPE_LABEL[h.type] || h.type}</span>{h.is_exception && <small className="sp-problem">expired exception</small>}</td>
                   <td><strong>{h.item_name || h.plant_name}</strong>{h.item_kind === "seed_packet" && h.plant_name && h.item_name ? ` · ${h.plant_name}` : ""}<small>{h.company ? `${h.company} · ` : ""}lot {h.batch_number || "-"} · {h.record_no}</small></td>
                   <td className="num">{h.quantity > 0 ? `+${num(h.quantity)}` : h.quantity < 0 ? `−${num(Math.abs(h.quantity))}` : "-"} {h.quantity ? <small>{h.unit}</small> : null}</td>
+                  <td className="num">{h.balance_after == null ? "-" : num(h.balance_after)}</td>
                   <td>{h.reason}{h.detail && <small>{h.detail}</small>}{h.type === "RECEIPT" && (h.invoice_number || h.supplier || h.total_amount) ? <small>{h.supplier}{h.invoice_number ? ` · bill ${h.invoice_number}` : ""}{h.total_amount ? ` · ${money(h.total_amount)}` : ""}{h.purchase_id ? <> · <Link to={`/admin/accounting/bills/${h.purchase_id}`}>open bill</Link></> : ""}{h.expense_id ? " · in Expenses" : ""}</small> : null}</td>
                   <td>{h.by}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Sowing({ tick, onSaved }) {
+  const blank = () => ({ batch_id: "", sowing_date: today(), packets_used: "", trays_sown: "", nursery_batch_number: "", notes: "", allow_expired: false, expired_reason: "" });
+  const [lots, setLots] = useState([]);
+  const [rows, setRows] = useState(null);
+  const [form, setForm] = useState(blank);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [key, setKey] = useState(newId);
+
+  useEffect(() => { api.get("/admin/stock/seed-packets?kind=seed_packet").then((d) => setLots(d.items)).catch(() => {}); }, [tick]);
+  useEffect(() => {
+    const t = setTimeout(() => api.get(`/admin/stock/seed-sowings${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`).then(setRows).catch(() => setRows([])), 200);
+    return () => clearTimeout(t);
+  }, [q, tick]);
+
+  const lot = lots.find((l) => String(l.id) === String(form.batch_id));
+  const used = Number(form.packets_used || 0);
+  const left = lot ? Math.round((lot.remaining - used) * 1000) / 1000 : null;
+  const expired = lot?.status === "Expired";
+  const ready = lot && used > 0 && used <= lot.remaining + 1e-9 && Number(form.trays_sown) >= 1 && form.sowing_date && (!expired || (form.allow_expired && form.expired_reason.trim().length >= 5));
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  async function save(e) {
+    e.preventDefault();
+    if (busy || !ready) return;
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api.post("/admin/stock/seed-sowings", { ...form, batch_id: Number(form.batch_id), packets_used: used, trays_sown: Number(form.trays_sown), request_id: key });
+      setForm(blank());
+      setKey(newId());
+      onSaved(`Saved ${r.record_no}: ${num(r.packets_used)} packets of ${r.item_name} (lot ${r.lot_number || "-"}) sown in ${r.trays_sown} trays. ${num(r.remaining_after)} packets left in the lot.`);
+    } catch (err) {
+      setError(err.message || "Could not save the sowing.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <form className="sp-form" onSubmit={save}>
+        {error && <div className="alert alert-error">{error}</div>}
+        <div className="sp-grid">
+          <label className="sp-span2">Seed (name, variety, lot) *
+            <select className="form-control" value={form.batch_id} onChange={set("batch_id")} required>
+              <option value="">Choose the seed lot you used</option>
+              {lots.filter((l) => l.remaining > 0).map((l) => (
+                <option key={l.id} value={l.id}>{l.item_name || l.plant_name}{l.plant_id && l.item_name ? ` (${l.plant_name})` : ""} · {l.company || "-"} · lot {l.batch_number || "-"} · {num(l.remaining)} {l.quantity_unit} left{l.status === "Expired" ? " · EXPIRED" : ""}</option>
+              ))}
+            </select>
+          </label>
+          <label>Sowing date *<input className="form-control" type="date" required max={today()} value={form.sowing_date} onChange={set("sowing_date")} /></label>
+          <label>Packets used *<input className="form-control" inputMode="decimal" placeholder="e.g. 3 or 0.5" value={form.packets_used} onChange={(e) => setForm({ ...form, packets_used: qtyText(e.target.value) })} /></label>
+          <label>Trays sown *<input className="form-control" inputMode="numeric" value={form.trays_sown} onChange={(e) => setForm({ ...form, trays_sown: e.target.value.replace(/\D/g, "") })} /></label>
+          <label>Nursery batch number<input className="form-control" maxLength={80} value={form.nursery_batch_number} onChange={set("nursery_batch_number")} placeholder="Your batch no. for these trays" /></label>
+          <label className="sp-wide">Notes<input className="form-control" maxLength={1000} value={form.notes} onChange={set("notes")} /></label>
+        </div>
+        {lot && <p className="stock-hint">In stock now: <strong>{num(lot.remaining)}</strong> {lot.quantity_unit}.{used > 0 ? <> After this sowing: <strong>{num(Math.max(left, 0))}</strong>.</> : ""} Half a packet is fine: type 0.5.</p>}
+        {lot && used > lot.remaining + 1e-9 && <p className="sp-problem">Only {num(lot.remaining)} packets are in stock for this lot.</p>}
+        {expired && (
+          <div className="alert alert-warning">
+            <label className="sp-check"><input type="checkbox" checked={form.allow_expired} onChange={(e) => setForm({ ...form, allow_expired: e.target.checked })} /> This lot is expired. Sow it anyway (recorded as an exception)</label>
+            {form.allow_expired && <input className="form-control" placeholder="Reason (required)" value={form.expired_reason} onChange={set("expired_reason")} />}
+          </div>
+        )}
+        <button className="btn btn-primary" disabled={busy || !ready}>{busy ? "Saving..." : "Save sowing"}</button>
+      </form>
+
+      <h3 style={{ marginTop: 24 }}>Sowing history</h3>
+      <div className="sp-filters"><input className="form-control" placeholder="Search seed, lot, nursery batch..." value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search sowings" /></div>
+      {!rows ? null : rows.length === 0 ? <p className="stock-hint">No sowing recorded yet.</p> : (
+        <div className="admin-table-wrap">
+          <table className="admin-table sp-table">
+            <thead><tr><th>Date</th><th>Seed / lot</th><th className="num">Packets used</th><th className="num">Trays</th><th>Nursery batch</th><th className="num">Lot balance</th><th>By</th></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtDate(r.sowing_date)}<small>{r.record_no}</small></td>
+                  <td><strong>{r.item_name}</strong>{r.plant_name && r.plant_name !== r.item_name ? ` · ${r.plant_name}` : ""}<small>{r.company ? `${r.company} · ` : ""}lot {r.lot_number || "-"}</small></td>
+                  <td className="num">{num(r.packets_used)}</td>
+                  <td className="num">{num(r.trays_sown)}</td>
+                  <td>{r.nursery_batch_number || "-"}{r.notes && <small>{r.notes}</small>}</td>
+                  <td className="num">{r.remaining_after == null ? "-" : num(r.remaining_after)}</td>
+                  <td>{r.by}</td>
                 </tr>
               ))}
             </tbody>

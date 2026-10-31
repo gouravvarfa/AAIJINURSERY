@@ -268,9 +268,22 @@ def alerts(db: Session = Depends(get_db)):
     return {"items": out, "expired": sum(1 for r in out if r["status"] == "Expired"), "expiring": sum(1 for r in out if r["status"] != "Expired"), "warning_days": periods}
 
 
+def _balances(db: Session, batch_ids: list[int]) -> dict:
+    """Stock left in the lot right after each movement (a running total), so the history reads purchase / use / balance."""
+    out, run = {}, {}
+    if not batch_ids:
+        return out
+    q = db.query(SeedPacketMovement.id, SeedPacketMovement.batch_id, SeedPacketMovement.quantity).filter(SeedPacketMovement.batch_id.in_(set(batch_ids))).order_by(SeedPacketMovement.id)
+    for mid, bid, qty in q:
+        run[bid] = round(run.get(bid, 0) + (qty or 0), 3)
+        out[mid] = run[bid]
+    return out
+
+
 def movement_rows(db: Session, rows) -> list[dict]:
     names = plant_names(db, [b.plant_id for _, b in rows])
-    return [{"id": m.id, "at": m.created_at.isoformat() + "Z", "type": m.movement_type, "quantity": m.quantity, "unit": b.quantity_unit or "packets", "reason": m.reason or "", "detail": m.detail or "",
+    bal = _balances(db, [b.id for _, b in rows])
+    return [{"balance_after": bal.get(m.id), "id": m.id, "at": m.created_at.isoformat() + "Z", "type": m.movement_type, "quantity": m.quantity, "unit": b.quantity_unit or "packets", "reason": m.reason or "", "detail": m.detail or "",
              "is_exception": m.is_exception, "by": m.performed_by, "batch_id": b.id, "record_no": b.record_no, "item_kind": b.item_kind or "seed_packet", "item_name": display_name(b),
              "plant_name": names.get(b.plant_id, "") if b.plant_id else "Unassigned / General stock", "variety": b.variety or "", "company": b.company or "", "supplier": m.supplier or b.supplier or "",
              "batch_number": b.batch_number or "", "total_amount": m.total_amount, "invoice_number": m.invoice_number or "", "purchase_id": m.purchase_id, "expense_id": m.expense_id,
